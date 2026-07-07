@@ -2,11 +2,12 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // CẤU HÌNH ĐƯỜNG DẪN API GỐC (BACKEND)
-// Lưu ý: 
+// Lưu ý:
 // - Dùng 'http://localhost:5000' nếu chạy giả lập iOS.
 // - Dùng 'http://10.0.2.2:5000' nếu chạy giả lập Android (Android emulator kết nối máy chủ localhost qua IP này).
 // - Dùng IP mạng LAN của máy tính bạn (ví dụ: 'http://192.168.1.5:5000') nếu chạy Expo Go trên điện thoại thật.
-const BASE_URL = 'http://10.0.2.2:5000/api';
+// Có thể ghi đè bằng biến môi trường EXPO_PUBLIC_API_URL khi chạy expo.
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.190.83:5000/api';
 
 const api = axios.create({
   baseURL: BASE_URL,
