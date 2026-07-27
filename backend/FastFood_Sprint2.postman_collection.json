@@ -1,0 +1,495 @@
+{
+	"info": {
+		"_postman_id": "b88c47d2-1111-4e28-9999-sprint2fastfood",
+		"name": "FastFood App - Sprint 2",
+		"description": "Bộ sưu tập các API cho Sprint 2 bao gồm: Quản lý Giỏ hàng (Cart API), Tạo đơn hàng (Checkout), Cập nhật trạng thái đơn (Order Status Pipeline) và Theo dõi tiến trình (Order Tracking).",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Authentication (Đăng nhập lấy Token)",
+			"item": [
+				{
+					"name": "Đăng nhập Khách Hàng (Hoàng)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if(jsonData.success && jsonData.data.token) {",
+									"    pm.globals.set(\"jwt_token\", jsonData.data.token);",
+									"}"
+								],
+								"type": "javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email_or_phone\": \"hoang@fastfood.com\",\n    \"mat_khau\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						},
+						"description": "Đăng nhập tài khoản khách hàng để lấy Token thử nghiệm Giỏ hàng và Tạo đơn"
+					},
+					"response": []
+				},
+				{
+					"name": "Đăng nhập Nhân Viên Bếp (Lê Văn Bếp)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if(jsonData.success && jsonData.data.token) {",
+									"    pm.globals.set(\"kitchen_jwt_token\", jsonData.data.token);",
+									"}"
+								],
+								"type": "javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email_or_phone\": \"bep@fastfood.com\",\n    \"mat_khau\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						},
+						"description": "Đăng nhập tài khoản Bếp để cập nhật trạng thái đơn sang 'dang_che_bien'"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "2. Cart API (Quản lý Giỏ Hàng)",
+			"item": [
+				{
+					"name": "Lấy chi tiết Giỏ hàng",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/cart",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"cart"
+							]
+						},
+						"description": "Lấy danh sách món ăn, kiểm tra tồn kho và tính tổng tiền giỏ hàng"
+					},
+					"response": []
+				},
+				{
+					"name": "Thêm Burger Bò + Topping Phô Mai vào giỏ",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"ma_mon_an\": 1,\n    \"so_luong\": 2,\n    \"tuy_chon_da_chon\": [4, 5]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/cart/add",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"cart",
+								"add"
+							]
+						},
+						"description": "Thêm 2 Burger Bò Cực Hạn kèm Phô Mai (4) và Thịt xông khói (5)"
+					},
+					"response": []
+				},
+				{
+					"name": "Thêm Pepsi Lon Size M vào giỏ",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"ma_mon_an\": 5,\n    \"so_luong\": 1,\n    \"tuy_chon_da_chon\": [2]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/cart/add",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"cart",
+								"add"
+							]
+						},
+						"description": "Thêm 1 Pepsi Lon Size M (2)"
+					},
+					"response": []
+				},
+				{
+					"name": "Cập nhật số lượng món trong giỏ",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"so_luong\": 3\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/cart/update/1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"cart",
+								"update",
+								"1"
+							]
+						},
+						"description": "Thay số 1 bằng mã chi tiết giỏ (ma_chi_tiet_gio) để thay đổi số lượng"
+					},
+					"response": []
+				},
+				{
+					"name": "Xóa 1 món khỏi giỏ hàng",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/cart/remove/1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"cart",
+								"remove",
+								"1"
+							]
+						},
+						"description": "Thay số 1 ở đường dẫn bằng ma_chi_tiet_gio cần xóa"
+					},
+					"response": []
+				},
+				{
+					"name": "Làm sạch (xóa toàn bộ) giỏ hàng",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/cart/clear",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"cart",
+								"clear"
+							]
+						},
+						"description": "Xóa toàn bộ các món trong giỏ hàng hiện tại"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "3. Order & Processing API (Đặt Hàng & Xử Lý Đơn)",
+			"item": [
+				{
+					"name": "Tạo đơn hàng mới (Checkout)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dia_chi_giao_hang\": \"456 Nguyễn Trãi, Phường 2, Quận 5, TP. Hồ Chí Minh\",\n    \"so_dien_thoai_nhan\": \"0923456789\",\n    \"ghi_chu\": \"Giao hàng nóng hổi, không lấy tương ớt\",\n    \"phuong_thuc_thanh_toan\": \"momo\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/orders",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders"
+							]
+						},
+						"description": "Tạo đơn hàng từ giỏ hàng hiện tại, kiểm tra và trừ kho món ăn, đồng thời tự động dọn giỏ"
+					},
+					"response": []
+				},
+				{
+					"name": "Lấy danh sách đơn hàng của người dùng",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/orders",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders"
+							]
+						},
+						"description": "Lấy tất cả đơn hàng của khách hàng hiện tại"
+					},
+					"response": []
+				},
+				{
+					"name": "Xem chi tiết đơn hàng & Tiến trình Timeline",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/orders/1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders",
+								"1"
+							]
+						},
+						"description": "Thay số 1 ở đường dẫn bằng mã đơn hàng (ma_don_hang) để xem thông tin chi tiết và tiến trình lịch sử"
+					},
+					"response": []
+				},
+				{
+					"name": "Bếp nhận đơn (Chuyển sang Đang chế biến)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{kitchen_jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"trang_thai_moi\": \"dang_che_bien\",\n    \"ghi_chu\": \"Nhà bếp đã nhận đơn và bắt đầu làm món\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/orders/1/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders",
+								"1",
+								"status"
+							]
+						},
+						"description": "Nhà bếp đổi trạng thái đơn sang dang_che_bien"
+					},
+					"response": []
+				},
+				{
+					"name": "Shipper nhận đơn & bắt đầu giao",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"trang_thai_moi\": \"dang_giao\",\n    \"ghi_chu\": \"Tài xế đã lấy đồ ăn tại bếp và đang di chuyển giao\",\n    \"ma_shipper\": 4\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/orders/1/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders",
+								"1",
+								"status"
+							]
+						},
+						"description": "Chuyển đơn sang trạng thái dang_giao"
+					},
+					"response": []
+				},
+				{
+					"name": "Hoàn thành đơn hàng (Đã giao thành công)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"trang_thai_moi\": \"da_giao\",\n    \"ghi_chu\": \"Giao hàng tận tay khách hàng thành công\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/orders/1/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders",
+								"1",
+								"status"
+							]
+						},
+						"description": "Chuyển đơn sang da_giao (tự động chuyển trang_thai_thanh_toan sang da_thanh_toan)"
+					},
+					"response": []
+				},
+				{
+					"name": "Hủy đơn hàng (Hoàn lại tồn kho món ăn)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"trang_thai_moi\": \"da_huy\",\n    \"ghi_chu\": \"Khách hàng hủy đơn do đổi ý\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/orders/1/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders",
+								"1",
+								"status"
+							]
+						},
+						"description": "Hủy đơn hàng khi chưa chế biến (tự động cộng lại số lượng tồn kho cho mon_an)"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5000/api",
+			"type": "string"
+		}
+	]
+}

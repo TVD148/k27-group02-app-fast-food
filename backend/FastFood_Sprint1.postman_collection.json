@@ -1,0 +1,420 @@
+{
+	"info": {
+		"_postman_id": "a9e6d0a7-bc6d-4952-bfcd-b82772cd3efb",
+		"name": "FastFood App - Sprint 1",
+		"description": "Bộ sưu tập các API của dự án Fast Food App phục vụ cho Sprint 1 bao gồm Xác thực, Thực đơn và CRUD Admin.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Authentication (Xác thực)",
+			"item": [
+				{
+					"name": "Đăng ký tài khoản",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"ho_ten\": \"Nguyễn Văn Khách\",\n    \"email\": \"khachhang@gmail.com\",\n    \"mat_khau\": \"123456\",\n    \"so_dien_thoai\": \"0988777666\",\n    \"dia_chi\": \"123 Đường Lê Lợi, Bình Dương\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"register"
+							]
+						},
+						"description": "Tạo tài khoản mới cho khách hàng"
+					},
+					"response": []
+				},
+				{
+					"name": "Đăng nhập tài khoản (Lấy Token)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Tự động lấy token từ kết quả trả về và lưu vào biến môi trường",
+									"var jsonData = pm.response.json();",
+									"if(jsonData.success && jsonData.data.token) {",
+									"    pm.globals.set(\"jwt_token\", jsonData.data.token);",
+									"}"
+								],
+								"type": "javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email_or_phone\": \"dinh@fastfood.com\",\n    \"mat_khau\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						},
+						"description": "Đăng nhập để nhận Token JWT. (Mặc định tài khoản Đình là Admin có quyền chạy API Admin)."
+					},
+					"response": []
+				},
+				{
+					"name": "Lấy thông tin cá nhân (Profile)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/auth/profile",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"profile"
+							]
+						},
+						"description": "Yêu cầu gửi kèm header Authorization có Token JWT đã đăng nhập"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "2. Menu (Thực đơn công khai)",
+			"item": [
+				{
+					"name": "Lấy danh sách Danh mục",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/menu/categories",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"menu",
+								"categories"
+							]
+						},
+						"description": "Lấy toàn bộ các danh mục thực đơn"
+					},
+					"response": []
+				},
+				{
+					"name": "Lấy danh sách Món ăn (Phân trang, Lọc & Tìm kiếm)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/menu/items?page=1&limit=5&category_id=1&search=Burger",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"menu",
+								"items"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Trang cần xem"
+								},
+								{
+									"key": "limit",
+									"value": "5",
+									"description": "Số lượng trên mỗi trang"
+								},
+								{
+									"key": "category_id",
+									"value": "1",
+									"description": "Lọc theo mã danh mục"
+								},
+								{
+									"key": "search",
+									"value": "Burger",
+									"description": "Tìm kiếm tương đối theo tên món"
+								}
+							]
+						},
+						"description": "Lấy món ăn hỗ trợ lọc và tìm kiếm"
+					},
+					"response": []
+				},
+				{
+					"name": "Lấy chi tiết món ăn (Kèm Size và Topping)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/menu/items/1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"menu",
+								"items",
+								"1"
+							]
+						},
+						"description": "Nhập mã món ăn (ma_mon_an) ở đường dẫn để xem các tùy chọn size/topping đi kèm"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "3. Admin (Quản trị CRUD)",
+			"item": [
+				{
+					"name": "Thêm danh mục mới",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"ten_danh_muc\": \"Món Tráng Miệng\",\n    \"mo_ta\": \"Các loại kem mát lạnh và bánh ngọt ngon tuyệt\",\n    \"hinh_anh\": \"trangmieng.png\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/categories",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"categories"
+							]
+						},
+						"description": "Chỉ dành cho Admin có Token hợp lệ"
+					},
+					"response": []
+				},
+				{
+					"name": "Cập nhật danh mục",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"ten_danh_muc\": \"Kem & Bánh Ngọt\",\n    \"mo_ta\": \"Bộ sưu tập các món tráng miệng ngọt ngào\",\n    \"hinh_anh\": \"kem_banh.png\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/categories/5",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"categories",
+								"5"
+							]
+						},
+						"description": "Thay số 5 ở cuối đường dẫn bằng ID danh mục cần sửa"
+					},
+					"response": []
+				},
+				{
+					"name": "Xóa danh mục",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/admin/categories/5",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"categories",
+								"5"
+							]
+						},
+						"description": "Thay đổi ID danh mục cần xóa ở cuối đường dẫn"
+					},
+					"response": []
+				},
+				{
+					"name": "Thêm món ăn mới (Kèm ánh xạ tùy chọn)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"ten_mon\": \"Burger Tôm Sốt Tartar\",\n    \"mo_ta\": \"Nhân tôm chiên xù giòn rụm kết hợp sốt tartar chua béo\",\n    \"gia_ban\": 59000,\n    \"hinh_anh\": \"burger_tom.png\",\n    \"ma_danh_muc\": 1,\n    \"trang_thai\": \"con_hang\",\n    \"ma_nhom_list\": [1, 2]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/items",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"items"
+							]
+						},
+						"description": "ma_nhom_list [1, 2] giúp tự động gắn món ăn này vào nhóm tùy chọn cỡ nước ngọt (1) và topping burger (2)"
+					},
+					"response": []
+				},
+				{
+					"name": "Cập nhật món ăn",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"ten_mon\": \"Burger Tôm Hoàng Kim\",\n    \"mo_ta\": \"Nhân tôm chiên sốt phô mai trứng muối béo ngậy\",\n    \"gia_ban\": 65000,\n    \"hinh_anh\": \"burger_tom_trung_muoi.png\",\n    \"ma_danh_muc\": 1,\n    \"trang_thai\": \"con_hang\",\n    \"ma_nhom_list\": [2]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/items/9",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"items",
+								"9"
+							]
+						},
+						"description": "Thay số 9 bằng ID món ăn cần sửa"
+					},
+					"response": []
+				},
+				{
+					"name": "Xóa món ăn",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/admin/items/9",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"items",
+								"9"
+							]
+						},
+						"description": "Thay số 9 bằng ID món ăn cần xóa"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5000/api",
+			"type": "string"
+		}
+	]
+}

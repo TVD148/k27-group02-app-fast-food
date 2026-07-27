@@ -10,21 +10,25 @@ app.use(cors()); // Cho phép cross-origin requests
 app.use(express.json()); // Phân tích body JSON của request
 app.use(express.urlencoded({ extended: true }));
 
-// Import các router định tuyến
+// Import các router định tuyến (Sprint 1 & Sprint 2)
 const authRoutes = require('./routes/authRoutes');
 const menuRoutes = require('./routes/menuRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const cartRoutes = require('./routes/cartRoutes');
+const orderRoutes = require('./routes/orderRoutes');
 
 // Khai báo các đường dẫn API gốc
 app.use('/api/auth', authRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/cart', cartRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Route chào mừng cơ bản để test server
 app.get('/', (req, res) => {
   res.status(200).json({
     success: true,
-    message: 'Chào mừng bạn đến với API của ứng dụng Đặt thức ăn nhanh (Fast Food App) - Sprint 1!'
+    message: 'Chào mừng bạn đến với API của ứng dụng Đặt thức ăn nhanh (Fast Food App) - Sprint 2!'
   });
 });
 
