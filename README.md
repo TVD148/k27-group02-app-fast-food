@@ -1,5 +1,5 @@
 # Ứng Dụng Đặt Thức Ăn Nhanh (Fast Food App)
-## Dự án môn học Lập trình Thiết bị di động - Nhóm K27 Group 02
+## Dự án môn học Lập trình Thiết bị di động - Chiều Thứ 3 - Group 02
 
 ### 1. Thành viên nhóm & Phân vai
 *   **Trần Văn Đình**: Backend Developer (Node.js) & Scrum Master
