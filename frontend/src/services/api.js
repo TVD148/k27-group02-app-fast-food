@@ -2,10 +2,6 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // CẤU HÌNH ĐƯỜNG DẪN API GỐC (BACKEND)
-// Lưu ý:
-// - Dùng 'http://localhost:5000' nếu chạy giả lập iOS.
-// - Dùng 'http://10.0.2.2:5000' nếu chạy giả lập Android (Android emulator kết nối máy chủ localhost qua IP này).
-// - Dùng IP mạng LAN của máy tính bạn (ví dụ: 'http://192.168.1.5:5000') nếu chạy Expo Go trên điện thoại thật.
 // Có thể ghi đè bằng biến môi trường EXPO_PUBLIC_API_URL khi chạy expo.
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.190.83:5000/api';
 
@@ -122,6 +118,118 @@ export const fetchItemDetail = async (itemId) => {
     return response.data;
   } catch (error) {
     throw error.response?.data || new Error('Lỗi kết nối mạng!');
+  }
+};
+
+// ============================================================================
+// III. CÁC API GIỎ HÀNG (CART API - SPRINT 2)
+// ============================================================================
+
+// Lấy thông tin chi tiết giỏ hàng
+export const fetchCart = async () => {
+  try {
+    const response = await api.get('/cart');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Lỗi kết nối máy chủ!');
+  }
+};
+
+// Thêm món vào giỏ hàng
+export const addToCart = async (ma_mon_an, so_luong = 1, tuy_chon_da_chon = []) => {
+  try {
+    const response = await api.post('/cart/add', {
+      ma_mon_an,
+      so_luong,
+      tuy_chon_da_chon
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Lỗi kết nối máy chủ!');
+  }
+};
+
+// Cập nhật số lượng món trong giỏ hàng
+export const updateCartItem = async (ma_chi_tiet_gio, so_luong) => {
+  try {
+    const response = await api.put(`/cart/update/${ma_chi_tiet_gio}`, { so_luong });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Lỗi kết nối máy chủ!');
+  }
+};
+
+// Xóa 1 món khỏi giỏ hàng
+export const removeCartItem = async (ma_chi_tiet_gio) => {
+  try {
+    const response = await api.delete(`/cart/remove/${ma_chi_tiet_gio}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Lỗi kết nối máy chủ!');
+  }
+};
+
+// Làm sạch giỏ hàng
+export const clearCart = async () => {
+  try {
+    const response = await api.delete('/cart/clear');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Lỗi kết nối máy chủ!');
+  }
+};
+
+// ============================================================================
+// IV. CÁC API ĐƠN HÀNG & TIẾN TRÌNH (ORDER & TRACKING API - SPRINT 2)
+// ============================================================================
+
+// Khởi tạo đơn hàng mới (Checkout)
+export const createOrder = async (dia_chi_giao_hang, so_dien_thoai_nhan, ghi_chu, phuong_thuc_thanh_toan) => {
+  try {
+    const response = await api.post('/orders', {
+      dia_chi_giao_hang,
+      so_dien_thoai_nhan,
+      ghi_chu,
+      phuong_thuc_thanh_toan
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Lỗi kết nối máy chủ!');
+  }
+};
+
+// Lấy danh sách đơn hàng
+export const fetchOrders = async (status = '') => {
+  try {
+    let url = '/orders';
+    if (status) url += `?status=${status}`;
+    const response = await api.get(url);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Lỗi kết nối máy chủ!');
+  }
+};
+
+// Lấy chi tiết đơn hàng & tiến trình timeline
+export const fetchOrderDetail = async (orderId) => {
+  try {
+    const response = await api.get(`/orders/${orderId}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Lỗi kết nối máy chủ!');
+  }
+};
+
+// Cập nhật trạng thái đơn hàng (Hủy đơn hoặc chuyển tiến trình)
+export const updateOrderStatus = async (orderId, trang_thai_moi, ghi_chu = '') => {
+  try {
+    const response = await api.put(`/orders/${orderId}/status`, {
+      trang_thai_moi,
+      ghi_chu
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Lỗi kết nối máy chủ!');
   }
 };
 
