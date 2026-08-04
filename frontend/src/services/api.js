@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // CẤU HÌNH ĐƯỜNG DẪN API GỐC (BACKEND)
 // Có thể ghi đè bằng biến môi trường EXPO_PUBLIC_API_URL khi chạy expo.
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.190.83:5000/api';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.5:5000/api';
 
 const api = axios.create({
   baseURL: BASE_URL,
