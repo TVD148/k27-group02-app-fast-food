@@ -1,9 +1,26 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
 // CẤU HÌNH ĐƯỜNG DẪN API GỐC (BACKEND)
-// Có thể ghi đè bằng biến môi trường EXPO_PUBLIC_API_URL khi chạy expo.
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.5:5000/api';
+// Tự động nhận diện IP máy tính đang phát Expo Metro Bundler để bạn đổi mạng Wi-Fi không cần sửa lại code!
+const getBaseUrl = () => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+
+  const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost || Constants.manifest2?.extra?.expoGo?.debuggerHost;
+  if (hostUri) {
+    const ip = hostUri.split(':').shift();
+    if (ip) {
+      return `http://${ip}:5000/api`;
+    }
+  }
+
+  return 'http://192.168.1.5:5000/api';
+};
+
+const BASE_URL = getBaseUrl();
 
 const api = axios.create({
   baseURL: BASE_URL,
