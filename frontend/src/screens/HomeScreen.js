@@ -117,15 +117,32 @@ export default function HomeScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 1. Header: Chào hỏi & Đăng xuất */}
+      {/* 1. Header: Chào hỏi, Giỏ hàng, Đơn hàng & Đăng xuất */}
       <View style={styles.header}>
         <View>
           <Text style={styles.greetingText}>Xin chào,</Text>
           <Text style={styles.userName}>{userInfo?.ho_ten || 'Khách hàng'}</Text>
         </View>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>Đăng xuất</Text>
-        </TouchableOpacity>
+
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            style={styles.iconHeaderBtn} 
+            onPress={() => navigation.navigate('OrdersList')}
+          >
+            <Text style={styles.iconHeaderText}>📋 Đơn hàng</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.iconHeaderBtnCart} 
+            onPress={() => navigation.navigate('Cart')}
+          >
+            <Text style={styles.iconHeaderTextCart}>🛒 Giỏ hàng</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutButtonText}>Thoát</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -232,11 +249,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconHeaderBtn: {
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginRight: 6,
+  },
+  iconHeaderText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#FF8F00',
+  },
+  iconHeaderBtnCart: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginRight: 6,
+  },
+  iconHeaderTextCart: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#2E7D32',
   },
   greetingText: {
     fontSize: 14,

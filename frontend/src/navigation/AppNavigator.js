@@ -4,6 +4,10 @@ import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ProductDetailScreen from '../screens/ProductDetailScreen';
+import CartScreen from '../screens/CartScreen';
+import CheckoutScreen from '../screens/CheckoutScreen';
+import OrderTrackingScreen from '../screens/OrderTrackingScreen';
+import OrdersListScreen from '../screens/OrdersListScreen';
 
 const Stack = createStackNavigator();
 
@@ -54,6 +58,26 @@ export function MainNavigator({ onLogout }) {
         name="ProductDetail" 
         component={ProductDetailScreen} 
         options={{ title: 'Chi Tiết Món Ăn' }}
+      />
+      <Stack.Screen 
+        name="Cart" 
+        component={CartScreen} 
+        options={{ title: 'Giỏ Hàng Của Tôi' }}
+      />
+      <Stack.Screen 
+        name="Checkout" 
+        component={CheckoutScreen} 
+        options={{ title: 'Xác Nhận Đặt Hàng' }}
+      />
+      <Stack.Screen 
+        name="OrderTracking" 
+        component={OrderTrackingScreen} 
+        options={{ title: 'Theo Dõi Đơn Hàng' }}
+      />
+      <Stack.Screen 
+        name="OrdersList" 
+        component={OrdersListScreen} 
+        options={{ title: 'Lịch Sử Đơn Hàng' }}
       />
     </Stack.Navigator>
   );

@@ -9,12 +9,13 @@ import {
   Alert,
   SafeAreaView
 } from 'react-native';
-import { fetchItemDetail } from '../services/api';
+import { fetchItemDetail, addToCart } from '../services/api';
 
 export default function ProductDetailScreen({ route, navigation }) {
   const { itemId } = route.params;
   const [food, setFood] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [addingToCart, setAddingToCart] = useState(false);
 
   // Trạng thái lưu trữ các tùy chọn đã chọn
   // Cấu trúc: { [ma_nhom]: [ma_gia_tri_1, ma_gia_tri_2, ...] }
@@ -100,13 +101,28 @@ export default function ProductDetailScreen({ route, navigation }) {
     recalculatePrice(food.gia_ban, updatedSelected, food.item_options);
   };
 
-  const handleAddToCart = () => {
-    // Chức năng giỏ hàng sẽ phát triển ở Sprint 2.
-    // Ở Sprint 1 chỉ hiển thị thông báo mô phỏng thành công
-    Alert.alert(
-      'Sprint 1 Demo',
-      `Đã chọn: ${food.ten_mon}\nTổng tiền: ${totalPrice.toLocaleString('vi-VN')} đ\n\n(Chức năng Giỏ hàng & Thanh toán sẽ hoàn thiện ở Sprint 2 & 3!)`
-    );
+  const handleAddToCart = async () => {
+    setAddingToCart(true);
+    try {
+      // Gộp toàn bộ mã giá trị tùy chọn đã chọn
+      const allSelectedOptionIds = Object.values(selectedOptions).flat();
+      
+      const response = await addToCart(food.ma_mon_an, 1, allSelectedOptionIds);
+      if (response.success) {
+        Alert.alert(
+          'Thành công 🎉',
+          `Đã thêm '${food.ten_mon}' vào giỏ hàng!`,
+          [
+            { text: 'Xem giỏ hàng', onPress: () => navigation.navigate('Cart') },
+            { text: 'Tiếp tục xem món', style: 'cancel' }
+          ]
+        );
+      }
+    } catch (error) {
+      Alert.alert('Thất bại', error.message || 'Không thể thêm món vào giỏ hàng!');
+    } finally {
+      setAddingToCart(false);
+    }
   };
 
   if (loading) {
