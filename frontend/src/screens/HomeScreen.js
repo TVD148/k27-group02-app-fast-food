@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchCategories, fetchItems, logoutUser } from '../services/api';
+import BottomTabBar from '../components/BottomTabBar';
 
 const { width } = Dimensions.get('window');
 
@@ -302,6 +303,9 @@ export default function HomeScreen({ navigation }) {
           />
         )}
       </ScrollView>
+
+      {/* Thanh điều hướng Bottom Tab chuẩn Mockup UI */}
+      <BottomTabBar activeTab="Home" navigation={navigation} />
     </SafeAreaView>
   );
 }

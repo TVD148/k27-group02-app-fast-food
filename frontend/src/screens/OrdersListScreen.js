@@ -11,6 +11,7 @@ import {
   SafeAreaView 
 } from 'react-native';
 import { fetchOrders } from '../services/api';
+import BottomTabBar from '../components/BottomTabBar';
 
 export default function OrdersListScreen({ navigation }) {
   const [orders, setOrders] = useState([]);
@@ -145,6 +146,9 @@ export default function OrdersListScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      {/* Thanh điều hướng Bottom Tab chuẩn Mockup UI */}
+      <BottomTabBar activeTab="OrdersList" navigation={navigation} />
     </SafeAreaView>
   );
 }

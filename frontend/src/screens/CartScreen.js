@@ -11,6 +11,7 @@ import {
   FlatList
 } from 'react-native';
 import { fetchCart, updateCartItem, removeCartItem, clearCart } from '../services/api';
+import BottomTabBar from '../components/BottomTabBar';
 
 export default function CartScreen({ navigation }) {
   const [cartData, setCartData] = useState(null);
@@ -220,6 +221,9 @@ export default function CartScreen({ navigation }) {
           </View>
         </>
       )}
+
+      {/* Thanh điều hướng Bottom Tab chuẩn Mockup UI */}
+      <BottomTabBar activeTab="Cart" navigation={navigation} />
     </SafeAreaView>
   );
 }
