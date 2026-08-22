@@ -28,11 +28,22 @@ export default function LoginScreen({ navigation, route }) {
     try {
       const response = await loginUser(emailOrPhone, password);
       if (response.success) {
-        Alert.alert('Thành công', 'Đăng nhập thành công!');
-        // Gọi callback để đổi trạng thái auth ở App.js
-        if (route.params?.onLoginSuccess) {
-          route.params.onLoginSuccess();
-        }
+        Alert.alert(
+          'Thành công 🎉',
+          `Chào mừng ${response.data?.user?.ho_ten || ''} trở lại!`,
+          [
+            { 
+              text: 'OK', 
+              onPress: () => {
+                if (navigation.canGoBack()) {
+                  navigation.goBack();
+                } else {
+                  navigation.navigate('Home');
+                }
+              } 
+            }
+          ]
+        );
       } else {
         Alert.alert('Thất bại', response.message || 'Sai thông tin đăng nhập!');
       }

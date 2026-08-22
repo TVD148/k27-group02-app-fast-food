@@ -6,7 +6,6 @@ import {
   ScrollView, 
   TextInput, 
   TouchableOpacity, 
-  Image, 
   FlatList, 
   ActivityIndicator, 
   Alert,
@@ -15,7 +14,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchCategories, fetchItems, logoutUser } from '../services/api';
 
-export default function HomeScreen({ navigation, route }) {
+export default function HomeScreen({ navigation }) {
   const [userInfo, setUserInfo] = useState(null);
   const [categories, setCategories] = useState([]);
   const [foods, setFoods] = useState([]);
@@ -26,19 +25,25 @@ export default function HomeScreen({ navigation, route }) {
   const [loadingFoods, setLoadingFoods] = useState(true);
 
   useEffect(() => {
-    loadUserData();
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadUserData();
+    });
     loadCategoriesData();
     loadFoodsData('', '');
-  }, []);
+    return unsubscribe;
+  }, [navigation]);
 
   const loadUserData = async () => {
     try {
       const storedUser = await AsyncStorage.getItem('user_info');
-      if (storedUser) {
+      const token = await AsyncStorage.getItem('user_token');
+      if (storedUser && token) {
         setUserInfo(JSON.parse(storedUser));
+      } else {
+        setUserInfo(null);
       }
     } catch (e) {
-      console.log('Không lấy được thông tin người dùng.');
+      setUserInfo(null);
     }
   };
 
@@ -79,19 +84,36 @@ export default function HomeScreen({ navigation, route }) {
     loadFoodsData(selectedCategory, searchQuery);
   };
 
+  // Guard kiểm tra đăng nhập trước khi cho phép vào các chức năng bảo vệ
+  const checkAuthGuard = async (onAuthorized, featureName) => {
+    const token = await AsyncStorage.getItem('user_token');
+    if (!token) {
+      Alert.alert(
+        'Yêu cầu đăng nhập 🔒',
+        `Bạn cần đăng nhập tài khoản để ${featureName}!`,
+        [
+          { text: 'Đăng nhập ngay', onPress: () => navigation.navigate('Login') },
+          { text: 'Để sau', style: 'cancel' }
+        ]
+      );
+      return false;
+    }
+    onAuthorized();
+    return true;
+  };
+
   const handleLogout = async () => {
     Alert.alert(
       'Đăng xuất',
-      'Bạn có chắc chắn muốn đăng xuất không?',
+      'Bạn có chắc chắn muốn đăng xuất tài khoản?',
       [
         { text: 'Hủy', style: 'cancel' },
         { 
           text: 'Đăng xuất', 
           onPress: async () => {
             await logoutUser();
-            if (route.params?.onLogout) {
-              route.params.onLogout();
-            }
+            setUserInfo(null);
+            Alert.alert('Thông báo', 'Đã đăng xuất tài khoản.');
           } 
         }
       ]
@@ -103,7 +125,6 @@ export default function HomeScreen({ navigation, route }) {
       style={styles.foodCard}
       onPress={() => navigation.navigate('ProductDetail', { itemId: item.ma_mon_an })}
     >
-      {/* Trong môi trường thật sẽ dùng URI hinh_anh từ DB, ở đây làm mock/fallback */}
       <View style={styles.foodImageContainer}>
         <Text style={styles.foodEmoji}>🍔</Text>
       </View>
@@ -117,31 +138,37 @@ export default function HomeScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 1. Header: Chào hỏi, Giỏ hàng, Đơn hàng & Đăng xuất */}
+      {/* 1. Header: Chào hỏi, Giỏ hàng, Đơn hàng & Đăng xuất / Đăng nhập */}
       <View style={styles.header}>
-        <View>
+        <View style={styles.userGreeting}>
           <Text style={styles.greetingText}>Xin chào,</Text>
-          <Text style={styles.userName}>{userInfo?.ho_ten || 'Khách hàng'}</Text>
+          <Text style={styles.userName} numberOfLines={1}>{userInfo?.ho_ten || 'Khách ghé thăm 👋'}</Text>
         </View>
 
         <View style={styles.headerActions}>
           <TouchableOpacity 
             style={styles.iconHeaderBtn} 
-            onPress={() => navigation.navigate('OrdersList')}
+            onPress={() => checkAuthGuard(() => navigation.navigate('OrdersList'), 'xem lịch sử đơn hàng')}
           >
             <Text style={styles.iconHeaderText}>📋 Đơn hàng</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={styles.iconHeaderBtnCart} 
-            onPress={() => navigation.navigate('Cart')}
+            onPress={() => checkAuthGuard(() => navigation.navigate('Cart'), 'xem giỏ hàng và mua hàng')}
           >
             <Text style={styles.iconHeaderTextCart}>🛒 Giỏ hàng</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Text style={styles.logoutButtonText}>Thoát</Text>
-          </TouchableOpacity>
+          {userInfo ? (
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <Text style={styles.logoutButtonText}>Thoát</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.loginButton} onPress={() => navigation.navigate('Login')}>
+              <Text style={styles.loginButtonText}>Đăng nhập</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -178,25 +205,26 @@ export default function HomeScreen({ navigation, route }) {
         {loadingCategories ? (
           <ActivityIndicator color="#FF8F00" style={styles.loader} />
         ) : (
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false} 
-            contentContainerStyle={styles.categoriesContainer}
-          >
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesContainer}>
             <TouchableOpacity 
-              style={[styles.categoryCard, selectedCategory === '' && styles.categoryCardSelected]}
+              style={[
+                styles.categoryChip, 
+                selectedCategory === '' && styles.categoryChipSelected
+              ]}
               onPress={() => handleCategorySelect('')}
             >
-              <Text style={[styles.categoryText, selectedCategory === '' && styles.categoryTextSelected]}>
-                Tất cả 🍽️
-              </Text>
+              <Text style={[
+                styles.categoryText, 
+                selectedCategory === '' && styles.categoryTextSelected
+              ]}>Tất cả</Text>
             </TouchableOpacity>
-            {categories.map(cat => (
-              <TouchableOpacity
-                key={cat.ma_danh_muc}
+
+            {categories.map((cat) => (
+              <TouchableOpacity 
+                key={cat.ma_danh_muc} 
                 style={[
-                  styles.categoryCard, 
-                  selectedCategory === cat.ma_danh_muc && styles.categoryCardSelected
+                  styles.categoryChip, 
+                  selectedCategory === cat.ma_danh_muc && styles.categoryChipSelected
                 ]}
                 onPress={() => handleCategorySelect(cat.ma_danh_muc)}
               >
@@ -228,7 +256,7 @@ export default function HomeScreen({ navigation, route }) {
             renderItem={renderFoodItem}
             keyExtractor={item => item.ma_mon_an.toString()}
             numColumns={2}
-            scrollEnabled={false} // Chạy scroll của ScrollView cha
+            scrollEnabled={false}
             columnWrapperStyle={styles.foodRow}
           />
         )}
@@ -249,11 +277,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingTop: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
+  },
+  userGreeting: {
+    flex: 1,
+    marginRight: 6,
   },
   headerActions: {
     flexDirection: 'row',
@@ -261,201 +293,206 @@ const styles = StyleSheet.create({
   },
   iconHeaderBtn: {
     backgroundColor: '#FFF3E0',
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 6,
     borderRadius: 8,
-    marginRight: 6,
+    marginRight: 4,
   },
   iconHeaderText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
     color: '#FF8F00',
   },
   iconHeaderBtnCart: {
     backgroundColor: '#E8F5E9',
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 6,
     borderRadius: 8,
-    marginRight: 6,
+    marginRight: 4,
   },
   iconHeaderTextCart: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
     color: '#2E7D32',
   },
   greetingText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#888',
   },
   userName: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#D84315',
   },
   logoutButton: {
-    borderWidth: 1,
-    borderColor: '#D84315',
-    borderRadius: 6,
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    backgroundColor: '#FFEBEE',
+    borderRadius: 8,
   },
   logoutButtonText: {
     color: '#D84315',
     fontWeight: 'bold',
     fontSize: 12,
   },
+  loginButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#FF8F00',
+    borderRadius: 8,
+  },
+  loginButtonText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
   searchSection: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     marginTop: 16,
-    alignItems: 'center',
   },
   searchInput: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
+    backgroundColor: '#FAF3E0',
+    borderRadius: 10,
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    paddingHorizontal: 14,
     fontSize: 14,
     color: '#333',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
   },
   searchButton: {
     backgroundColor: '#FF8F00',
-    paddingVertical: 11,
+    borderRadius: 10,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginLeft: 8,
   },
   searchButtonText: {
-    color: '#fff',
+    color: '#FFF',
     fontWeight: 'bold',
     fontSize: 14,
   },
   bannerContainer: {
-    marginHorizontal: 20,
+    marginHorizontal: 16,
     marginTop: 16,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#E65100', // Đỏ cam đậm
+    backgroundColor: '#D84315',
+    borderRadius: 14,
+    padding: 18,
   },
   bannerContent: {
-    padding: 20,
     alignItems: 'flex-start',
   },
   bannerTitle: {
-    fontSize: 22,
+    color: '#FFF',
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#FFD54F',
-    marginBottom: 4,
   },
   bannerSubtitle: {
+    color: '#FFE0B2',
     fontSize: 13,
-    color: '#FFF',
-    marginBottom: 10,
+    marginTop: 4,
   },
   bannerCode: {
-    backgroundColor: '#FF8F00',
-    color: '#FFF',
-    fontSize: 12,
+    marginTop: 10,
+    backgroundColor: '#FFF',
+    color: '#D84315',
     fontWeight: 'bold',
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
+    borderRadius: 6,
+    fontSize: 12,
   },
   sectionHeader: {
-    paddingHorizontal: 20,
-    marginTop: 24,
-    marginBottom: 12,
+    paddingHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 10,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
     color: '#333',
   },
   categoriesContainer: {
-    paddingLeft: 20,
-    paddingRight: 8,
-    paddingBottom: 4,
+    paddingLeft: 16,
   },
-  categoryCard: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 20,
-    paddingVertical: 8,
+  categoryChip: {
     paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#FAF3E0',
     marginRight: 10,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
   },
-  categoryCardSelected: {
+  categoryChipSelected: {
     backgroundColor: '#FF8F00',
-    borderColor: '#FF8F00',
   },
   categoryText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666',
-    fontWeight: '600',
+    fontWeight: '500',
   },
   categoryTextSelected: {
-    color: '#fff',
+    color: '#FFF',
+    fontWeight: 'bold',
   },
   foodRow: {
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 16,
+    paddingHorizontal: 16,
   },
   foodCard: {
-    width: '47%',
+    width: '48%',
     backgroundColor: '#FFF',
     borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#F0F0F0',
+    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-    overflow: 'hidden',
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
   foodImageContainer: {
-    height: 120,
+    width: '100%',
+    height: 100,
     backgroundColor: '#FFE0B2',
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 10,
   },
   foodEmoji: {
     fontSize: 48,
   },
   foodInfo: {
-    padding: 10,
+    flex: 1,
   },
   foodName: {
     fontSize: 14,
     fontWeight: 'bold',
     color: '#333',
+    marginBottom: 4,
   },
   categoryBadge: {
     fontSize: 11,
     color: '#888',
-    marginTop: 2,
+    marginBottom: 6,
   },
   foodPrice: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 'bold',
     color: '#D84315',
-    marginTop: 6,
   },
   loader: {
-    marginTop: 20,
+    marginVertical: 20,
   },
   emptyContainer: {
+    padding: 20,
     alignItems: 'center',
-    marginTop: 20,
-    paddingVertical: 20,
   },
   emptyText: {
-    color: '#999',
+    color: '#888',
     fontSize: 14,
   },
 });

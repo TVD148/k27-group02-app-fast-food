@@ -9,6 +9,7 @@ import {
   Alert,
   SafeAreaView
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchItemDetail, addToCart } from '../services/api';
 
 export default function ProductDetailScreen({ route, navigation }) {
@@ -102,8 +103,21 @@ export default function ProductDetailScreen({ route, navigation }) {
   };
 
   const handleAddToCart = async () => {
-    setAddingToCart(true);
     try {
+      const token = await AsyncStorage.getItem('user_token');
+      if (!token) {
+        Alert.alert(
+          'Yêu cầu đăng nhập 🔒',
+          'Bạn cần đăng nhập tài khoản để thêm món vào giỏ và đặt hàng!',
+          [
+            { text: 'Đăng nhập ngay', onPress: () => navigation.navigate('Login') },
+            { text: 'Để sau', style: 'cancel' }
+          ]
+        );
+        return;
+      }
+
+      setAddingToCart(true);
       // Gộp toàn bộ mã giá trị tùy chọn đã chọn
       const allSelectedOptionIds = Object.values(selectedOptions).flat();
       
