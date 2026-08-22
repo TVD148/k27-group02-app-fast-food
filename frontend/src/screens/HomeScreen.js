@@ -166,7 +166,7 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* 1. Teal Curved Header theo đúng Mockup Design */}
         <View style={styles.tealHeader}>
           <View style={styles.topRow}>

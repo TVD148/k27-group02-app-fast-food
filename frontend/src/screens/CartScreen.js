@@ -186,6 +186,7 @@ export default function CartScreen({ navigation }) {
           </View>
 
           <FlatList
+            style={{ flex: 1 }}
             data={items}
             renderItem={renderCartItem}
             keyExtractor={item => item.ma_chi_tiet_gio.toString()}

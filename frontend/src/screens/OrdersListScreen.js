@@ -136,6 +136,7 @@ export default function OrdersListScreen({ navigation }) {
         </View>
       ) : (
         <FlatList
+          style={{ flex: 1 }}
           data={orders}
           renderItem={renderOrderItem}
           keyExtractor={item => item.ma_don_hang.toString()}
