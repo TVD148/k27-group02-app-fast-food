@@ -42,6 +42,19 @@ export default function CheckoutScreen({ route, navigation }) {
   };
 
   const handlePlaceOrder = async () => {
+    const token = await AsyncStorage.getItem('user_token');
+    if (!token) {
+      Alert.alert(
+        'Yêu cầu đăng nhập 🔒',
+        'Bạn cần đăng nhập tài khoản để tiến hành đặt hàng và thanh toán!',
+        [
+          { text: 'Đăng nhập ngay', onPress: () => navigation.navigate('Login') },
+          { text: 'Để sau', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
     if (!address.trim()) {
       Alert.alert('Lỗi', 'Vui lòng nhập địa chỉ giao hàng!');
       return;

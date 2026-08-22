@@ -10,6 +10,7 @@ import {
   SafeAreaView,
   FlatList
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchCart, updateCartItem, removeCartItem, clearCart } from '../services/api';
 import BottomTabBar from '../components/BottomTabBar';
 
@@ -28,12 +29,18 @@ export default function CartScreen({ navigation }) {
   const loadCart = async () => {
     setLoading(true);
     try {
+      const token = await AsyncStorage.getItem('user_token');
+      if (!token) {
+        setCartData({ items: [], tong_tien: 0, tong_so_luong: 0 });
+        return;
+      }
       const response = await fetchCart();
       if (response.success) {
         setCartData(response.data);
       }
     } catch (error) {
-      Alert.alert('Lỗi', error.message || 'Không thể lấy thông tin giỏ hàng!');
+      console.log('Lỗi tải giỏ hàng:', error.message);
+      setCartData({ items: [], tong_tien: 0, tong_so_luong: 0 });
     } finally {
       setLoading(false);
       setRefreshing(false);

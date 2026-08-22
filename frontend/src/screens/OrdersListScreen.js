@@ -10,6 +10,7 @@ import {
   RefreshControl,
   SafeAreaView 
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchOrders } from '../services/api';
 import BottomTabBar from '../components/BottomTabBar';
 
@@ -29,12 +30,18 @@ export default function OrdersListScreen({ navigation }) {
   const loadOrders = async () => {
     setLoading(true);
     try {
+      const token = await AsyncStorage.getItem('user_token');
+      if (!token) {
+        setOrders([]);
+        return;
+      }
       const response = await fetchOrders(selectedTab);
       if (response.success) {
         setOrders(response.data);
       }
     } catch (error) {
-      Alert.alert('Lỗi', error.message || 'Không thể tải danh sách đơn hàng!');
+      console.log('Lỗi tải danh sách đơn hàng:', error.message);
+      setOrders([]);
     } finally {
       setLoading(false);
       setRefreshing(false);

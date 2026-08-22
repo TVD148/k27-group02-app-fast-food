@@ -183,14 +183,14 @@ export default function HomeScreen({ navigation }) {
             <View style={styles.headerRightActions}>
               <TouchableOpacity 
                 style={styles.headerBadgeBtn}
-                onPress={() => checkAuthGuard(() => navigation.navigate('OrdersList'), 'xem lịch sử đơn hàng')}
+                onPress={() => navigation.navigate('OrdersList')}
               >
                 <Text style={styles.headerBadgeIcon}>📋</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
                 style={styles.headerBadgeBtn}
-                onPress={() => checkAuthGuard(() => navigation.navigate('Cart'), 'xem giỏ hàng và mua hàng')}
+                onPress={() => navigation.navigate('Cart')}
               >
                 <Text style={styles.headerBadgeIcon}>🛒</Text>
               </TouchableOpacity>

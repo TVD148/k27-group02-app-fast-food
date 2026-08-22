@@ -3,22 +3,6 @@ import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function BottomTabBar({ activeTab, navigation }) {
-  const checkAuthAndNavigate = async (targetScreen, featureName) => {
-    const token = await AsyncStorage.getItem('user_token');
-    if (!token && (targetScreen === 'Cart' || targetScreen === 'OrdersList')) {
-      Alert.alert(
-        'Yêu cầu đăng nhập 🔒',
-        `Bạn cần đăng nhập tài khoản để ${featureName}!`,
-        [
-          { text: 'Đăng nhập ngay', onPress: () => navigation.navigate('Login') },
-          { text: 'Để sau', style: 'cancel' }
-        ]
-      );
-      return;
-    }
-    navigation.navigate(targetScreen);
-  };
-
   const handleAccountPress = async () => {
     const token = await AsyncStorage.getItem('user_token');
     if (token) {
@@ -48,8 +32,8 @@ export default function BottomTabBar({ activeTab, navigation }) {
 
   const tabs = [
     { key: 'Home', label: 'Home', icon: '🏠', action: () => navigation.navigate('Home') },
-    { key: 'Cart', label: 'Cart', icon: '🛒', action: () => checkAuthAndNavigate('Cart', 'xem giỏ hàng và mua hàng') },
-    { key: 'OrdersList', label: 'Orders', icon: '📋', action: () => checkAuthAndNavigate('OrdersList', 'xem lịch sử đơn hàng') },
+    { key: 'Cart', label: 'Cart', icon: '🛒', action: () => navigation.navigate('Cart') },
+    { key: 'OrdersList', label: 'Orders', icon: '📋', action: () => navigation.navigate('OrdersList') },
     { key: 'Account', label: 'Account', icon: '👤', action: handleAccountPress },
   ];
 
