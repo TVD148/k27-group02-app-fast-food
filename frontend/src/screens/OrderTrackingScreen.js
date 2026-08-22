@@ -67,10 +67,10 @@ export default function OrderTrackingScreen({ route, navigation }) {
   };
 
   const steps = [
-    { key: 'cho_xac_nhan', title: 'Chờ xác nhận', desc: 'Đơn hàng đang chờ cửa hàng duyệt', icon: '⏳' },
-    { key: 'dang_che_bien', title: 'Đang chế biến', desc: 'Nhà bếp đang chế biến món ăn', icon: '👨‍🍳' },
-    { key: 'dang_giao', title: 'Đang giao hàng', desc: 'Shipper đang di chuyển giao tới bạn', icon: '🛵' },
-    { key: 'da_giao', title: 'Đã giao thành công', desc: 'Đơn hàng hoàn tất. Chúc ngon miệng!', icon: '🎉' },
+    { key: 'cho_xac_nhan', title: 'Chờ xác nhận', desc: 'Đơn hàng vừa nằm trong danh sách ưu tiên', icon: '⏳' },
+    { key: 'dang_che_bien', title: 'Đang chế biến', desc: 'Đầu bếp đang cắt thái và chế biến siêu ngon', icon: '👨‍🍳' },
+    { key: 'dang_giao', title: 'Đang giao hàng', desc: 'Shipper đang trên đường tới bạn', icon: '🛵' },
+    { key: 'da_giao', title: 'Đã hoàn thành', desc: 'Đã giao thành công. Chúc ngon miệng!', icon: '🎉' },
   ];
 
   const getStepStatusIndex = (currentStatus) => {
@@ -83,10 +83,48 @@ export default function OrderTrackingScreen({ route, navigation }) {
     }
   };
 
+  // Các thông điệp vui vẻ kiểu thiết kế Mockup Sloth Mascot
+  const getStatusMascotMessage = (currentStatus) => {
+    switch (currentStatus) {
+      case 'cho_xac_nhan':
+        return {
+          emoji: '📱🦥',
+          title: 'Đơn hàng đã được tiếp nhận!',
+          desc: 'Your order just made it to the top of our chill list. No stress. No rush. Just vibes. 😎🍿'
+        };
+      case 'dang_che_bien':
+        return {
+          emoji: '👨‍🍳🔥',
+          title: 'Nhà bếp đang bận rộn chế biến!',
+          desc: "Your order's in the works! The squad's slicing, dicing, and Zlurping it into greatness. 😋🔥"
+        };
+      case 'dang_giao':
+        return {
+          emoji: '🛵💨',
+          title: 'Shipper đang giao tới!',
+          desc: 'Our speedy driver is on the move. Hot & fresh fast food is coming right up! 🚀'
+        };
+      case 'da_giao':
+        return {
+          emoji: '🎉🍔',
+          title: 'Giao hàng thành công!',
+          desc: 'Delivered with love! Enjoy your delicious meal & see you next time! ❤️'
+        };
+      case 'da_huy':
+        return {
+          emoji: '❌',
+          title: 'Đơn hàng đã bị hủy',
+          desc: 'Đơn hàng đã dừng xử lý. Hãy tạo đơn mới bất cứ lúc nào bạn muốn!'
+        };
+      default:
+        return { emoji: '📦', title: 'Đang xử lý', desc: 'Đang cập nhật trạng thái đơn...' };
+    }
+  };
+
   if (loading && !refreshing) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#FF8F00" />
+        <ActivityIndicator size="large" color="#00A896" />
       </View>
     );
   }
@@ -101,13 +139,14 @@ export default function OrderTrackingScreen({ route, navigation }) {
 
   const activeIndex = getStepStatusIndex(order.trang_thai_don_hang);
   const isCanceled = order.trang_thai_don_hang === 'da_huy';
+  const mascot = getStatusMascotMessage(order.trang_thai_don_hang);
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadOrderDetails(); }} colors={['#FF8F00']} />
+          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadOrderDetails(); }} colors={['#00A896']} />
         }
         showsVerticalScrollIndicator={false}
       >
@@ -124,51 +163,36 @@ export default function OrderTrackingScreen({ route, navigation }) {
           </Text>
         </View>
 
-        {/* 1. Màn hình Timeline / Stepper Tiến Trình */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>📍 Tiến trình đơn hàng</Text>
-
-          {isCanceled ? (
-            <View style={styles.canceledCard}>
-              <Text style={styles.canceledIcon}>❌</Text>
-              <Text style={styles.canceledTitle}>Đơn hàng đã bị hủy</Text>
-              <Text style={styles.canceledDesc}>Rất tiếc, đơn hàng này đã dừng xử lý.</Text>
-            </View>
-          ) : (
-            <View style={styles.stepperContainer}>
-              {steps.map((step, idx) => {
-                const isCompleted = idx <= activeIndex;
-                const isCurrent = idx === activeIndex;
-
-                return (
-                  <View key={step.key} style={styles.stepRow}>
-                    <View style={styles.stepLeftColumn}>
-                      <View style={[
-                        styles.stepDot, 
-                        isCompleted && styles.stepDotCompleted,
-                        isCurrent && styles.stepDotCurrent
-                      ]}>
-                        <Text style={styles.stepIconText}>{step.icon}</Text>
-                      </View>
-                      {idx < steps.length - 1 && (
-                        <View style={[styles.stepLine, isCompleted && idx < activeIndex && styles.stepLineCompleted]} />
-                      )}
-                    </View>
-
-                    <View style={styles.stepContent}>
-                      <Text style={[styles.stepTitle, isCompleted && styles.stepTitleCompleted, isCurrent && styles.stepTitleCurrent]}>
-                        {step.title}
-                      </Text>
-                      <Text style={styles.stepDesc}>{step.desc}</Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          )}
+        {/* Top Stepper Indicator (4 Dấu Chấm Tiến Trình) */}
+        <View style={styles.topStepperCard}>
+          <View style={styles.dotsRow}>
+            {steps.map((step, idx) => {
+              const isCompleted = idx <= activeIndex;
+              const isCurrent = idx === activeIndex;
+              return (
+                <React.Fragment key={step.key}>
+                  <View style={[
+                    styles.stepperDot,
+                    isCompleted && styles.stepperDotActive,
+                    isCurrent && styles.stepperDotCurrent
+                  ]} />
+                  {idx < steps.length - 1 && (
+                    <View style={[styles.stepperLine, idx < activeIndex && styles.stepperLineActive]} />
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </View>
         </View>
 
-        {/* 2. Thông tin giao nhận */}
+        {/* Mascot / Graphic Card theo chuẩn Mockup */}
+        <View style={styles.mascotCard}>
+          <Text style={styles.mascotEmoji}>{mascot.emoji}</Text>
+          <Text style={styles.mascotTitle}>{mascot.title}</Text>
+          <Text style={styles.mascotDesc}>{mascot.desc}</Text>
+        </View>
+
+        {/* Thông tin giao nhận */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>🚚 Thông tin nhận hàng</Text>
           <Text style={styles.infoLabel}>Khách hàng: <Text style={styles.infoValue}>{order.ten_khach_hang}</Text></Text>
@@ -187,9 +211,9 @@ export default function OrderTrackingScreen({ route, navigation }) {
           )}
         </View>
 
-        {/* 3. Chi tiết danh sách món ăn */}
+        {/* Chi tiết các món đã đặt */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>🍔 Chi tiết các món đặt ({order.items?.length || 0})</Text>
+          <Text style={styles.sectionTitle}>🍔 Món ăn trong đơn ({order.items?.length || 0})</Text>
           {order.items?.map((item, index) => (
             <View key={index} style={styles.itemRow}>
               <View style={styles.itemMain}>
@@ -220,22 +244,6 @@ export default function OrderTrackingScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* 4. Lịch sử nhật ký làm việc (Timeline logs) */}
-        {order.lich_su_trang_thai && order.lich_su_trang_thai.length > 0 && (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>📝 Nhật ký làm việc</Text>
-            {order.lich_su_trang_thai.map((log, idx) => (
-              <View key={idx} style={styles.logRow}>
-                <Text style={styles.logTime}>{new Date(log.ngay_tao).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</Text>
-                <View style={styles.logBody}>
-                  <Text style={styles.logActor}>{log.nguoi_thuc_hien}:</Text>
-                  <Text style={styles.logNote}>{log.ghi_chu}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-
         {/* Nút hủy đơn nếu đơn đang ở trạng thái 'cho_xac_nhan' */}
         {order.trang_thai_don_hang === 'cho_xac_nhan' && (
           <TouchableOpacity 
@@ -258,7 +266,7 @@ export default function OrderTrackingScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#F7F9FA',
   },
   centerContainer: {
     flex: 1,
@@ -268,7 +276,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: '#D84315',
+    color: '#FF5722',
     fontWeight: 'bold',
   },
   scrollContent: {
@@ -276,9 +284,9 @@ const styles = StyleSheet.create({
   },
   headerCard: {
     backgroundColor: '#FFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 12,
     elevation: 2,
   },
   headerTop: {
@@ -289,133 +297,120 @@ const styles = StyleSheet.create({
   orderIdText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#D84315',
+    color: '#00A896',
   },
   refreshBtn: {
-    backgroundColor: '#FFF3E0',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
+    backgroundColor: '#E0F2F1',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   refreshBtnText: {
     fontSize: 12,
-    color: '#FF8F00',
+    color: '#00A896',
     fontWeight: 'bold',
   },
   orderTimeText: {
     fontSize: 12,
-    color: '#777',
+    color: '#78909C',
     marginTop: 4,
+  },
+  topStepperCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    justifyContent: 'center',
+  },
+  stepperDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#ECEFF1',
+  },
+  stepperDotActive: {
+    backgroundColor: '#FF5722',
+  },
+  stepperDotCurrent: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#FF5722',
+    borderWidth: 3,
+    borderColor: '#FFE0B2',
+  },
+  stepperLine: {
+    flex: 1,
+    height: 3,
+    backgroundColor: '#ECEFF1',
+    marginHorizontal: 4,
+  },
+  stepperLineActive: {
+    backgroundColor: '#FF5722',
+  },
+  mascotCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 16,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 5,
+  },
+  mascotEmoji: {
+    fontSize: 64,
+    marginBottom: 12,
+  },
+  mascotTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1A1D1E',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  mascotDesc: {
+    fontSize: 13,
+    color: '#6C757D',
+    textAlign: 'center',
+    lineHeight: 19,
+    paddingHorizontal: 10,
   },
   sectionCard: {
     backgroundColor: '#FFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 12,
     elevation: 2,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 14,
-  },
-  stepperContainer: {
-    paddingLeft: 4,
-  },
-  stepRow: {
-    flexDirection: 'row',
-    marginBottom: 10,
-  },
-  stepLeftColumn: {
-    alignItems: 'center',
-    marginRight: 14,
-    width: 36,
-  },
-  stepDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F0F0F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#DDD',
-  },
-  stepDotCompleted: {
-    backgroundColor: '#FFE0B2',
-    borderColor: '#FF8F00',
-  },
-  stepDotCurrent: {
-    backgroundColor: '#FF8F00',
-    borderColor: '#D84315',
-  },
-  stepIconText: {
-    fontSize: 16,
-  },
-  stepLine: {
-    width: 3,
-    height: 30,
-    backgroundColor: '#E0E0E0',
-    marginVertical: 2,
-  },
-  stepLineCompleted: {
-    backgroundColor: '#FF8F00',
-  },
-  stepContent: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  stepTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#999',
-  },
-  stepTitleCompleted: {
-    color: '#333',
-  },
-  stepTitleCurrent: {
-    fontSize: 15,
-    color: '#D84315',
-  },
-  stepDesc: {
-    fontSize: 12,
-    color: '#777',
-    marginTop: 2,
-  },
-  canceledCard: {
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#FFEBEE',
-    borderRadius: 10,
-  },
-  canceledIcon: {
-    fontSize: 40,
-    marginBottom: 8,
-  },
-  canceledTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#C62828',
-  },
-  canceledDesc: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 4,
+    color: '#1A1D1E',
+    marginBottom: 12,
   },
   infoLabel: {
     fontSize: 13,
-    color: '#666',
+    color: '#6C757D',
     marginBottom: 6,
   },
   infoValue: {
-    color: '#333',
+    color: '#1A1D1E',
     fontWeight: 'bold',
   },
   shipperCard: {
     backgroundColor: '#E8F5E9',
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     marginTop: 10,
   },
   shipperTitle: {
@@ -446,7 +441,7 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: '#1A1D1E',
   },
   itemOptionText: {
     fontSize: 12,
@@ -456,7 +451,7 @@ const styles = StyleSheet.create({
   itemPrice: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1A1D1E',
   },
   divider: {
     height: 1,
@@ -470,50 +465,29 @@ const styles = StyleSheet.create({
   },
   priceLabel: {
     fontSize: 13,
-    color: '#666',
+    color: '#6C757D',
   },
   priceValue: {
     fontSize: 13,
-    color: '#333',
+    color: '#1A1D1E',
     fontWeight: '600',
   },
   totalLabel: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1A1D1E',
   },
   totalValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#D84315',
-  },
-  logRow: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  logTime: {
-    fontSize: 12,
-    color: '#999',
-    width: 60,
-  },
-  logBody: {
-    flex: 1,
-  },
-  logActor: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#555',
-  },
-  logNote: {
-    fontSize: 12,
-    color: '#333',
+    color: '#FF5722',
   },
   cancelBtn: {
-    backgroundColor: '#D84315',
-    borderRadius: 10,
+    backgroundColor: '#FF5722',
+    borderRadius: 24,
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 6,
     marginBottom: 30,
   },
   btnDisabled: {

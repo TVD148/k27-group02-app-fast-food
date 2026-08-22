@@ -309,8 +309,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   optionCardSelected: {
-    backgroundColor: '#FFE0B2',
-    borderColor: '#FF8F00',
+    backgroundColor: '#FFF3E0',
+    borderColor: '#FF5722',
   },
   optionName: {
     fontSize: 13,
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   optionNameSelected: {
-    color: '#E65100',
+    color: '#FF5722',
     fontWeight: 'bold',
   },
   optionPrice: {
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   optionPriceSelected: {
-    color: '#E65100',
+    color: '#FF5722',
   },
   bottomBar: {
     position: 'absolute',
@@ -357,18 +357,19 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   priceValue: {
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: 'bold',
-    color: '#D84315',
+    color: '#FF5722',
     marginTop: 2,
   },
   addToCartButton: {
-    backgroundColor: '#FF8F00',
-    borderRadius: 8,
+    backgroundColor: '#FF5722',
+    borderRadius: 20,
     paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 2,
   },
   addToCartButtonText: {
     color: '#FFF',

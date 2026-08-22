@@ -16,10 +16,10 @@ export function AppNavigator() {
     <Stack.Navigator
       initialRouteName="Home"
       screenOptions={{
-        headerStyle: { backgroundColor: '#FF8F00' },
+        headerStyle: { backgroundColor: '#00A896' },
         headerTintColor: '#fff',
         headerTitleStyle: { fontWeight: 'bold' },
-        cardStyle: { backgroundColor: '#fff' },
+        cardStyle: { backgroundColor: '#F7F9FA' },
       }}
     >
       <Stack.Screen 

@@ -16,7 +16,7 @@ export default function OrdersListScreen({ navigation }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedTab, setSelectedTab] = useState(''); // '' (Tất cả), 'cho_xac_nhan', 'dang_giao', 'da_giao'
+  const [selectedTab, setSelectedTab] = useState('');
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -45,13 +45,13 @@ export default function OrdersListScreen({ navigation }) {
       case 'cho_xac_nhan':
         return { label: '⏳ Chờ xác nhận', color: '#FF9800', bg: '#FFF3E0' };
       case 'dang_che_bien':
-        return { label: '👨‍🍳 Đang chế biến', color: '#2196F3', bg: '#E3F2FD' };
+        return { label: '👨‍🍳 Đang chế biến', color: '#028090', bg: '#E0F2F1' };
       case 'dang_giao':
         return { label: '🛵 Đang giao', color: '#9C27B0', bg: '#F3E5F5' };
       case 'da_giao':
-        return { label: '🎉 Đã hoàn thành', color: '#4CAF50', bg: '#E8F5E9' };
+        return { label: '🎉 Đã hoàn thành', color: '#2E7D32', bg: '#E8F5E9' };
       case 'da_huy':
-        return { label: '❌ Đã hủy', color: '#F44336', bg: '#FFEBEE' };
+        return { label: '❌ Đã hủy', color: '#D32F2F', bg: '#FFEBEE' };
       default:
         return { label: status, color: '#777', bg: '#EEE' };
     }
@@ -63,6 +63,7 @@ export default function OrdersListScreen({ navigation }) {
     return (
       <TouchableOpacity 
         style={styles.orderCard}
+        activeOpacity={0.85}
         onPress={() => navigation.navigate('OrderTracking', { orderId: item.ma_don_hang })}
       >
         <View style={styles.cardHeader}>
@@ -97,7 +98,7 @@ export default function OrdersListScreen({ navigation }) {
     { key: 'cho_xac_nhan', label: 'Chờ nhận' },
     { key: 'dang_che_bien', label: 'Đang làm' },
     { key: 'dang_giao', label: 'Đang giao' },
-    { key: 'da_giao', label: 'Đã hoàn thành' },
+    { key: 'da_giao', label: 'Hoàn thành' },
   ];
 
   return (
@@ -125,7 +126,7 @@ export default function OrdersListScreen({ navigation }) {
 
       {loading && !refreshing ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#FF8F00" />
+          <ActivityIndicator size="large" color="#00A896" />
         </View>
       ) : orders.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -139,7 +140,7 @@ export default function OrdersListScreen({ navigation }) {
           keyExtractor={item => item.ma_don_hang.toString()}
           contentContainerStyle={styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadOrders(); }} colors={['#FF8F00']} />
+            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadOrders(); }} colors={['#00A896']} />
           }
           showsVerticalScrollIndicator={false}
         />
@@ -151,7 +152,7 @@ export default function OrdersListScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#F7F9FA',
   },
   centerContainer: {
     flex: 1,
@@ -173,11 +174,11 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   tabBtnActive: {
-    backgroundColor: '#FF8F00',
+    backgroundColor: '#FF5722',
   },
   tabText: {
     fontSize: 13,
-    color: '#666',
+    color: '#6C757D',
     fontWeight: '500',
   },
   tabTextActive: {
@@ -189,13 +190,13 @@ const styles = StyleSheet.create({
   },
   orderCard: {
     backgroundColor: '#FFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 14,
     marginBottom: 12,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.06,
     shadowRadius: 4,
   },
   cardHeader: {
@@ -207,7 +208,7 @@ const styles = StyleSheet.create({
   orderId: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1A1D1E',
   },
   badge: {
     paddingHorizontal: 10,
@@ -220,7 +221,7 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 12,
-    color: '#777',
+    color: '#78909C',
     marginBottom: 4,
   },
   addressText: {
@@ -243,7 +244,7 @@ const styles = StyleSheet.create({
   totalPrice: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#D84315',
+    color: '#FF5722',
   },
   emptyContainer: {
     flex: 1,
@@ -256,7 +257,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#777',
+    color: '#78909C',
     fontWeight: 'bold',
   },
 });

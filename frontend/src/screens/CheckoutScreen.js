@@ -21,7 +21,7 @@ export default function CheckoutScreen({ route, navigation }) {
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [note, setNote] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('tien_mat'); // tien_mat, momo, vnpay, chuyen_khoan
+  const [paymentMethod, setPaymentMethod] = useState('tien_mat');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -173,13 +173,13 @@ export default function CheckoutScreen({ route, navigation }) {
               <Text style={styles.priceValue}>15.000 đ</Text>
             </View>
             <View style={styles.priceRow}>
-              <Text style={styles.totalLabel}>TỔNG CỘNG:</Text>
+              <Text style={styles.totalLabel}>TỔNG THÀNH TIỀN:</Text>
               <Text style={styles.totalValue}>{grandTotal?.toLocaleString('vi-VN')} đ</Text>
             </View>
           </View>
         </ScrollView>
 
-        {/* Nút đặt hàng ở cạnh dưới */}
+        {/* Nút đặt hàng cạnh dưới */}
         <View style={styles.bottomBar}>
           <TouchableOpacity 
             style={[styles.submitBtn, submitting && styles.btnDisabled]} 
@@ -201,7 +201,7 @@ export default function CheckoutScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#F7F9FA',
   },
   scrollContent: {
     padding: 16,
@@ -209,36 +209,36 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     backgroundColor: '#FFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.06,
     shadowRadius: 4,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1A1D1E',
     marginBottom: 14,
   },
   label: {
     fontSize: 13,
     fontWeight: 'bold',
-    color: '#555',
+    color: '#6C757D',
     marginBottom: 6,
     marginTop: 6,
   },
   input: {
-    backgroundColor: '#F9F9F9',
-    borderRadius: 8,
+    backgroundColor: '#F7F9FA',
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    padding: 10,
+    padding: 12,
     fontSize: 14,
-    color: '#333',
+    color: '#1A1D1E',
     marginBottom: 8,
   },
   paymentCard: {
@@ -246,13 +246,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 12,
     marginBottom: 10,
-    backgroundColor: '#F9F9F9',
+    backgroundColor: '#F7F9FA',
   },
   paymentCardSelected: {
-    borderColor: '#FF8F00',
+    borderColor: '#FF5722',
     backgroundColor: '#FFF3E0',
   },
   radioCircle: {
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#FF8F00',
+    borderColor: '#FF5722',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#FF8F00',
+    backgroundColor: '#FF5722',
   },
   paymentInfo: {
     flex: 1,
@@ -277,14 +277,14 @@ const styles = StyleSheet.create({
   paymentLabel: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1A1D1E',
   },
   paymentLabelSelected: {
-    color: '#D84315',
+    color: '#FF5722',
   },
   paymentDesc: {
     fontSize: 12,
-    color: '#777',
+    color: '#78909C',
     marginTop: 2,
   },
   orderItemRow: {
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   orderItemPrice: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1A1D1E',
   },
   divider: {
     height: 1,
@@ -314,22 +314,22 @@ const styles = StyleSheet.create({
   },
   priceLabel: {
     fontSize: 13,
-    color: '#666',
+    color: '#6C757D',
   },
   priceValue: {
     fontSize: 13,
-    color: '#333',
+    color: '#1A1D1E',
     fontWeight: '600',
   },
   totalLabel: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1A1D1E',
   },
   totalValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#D84315',
+    color: '#FF5722',
   },
   bottomBar: {
     position: 'absolute',
@@ -343,13 +343,13 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   submitBtn: {
-    backgroundColor: '#FF8F00',
-    borderRadius: 10,
+    backgroundColor: '#FF5722',
+    borderRadius: 24,
     paddingVertical: 14,
     alignItems: 'center',
   },
   btnDisabled: {
-    backgroundColor: '#FFB74D',
+    backgroundColor: '#FFAB91',
   },
   submitBtnText: {
     color: '#FFF',

@@ -114,7 +114,6 @@ export default function CartScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Danh sách tùy chọn đã chọn (Size, Toppings) */}
         {item.tuy_chon_da_chon && item.tuy_chon_da_chon.length > 0 && (
           <View style={styles.optionsContainer}>
             {item.tuy_chon_da_chon.map((opt, idx) => (
@@ -130,19 +129,19 @@ export default function CartScreen({ navigation }) {
           
           <View style={styles.qtyControlContainer}>
             <TouchableOpacity 
-              style={styles.qtyBtn} 
+              style={styles.qtyBtnMinus} 
               onPress={() => handleUpdateQty(item.ma_chi_tiet_gio, item.so_luong, -1)}
             >
-              <Text style={styles.qtyBtnText}>-</Text>
+              <Text style={styles.qtyBtnMinusText}>-</Text>
             </TouchableOpacity>
             
             <Text style={styles.qtyText}>{item.so_luong}</Text>
             
             <TouchableOpacity 
-              style={styles.qtyBtn} 
+              style={styles.qtyBtnPlus} 
               onPress={() => handleUpdateQty(item.ma_chi_tiet_gio, item.so_luong, 1)}
             >
-              <Text style={styles.qtyBtnText}>+</Text>
+              <Text style={styles.qtyBtnPlusText}>+</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -153,7 +152,7 @@ export default function CartScreen({ navigation }) {
   if (loading && !refreshing) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#FF8F00" />
+        <ActivityIndicator size="large" color="#00A896" />
       </View>
     );
   }
@@ -165,18 +164,21 @@ export default function CartScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       {items.length === 0 ? (
+        /* Empty Cart State theo đúng Mockup Design (Paper bag / empty state) */
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyEmoji}>🛒</Text>
+          <View style={styles.paperBagContainer}>
+            <Text style={styles.paperBagEmoji}>🛍️</Text>
+          </View>
           <Text style={styles.emptyTitle}>Giỏ hàng của bạn đang trống!</Text>
-          <Text style={styles.emptySubtitle}>Hãy quay lại thực đơn và chọn cho mình những món ăn siêu ngon nhé.</Text>
-          <TouchableOpacity style={styles.browseBtn} onPress={() => navigation.navigate('Home')}>
-            <Text style={styles.browseBtnText}>Khám phá thực đơn 🍔</Text>
+          <Text style={styles.emptySubtitle}>Có vẻ như bạn chưa chọn món ăn nào. Hãy quay lại thực đơn và chọn những món ăn ngon tuyệt nhé.</Text>
+          <TouchableOpacity style={styles.orderNowBtn} onPress={() => navigation.navigate('Home')}>
+            <Text style={styles.orderNowBtnText}>Khám phá thực đơn 🍔</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <>
           <View style={styles.cartHeader}>
-            <Text style={styles.cartCountText}>Bạn có {cartData?.tong_so_luong || 0} món trong giỏ</Text>
+            <Text style={styles.cartCountText}>Món ăn đã chọn ({cartData?.tong_so_luong || 0})</Text>
             <TouchableOpacity onPress={handleClearCart}>
               <Text style={styles.clearAllText}>Xóa tất cả</Text>
             </TouchableOpacity>
@@ -190,7 +192,7 @@ export default function CartScreen({ navigation }) {
             showsVerticalScrollIndicator={false}
           />
 
-          {/* Thanh toán & Tổng tiền */}
+          {/* Bottom Card: Review Payment and Address */}
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Tiền hàng tạm tính:</Text>
@@ -205,7 +207,7 @@ export default function CartScreen({ navigation }) {
             <View style={styles.divider} />
 
             <View style={styles.summaryRow}>
-              <Text style={styles.totalLabel}>TỔNG THANH TOÁN:</Text>
+              <Text style={styles.totalLabel}>TỔNG THÀNH TIỀN:</Text>
               <Text style={styles.totalValue}>{grandTotal.toLocaleString('vi-VN')} đ</Text>
             </View>
 
@@ -225,7 +227,7 @@ export default function CartScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#F7F9FA',
   },
   centerContainer: {
     flex: 1,
@@ -238,16 +240,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 8,
+    paddingBottom: 10,
   },
   cartCountText: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 15,
+    color: '#1A1D1E',
     fontWeight: 'bold',
   },
   clearAllText: {
     fontSize: 13,
-    color: '#D84315',
+    color: '#FF5722',
     fontWeight: 'bold',
   },
   listContent: {
@@ -256,27 +258,27 @@ const styles = StyleSheet.create({
   },
   cartItemCard: {
     backgroundColor: '#FFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 12,
     marginBottom: 12,
     flexDirection: 'row',
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.06,
     shadowRadius: 4,
   },
   foodEmojiContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    backgroundColor: '#FFE0B2',
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: '#FFF3E0',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   foodEmoji: {
-    fontSize: 32,
+    fontSize: 34,
   },
   cartItemInfo: {
     flex: 1,
@@ -290,12 +292,12 @@ const styles = StyleSheet.create({
   foodName: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1A1D1E',
     flex: 1,
   },
   deleteText: {
     fontSize: 16,
-    color: '#999',
+    color: '#9E9E9E',
     paddingLeft: 8,
   },
   optionsContainer: {
@@ -304,54 +306,65 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 12,
-    color: '#888',
+    color: '#6C757D',
   },
   cartItemFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 6,
   },
   itemPrice: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#D84315',
+    color: '#FF5722',
   },
   qtyControlContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 6,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
   },
-  qtyBtn: {
-    width: 28,
-    height: 28,
+  qtyBtnMinus: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#E0E0E0',
-    borderRadius: 4,
+    backgroundColor: '#FFF',
   },
-  qtyBtnText: {
-    fontSize: 16,
+  qtyBtnMinusText: {
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#616161',
   },
   qtyText: {
     fontSize: 14,
     fontWeight: 'bold',
-    paddingHorizontal: 12,
-    color: '#333',
+    paddingHorizontal: 10,
+    color: '#1A1D1E',
+  },
+  qtyBtnPlus: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#FF5722',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  qtyBtnPlusText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FFF',
   },
   summaryCard: {
     backgroundColor: '#FFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 8,
   },
@@ -362,11 +375,11 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 14,
-    color: '#666',
+    color: '#6C757D',
   },
   summaryValue: {
     fontSize: 14,
-    color: '#333',
+    color: '#1A1D1E',
     fontWeight: '600',
   },
   divider: {
@@ -377,19 +390,20 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1A1D1E',
   },
   totalValue: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#D84315',
+    color: '#FF5722',
   },
   checkoutBtn: {
-    backgroundColor: '#FF8F00',
-    borderRadius: 10,
+    backgroundColor: '#FF5722',
+    borderRadius: 24,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 14,
+    elevation: 2,
   },
   checkoutBtnText: {
     color: '#FFF',
@@ -402,30 +416,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 30,
   },
-  emptyEmoji: {
-    fontSize: 80,
-    marginBottom: 16,
+  paperBagContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#FFF3E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  paperBagEmoji: {
+    fontSize: 64,
   },
   emptyTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1A1D1E',
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: '#777',
+    color: '#78909C',
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 24,
   },
-  browseBtn: {
-    backgroundColor: '#FF8F00',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+  orderNowBtn: {
+    backgroundColor: '#FF5722',
+    borderRadius: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
   },
-  browseBtnText: {
+  orderNowBtnText: {
     color: '#FFF',
     fontSize: 15,
     fontWeight: 'bold',
