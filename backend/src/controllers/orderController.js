@@ -8,7 +8,8 @@ const createOrder = async (req, res) => {
       dia_chi_giao_hang, 
       so_dien_thoai_nhan, 
       ghi_chu = '', 
-      phuong_thuc_thanh_toan = 'tien_mat' 
+      phuong_thuc_thanh_toan = 'tien_mat',
+      ma_code = null
     } = req.body;
 
     // Validate bắt buộc
@@ -19,7 +20,7 @@ const createOrder = async (req, res) => {
       });
     }
 
-    const validPaymentMethods = ['tien_mat', 'chuyen_khoan', 'momo', 'vnpay'];
+    const validPaymentMethods = ['tien_mat', 'chuyen_khoan', 'momo', 'vnpay', 'vietqr'];
     if (!validPaymentMethods.includes(phuong_thuc_thanh_toan)) {
       return res.status(400).json({
         success: false,
@@ -64,7 +65,32 @@ const createOrder = async (req, res) => {
     // 3. Tính toán tổng tiền
     const tongTienHang = cartItems.reduce((sum, item) => sum + parseFloat(item.gia_tam_tinh), 0);
     const phiGiaoHang = 15000; // Phí ship cố định 15k
-    const tongThanhToan = tongTienHang + phiGiaoHang;
+    let soTienGiam = 0;
+    let maVoucherId = null;
+
+    // Xử lý giảm giá nếu có ma_code
+    if (ma_code) {
+      const cleanCode = ma_code.trim().toUpperCase();
+      const [vouchers] = await db.query('SELECT * FROM ma_giam_gia WHERE UPPER(ma_code) = ? AND trang_thai = "hoat_dong"', [cleanCode]);
+      if (vouchers.length > 0) {
+        const v = vouchers[0];
+        if (tongTienHang >= parseFloat(v.don_hang_toi_thieu || 0) && v.so_luong_da_dung < v.so_luong_phat_hanh) {
+          maVoucherId = v.ma_voucher;
+          if (v.loai_giam_gia === 'phan_tram') {
+            soTienGiam = (tongTienHang * parseFloat(v.gia_tri_giam)) / 100;
+            if (v.giam_toi_da) soTienGiam = Math.min(soTienGiam, parseFloat(v.giam_toi_da));
+          } else {
+            soTienGiam = Math.min(parseFloat(v.gia_tri_giam), tongTienHang);
+          }
+          soTienGiam = Math.round(soTienGiam);
+
+          // Cập nhật tăng số lượt đã dùng của voucher
+          await db.query('UPDATE ma_giam_gia SET so_luong_da_dung = so_luong_da_dung + 1 WHERE ma_voucher = ?', [maVoucherId]);
+        }
+      }
+    }
+
+    const tongThanhToan = Math.max(0, tongTienHang + phiGiaoHang - soTienGiam);
 
     // Trạng thái thanh toán mặc định
     const trangThaiThanhToan = phuong_thuc_thanh_toan === 'tien_mat' ? 'chua_thanh_toan' : 'da_thanh_toan';
@@ -77,12 +103,12 @@ const createOrder = async (req, res) => {
     // 4a. Tạo đơn hàng mới
     const [orderResult] = await db.query(`
       INSERT INTO don_hang (
-        ma_nguoi_dung, tong_tien_hang, phi_giao_hang, tong_thanh_toan,
+        ma_nguoi_dung, ma_voucher, tong_tien_hang, phi_giao_hang, so_tien_giam, tong_thanh_toan,
         dia_chi_giao_hang, so_dien_thoai_nhan, ghi_chu,
         phuong_thuc_thanh_toan, trang_thai_thanh_toan, trang_thai_don_hang
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'cho_xac_nhan')
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'cho_xac_nhan')
     `, [
-      userId, tongTienHang, phiGiaoHang, tongThanhToan,
+      userId, maVoucherId, tongTienHang, phiGiaoHang, soTienGiam, tongThanhToan,
       dia_chi_giao_hang, so_dien_thoai_nhan, ghi_chu,
       phuong_thuc_thanh_toan, trangThaiThanhToan
     ]);
