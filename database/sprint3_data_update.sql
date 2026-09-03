@@ -74,9 +74,17 @@ INSERT INTO `ma_giam_gia` (`ma_voucher`, `ma_code`, `ten_voucher`, `mo_ta`, `loa
 (4, 'HEALTHY10', 'Ưu Đãi Dinh Dưỡng 10%', 'Giảm 10% khi tùy biến món ăn chuẩn dinh dưỡng', 'phan_tram', 10.00, 25000, 60000, 300, 5, '2026-01-01 00:00:00', '2026-12-31 23:59:59', 'hoat_dong');
 
 -- ============================================================================
--- 4. NẠP DỮ LIỆU MẪU: thanh_toan (Nhật ký giao dịch thanh toán mẫu)
+-- 4. ĐẢM BẢO ĐƠN HÀNG MẪU TỒN TẠI (Đảm bảo không bị lỗi Khóa Ngoại - Foreign Key)
 -- ============================================================================
-INSERT INTO `thanh_toan` (`ma_thanh_toan`, `ma_don_hang`, `phuong_thuc`, `ma_giao_dich_cong`, `so_tien`, `trang_thai_thanh_toan`, `noi_dung_chuyen_khoan`, `ma_qr_code_url`, `ngay_thanh_toan`) VALUES
+INSERT IGNORE INTO `don_hang` (`ma_don_hang`, `ma_nguoi_dung`, `tong_tien_hang`, `phi_giao_hang`, `tong_thanh_toan`, `dia_chi_giao_hang`, `so_dien_thoai_nhan`, `phuong_thuc_thanh_toan`, `trang_thai_thanh_toan`, `trang_thai_don_hang`) VALUES
+(1, 1, 147000, 15000, 162000, '123 Đường Lê Duẩn, Q.1, TP.HCM', '0901234567', 'vietqr', 'da_thanh_toan', 'cho_xac_nhan'),
+(2, 1, 100000, 15000, 115000, '456 Nguyễn Thị Minh Khai, Q.3, TP.HCM', '0901234567', 'momo', 'da_thanh_toan', 'dang_che_bien'),
+(3, 1, 163000, 15000, 178000, '789 Điện Biên Phủ, Bình Thạnh, TP.HCM', '0901234567', 'tien_mat', 'chua_thanh_toan', 'cho_xac_nhan');
+
+-- ============================================================================
+-- 5. NẠP DỮ LIỆU MẪU: thanh_toan (Nhật ký giao dịch thanh toán mẫu)
+-- ============================================================================
+INSERT IGNORE INTO `thanh_toan` (`ma_thanh_toan`, `ma_don_hang`, `phuong_thuc`, `ma_giao_dich_cong`, `so_tien`, `trang_thai_thanh_toan`, `noi_dung_chuyen_khoan`, `ma_qr_code_url`, `ngay_thanh_toan`) VALUES
 (1, 1, 'vietqr', 'MBVCB.20260901.10239', 147000, 'thanh_cong', 'FASTFOOD10001', 'https://api.vietqr.io/image/970422-0987654321-FASTFOOD10001.jpg', '2026-09-01 10:32:00'),
 (2, 2, 'momo', 'MM2026090199882', 100000, 'thanh_cong', 'FASTFOOD10002', NULL, '2026-09-01 11:15:30'),
 (3, 3, 'tien_mat', NULL, 163000, 'cho_thanh_toan', 'FASTFOOD10003', NULL, NULL);
