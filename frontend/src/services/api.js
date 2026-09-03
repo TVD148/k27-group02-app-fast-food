@@ -200,14 +200,15 @@ export const clearCart = async () => {
 // IV. CÁC API ĐƠN HÀNG & TIẾN TRÌNH (ORDER & TRACKING API - SPRINT 2)
 // ============================================================================
 
-// Khởi tạo đơn hàng mới (Checkout)
-export const createOrder = async (dia_chi_giao_hang, so_dien_thoai_nhan, ghi_chu, phuong_thuc_thanh_toan) => {
+// Khởi tạo đơn hàng mới (Checkout, hỗ trợ Voucher ma_code)
+export const createOrder = async (dia_chi_giao_hang, so_dien_thoai_nhan, ghi_chu, phuong_thuc_thanh_toan, ma_code = null) => {
   try {
     const response = await api.post('/orders', {
       dia_chi_giao_hang,
       so_dien_thoai_nhan,
       ghi_chu,
-      phuong_thuc_thanh_toan
+      phuong_thuc_thanh_toan,
+      ma_code: ma_code || undefined
     });
     return response.data;
   } catch (error) {
@@ -247,6 +248,102 @@ export const updateOrderStatus = async (orderId, trang_thai_moi, ghi_chu = '') =
     return response.data;
   } catch (error) {
     throw error.response?.data || new Error('Lỗi kết nối máy chủ!');
+  }
+};
+
+// ============================================================================
+// V. CÁC API SPRINT 3: DINH DƯỠNG (KILLER FEATURE), VOUCHER & VIETQR PAYMENT
+// ============================================================================
+
+// 1. Lấy danh sách toàn bộ nguyên liệu & chỉ số dinh dưỡng
+export const fetchIngredients = async () => {
+  try {
+    const response = await api.get('/nutrition/ingredients');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể lấy danh sách nguyên liệu!');
+  }
+};
+
+// 2. Lấy công thức & dinh dưỡng mặc định của món ăn
+export const fetchItemNutrition = async (itemId) => {
+  try {
+    const response = await api.get(`/nutrition/item/${itemId}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể lấy dinh dưỡng mặc định của món!');
+  }
+};
+
+// 3. Tính toán động Calo, Protein, Carbs, Fat khi tùy biến món ăn (Killer Feature)
+export const calculateNutrition = async (ma_mon_an, dieu_chinh_nguyen_lieu) => {
+  try {
+    const response = await api.post('/nutrition/calculate', {
+      ma_mon_an,
+      dieu_chinh_nguyen_lieu
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể tính toán dinh dưỡng tùy biến!');
+  }
+};
+
+// 4. Lấy danh sách mã giảm giá đang hoạt động
+export const fetchVouchers = async () => {
+  try {
+    const response = await api.get('/vouchers');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể lấy danh sách mã giảm giá!');
+  }
+};
+
+// 5. Áp dụng mã giảm giá và tính toán số tiền giảm
+export const applyVoucher = async (ma_code, tong_tien_hang) => {
+  try {
+    const response = await api.post('/vouchers/apply', {
+      ma_code,
+      tong_tien_hang
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể áp dụng mã giảm giá!');
+  }
+};
+
+// 6. Sinh mã VietQR chuyển khoản động
+export const generateVietQR = async (ma_don_hang) => {
+  try {
+    const response = await api.post('/payments/vietqr/generate', {
+      ma_don_hang
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể sinh mã VietQR!');
+  }
+};
+
+// 7. Xác nhận giao dịch thanh toán thành công
+export const confirmPayment = async (ma_don_hang, ma_giao_dich_cong = '', phuong_thuc = 'vietqr') => {
+  try {
+    const response = await api.post('/payments/confirm', {
+      ma_don_hang,
+      ma_giao_dich_cong,
+      phuong_thuc
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể xác nhận thanh toán!');
+  }
+};
+
+// 8. Lấy thông tin nhật ký thanh toán của đơn hàng
+export const fetchPaymentDetail = async (orderId) => {
+  try {
+    const response = await api.get(`/payments/order/${orderId}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể lấy nhật ký thanh toán!');
   }
 };
 

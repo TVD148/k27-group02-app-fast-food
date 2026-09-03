@@ -195,9 +195,18 @@ export default function ProductDetailScreen({ route, navigation }) {
                     </TouchableOpacity>
                   );
                 })}
-              </View>
-            </View>
-          ))}
+        {/* Banner Tùy biến Dinh dưỡng Killer Feature */}
+        <TouchableOpacity 
+          style={styles.nutritionBannerBtn}
+          onPress={() => navigation.navigate('CustomNutrition', { itemId: food.ma_mon_an, foodName: food.ten_mon })}
+        >
+          <View style={styles.nutritionBannerLeft}>
+            <Text style={styles.nutritionBannerTitle}>🥗 Tùy biến Dinh dưỡng (Killer Feature)</Text>
+            <Text style={styles.nutritionBannerDesc}>Tính toán Calo, Protein, Carbs, Fat theo định lượng cá nhân</Text>
+          </View>
+          <Text style={styles.nutritionBannerArrow}>➔</Text>
+        </TouchableOpacity>
+
         </View>
       </ScrollView>
 
@@ -374,6 +383,36 @@ const styles = StyleSheet.create({
   addToCartButtonText: {
     color: '#FFF',
     fontSize: 15,
+    fontWeight: 'bold',
+  },
+  nutritionBannerBtn: {
+    backgroundColor: '#E0F2F1',
+    borderWidth: 1,
+    borderColor: '#00A896',
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  nutritionBannerLeft: {
+    flex: 1,
+    marginRight: 8,
+  },
+  nutritionBannerTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#00A896',
+  },
+  nutritionBannerDesc: {
+    fontSize: 11,
+    color: '#004D40',
+    marginTop: 2,
+  },
+  nutritionBannerArrow: {
+    fontSize: 18,
+    color: '#00A896',
     fontWeight: 'bold',
   },
 });

@@ -7,7 +7,8 @@ import CheckoutScreen from '../screens/CheckoutScreen';
 import OrderTrackingScreen from '../screens/OrderTrackingScreen';
 import OrdersListScreen from '../screens/OrdersListScreen';
 import LoginScreen from '../screens/LoginScreen';
-import RegisterScreen from '../screens/RegisterScreen';
+import CustomNutritionScreen from '../screens/CustomNutritionScreen';
+import PaymentScreen from '../screens/PaymentScreen';
 
 const Stack = createStackNavigator();
 
@@ -33,6 +34,11 @@ export function AppNavigator() {
         options={{ title: 'Chi Tiết Món Ăn' }}
       />
       <Stack.Screen 
+        name="CustomNutrition" 
+        component={CustomNutritionScreen} 
+        options={{ title: 'Tùy Biến Dinh Dưỡng 🥗' }}
+      />
+      <Stack.Screen 
         name="Cart" 
         component={CartScreen} 
         options={{ title: 'Giỏ Hàng Của Tôi' }}
@@ -41,6 +47,11 @@ export function AppNavigator() {
         name="Checkout" 
         component={CheckoutScreen} 
         options={{ title: 'Xác Nhận Đặt Hàng' }}
+      />
+      <Stack.Screen 
+        name="Payment" 
+        component={PaymentScreen} 
+        options={{ title: 'Thanh Toán & Voucher 💳' }}
       />
       <Stack.Screen 
         name="OrderTracking" 
