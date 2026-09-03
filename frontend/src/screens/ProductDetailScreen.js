@@ -195,6 +195,10 @@ export default function ProductDetailScreen({ route, navigation }) {
                     </TouchableOpacity>
                   );
                 })}
+              </View>
+            </View>
+          ))}
+
         {/* Banner Tùy biến Dinh dưỡng Killer Feature */}
         <TouchableOpacity 
           style={styles.nutritionBannerBtn}
