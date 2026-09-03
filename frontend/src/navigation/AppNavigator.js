@@ -7,6 +7,7 @@ import CheckoutScreen from '../screens/CheckoutScreen';
 import OrderTrackingScreen from '../screens/OrderTrackingScreen';
 import OrdersListScreen from '../screens/OrdersListScreen';
 import LoginScreen from '../screens/LoginScreen';
+import RegisterScreen from '../screens/RegisterScreen';
 import CustomNutritionScreen from '../screens/CustomNutritionScreen';
 import PaymentScreen from '../screens/PaymentScreen';
 
