@@ -9,15 +9,21 @@ const getBaseUrl = () => {
     return process.env.EXPO_PUBLIC_API_URL;
   }
 
+  // Ưu tiên 1: Tự động lấy hostname nếu đang chạy trên Trình duyệt Web (Chrome, Edge...)
+  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+    return `http://${window.location.hostname}:5000/api`;
+  }
+
+  // Ưu tiên 2: Tự động nhận diện IP máy tính cho Expo Go trên Điện thoại
   const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost || Constants.manifest2?.extra?.expoGo?.debuggerHost;
   if (hostUri) {
     const ip = hostUri.split(':').shift();
-    if (ip) {
+    if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
       return `http://${ip}:5000/api`;
     }
   }
 
-  return 'http://192.168.1.5:5000/api';
+  return 'http://localhost:5000/api';
 };
 
 const BASE_URL = getBaseUrl();

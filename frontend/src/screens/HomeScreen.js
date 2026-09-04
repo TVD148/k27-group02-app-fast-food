@@ -52,14 +52,33 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  const DEFAULT_CATEGORIES = [
+    { ma_danh_muc: 1, ten_danh_muc: 'Burger', bieu_tuong: '🍔' },
+    { ma_danh_muc: 2, ten_danh_muc: 'Gà Rán', bieu_tuong: '🍗' },
+    { ma_danh_muc: 3, ten_danh_muc: 'Khoai Tây', bieu_tuong: '🍟' },
+    { ma_danh_muc: 4, ten_danh_muc: 'Đồ Uống', bieu_tuong: '🥤' }
+  ];
+
+  const DEFAULT_FOODS = [
+    { ma_mon_an: 1, ten_mon: 'Burger Bò Cực Hạn (Double Cheese)', ma_danh_muc: 1, ten_danh_muc: 'Burger', gia_ban: 89000, mo_ta: '2 miếng thịt bò Mỹ nướng lửa hồng, phô mai Cheddar tan chảy, xà lách & sốt đặc biệt.', hinh_anh: '🍔', danh_gia: 4.9 },
+    { ma_mon_an: 2, ten_mon: 'Burger Gà Giòn Sốt Mayo', ma_danh_muc: 1, ten_danh_muc: 'Burger', gia_ban: 65000, mo_ta: 'Gà phi lê chiên xù giòn rụm, phô mai lát & sốt Mayonnaise thơm béo.', hinh_anh: '🍔', danh_gia: 4.8 },
+    { ma_mon_an: 3, ten_mon: 'Gà Rán Giòn Rụm (2 Miếng)', ma_danh_muc: 2, ten_danh_muc: 'Gà Rán', gia_ban: 72000, mo_ta: '2 miếng đùi & cánh gà tẩm bột giòn tan chuẩn vị Fast Food.', hinh_anh: '🍗', danh_gia: 4.9 },
+    { ma_mon_an: 4, ten_mon: 'Khoai Tây Chiên Lớn (Jumbo Fries)', ma_danh_muc: 3, ten_danh_muc: 'Khoai Tây', gia_ban: 35000, mo_ta: 'Khoai tây chiên giòn rụm rắc chút muối biển vị đậm đà.', hinh_anh: '🍟', danh_gia: 4.7 },
+    { ma_mon_an: 5, ten_mon: 'Pizza Haiwaiian Hải Sản', ma_danh_muc: 1, ten_danh_muc: 'Pizza', gia_ban: 129000, mo_ta: 'Pizza dứa, tôm tươi, mực giòn & phô mai Mozzarella kéo sợi.', hinh_anh: '🍕', danh_gia: 4.9 },
+    { ma_mon_an: 6, ten_mon: 'Trà Đào Cam Sả Lạnh', ma_danh_muc: 4, ten_danh_muc: 'Đồ Uống', gia_ban: 32000, mo_ta: 'Trà đào thơm nồng thanh mát kết hợp lát cam tươi và sả thơm.', hinh_anh: '🥤', danh_gia: 4.8 },
+  ];
+
   const loadCategoriesData = async () => {
     try {
       const response = await fetchCategories();
-      if (response.success) {
+      if (response.success && Array.isArray(response.data) && response.data.length > 0) {
         setCategories(response.data);
+      } else {
+        setCategories(DEFAULT_CATEGORIES);
       }
     } catch (error) {
-      console.log('Lỗi tải danh mục:', error.message);
+      console.log('Lỗi tải danh mục, sử dụng danh mục mặc định:', error.message);
+      setCategories(DEFAULT_CATEGORIES);
     } finally {
       setLoadingCategories(false);
     }
@@ -69,11 +88,31 @@ export default function HomeScreen({ navigation }) {
     setLoadingFoods(true);
     try {
       const response = await fetchItems(catId, search);
-      if (response.success) {
+      if (response.success && Array.isArray(response.data) && response.data.length > 0) {
         setFoods(response.data);
+      } else {
+        // Lọc danh sách món ăn mặc định theo catId hoặc từ khóa tìm kiếm
+        let filtered = DEFAULT_FOODS;
+        if (catId) {
+          filtered = filtered.filter(f => f.ma_danh_muc == catId);
+        }
+        if (search) {
+          const s = search.toLowerCase();
+          filtered = filtered.filter(f => f.ten_mon.toLowerCase().includes(s));
+        }
+        setFoods(filtered);
       }
     } catch (error) {
-      console.log('Lỗi tải món ăn:', error.message);
+      console.log('Lỗi tải món ăn, sử dụng danh sách mặc định:', error.message);
+      let filtered = DEFAULT_FOODS;
+      if (catId) {
+        filtered = filtered.filter(f => f.ma_danh_muc == catId);
+      }
+      if (search) {
+        const s = search.toLowerCase();
+        filtered = filtered.filter(f => f.ten_mon.toLowerCase().includes(s));
+      }
+      setFoods(filtered);
     } finally {
       setLoadingFoods(false);
     }
