@@ -1,5 +1,7 @@
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
+import SplashScreen from '../screens/SplashScreen';
+import OnboardingScreen from '../screens/OnboardingScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ProductDetailScreen from '../screens/ProductDetailScreen';
 import CartScreen from '../screens/CartScreen';
@@ -16,7 +18,7 @@ const Stack = createStackNavigator();
 export function AppNavigator() {
   return (
     <Stack.Navigator
-      initialRouteName="Home"
+      initialRouteName="Splash"
       screenOptions={{
         headerStyle: { backgroundColor: '#00A896' },
         headerTintColor: '#fff',
@@ -24,6 +26,35 @@ export function AppNavigator() {
         cardStyle: { backgroundColor: '#F7F9FA' },
       }}
     >
+      {/* 1. Màn hình Splash Khởi Động */}
+      <Stack.Screen 
+        name="Splash" 
+        component={SplashScreen} 
+        options={{ headerShown: false }}
+      />
+
+      {/* 2. Màn hình Onboarding Giới Thiệu (Cho Khách Lần Đầu Tải App) */}
+      <Stack.Screen 
+        name="Onboarding" 
+        component={OnboardingScreen} 
+        options={{ headerShown: false }}
+      />
+
+      {/* 3. Màn hình Đăng Nhập (Header Vàng) */}
+      <Stack.Screen 
+        name="Login" 
+        component={LoginScreen} 
+        options={{ headerShown: false }}
+      />
+
+      {/* 4. Màn hình Đăng Ký (Header Đỏ) */}
+      <Stack.Screen 
+        name="Register" 
+        component={RegisterScreen} 
+        options={{ headerShown: false }}
+      />
+
+      {/* 5. Màn hình Trang Chủ & Các Chức Năng Khác */}
       <Stack.Screen 
         name="Home" 
         component={HomeScreen} 
@@ -63,16 +94,6 @@ export function AppNavigator() {
         name="OrdersList" 
         component={OrdersListScreen} 
         options={{ title: 'Lịch Sử Đơn Hàng' }}
-      />
-      <Stack.Screen 
-        name="Login" 
-        component={LoginScreen} 
-        options={{ title: 'Đăng Nhập' }}
-      />
-      <Stack.Screen 
-        name="Register" 
-        component={RegisterScreen} 
-        options={{ title: 'Đăng Ký Tài Khoản' }}
       />
     </Stack.Navigator>
   );

@@ -9,18 +9,21 @@ import {
   Alert, 
   KeyboardAvoidingView, 
   Platform, 
-  ScrollView 
+  ScrollView,
+  SafeAreaView 
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loginUser } from '../services/api';
 
-export default function LoginScreen({ navigation, route }) {
+export default function LoginScreen({ navigation }) {
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!emailOrPhone || !password) {
-      Alert.alert('Lỗi', 'Vui lòng nhập tài khoản và mật khẩu!');
+      Alert.alert('Lỗi', 'Vui lòng nhập email/số điện thoại và mật khẩu!');
       return;
     }
 
@@ -29,18 +32,12 @@ export default function LoginScreen({ navigation, route }) {
       const response = await loginUser(emailOrPhone, password);
       if (response.success) {
         Alert.alert(
-          'Thành công 🎉',
-          `Chào mừng ${response.data?.user?.ho_ten || ''} trở lại!`,
+          'Đăng nhập thành công 🎉',
+          `Chào mừng ${response.data?.user?.ho_ten || ''} đến với GrabFast!`,
           [
             { 
-              text: 'OK', 
-              onPress: () => {
-                if (navigation.canGoBack()) {
-                  navigation.goBack();
-                } else {
-                  navigation.navigate('Home');
-                }
-              } 
+              text: 'Bắt đầu đặt món', 
+              onPress: () => navigation.replace('Home')
             }
           ]
         );
@@ -55,142 +52,217 @@ export default function LoginScreen({ navigation, route }) {
   };
 
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-      style={styles.container}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.title}>FAST FOOD 🍔</Text>
-          <Text style={styles.subtitle}>Đặt món nhanh chóng - Giao hàng trong tích tắc</Text>
-        </View>
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        style={styles.container}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Header màu Vàng Nổi Bật theo Mockup */}
+          <View style={styles.yellowHeaderSection}>
+            <Text style={styles.loginTitleText}>Log in</Text>
+            <Text style={styles.loginSubtitleText}>Đăng nhập để nhận ngập tràn ưu đãi voucher</Text>
+          </View>
 
-        <View style={styles.form}>
-          <Text style={styles.label}>Email hoặc Số điện thoại</Text>
-          <TextInput 
-            style={styles.input}
-            placeholder="Nhập email hoặc số điện thoại..."
-            placeholderTextColor="#888"
-            value={emailOrPhone}
-            onChangeText={setEmailOrPhone}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
+          {/* Form Card màu Trắng Bo Tròn bên dưới */}
+          <View style={styles.whiteFormCard}>
+            <Text style={styles.inputLabel}>Email hoặc Số điện thoại</Text>
+            <TextInput 
+              style={styles.textInput}
+              placeholder="Nhập email hoặc số điện thoại..."
+              placeholderTextColor="#9E9E9E"
+              value={emailOrPhone}
+              onChangeText={setEmailOrPhone}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
 
-          <Text style={styles.label}>Mật khẩu</Text>
-          <TextInput 
-            style={styles.input}
-            placeholder="Nhập mật khẩu..."
-            placeholderTextColor="#888"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
+            <Text style={styles.inputLabel}>Mật khẩu</Text>
+            <View style={styles.passwordContainer}>
+              <TextInput 
+                style={styles.passwordInput}
+                placeholder="Nhập mật khẩu của bạn..."
+                placeholderTextColor="#9E9E9E"
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '🔒'}</Text>
+              </TouchableOpacity>
+            </View>
 
-          <TouchableOpacity 
-            style={[styles.button, loading && styles.buttonDisabled]} 
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Đăng Nhập</Text>
-            )}
-          </TouchableOpacity>
+            <TouchableOpacity style={styles.forgotPassBtn} onPress={() => Alert.alert('Thông báo', 'Vui lòng liên hệ quản trị viên để lấy lại mật khẩu!')}>
+              <Text style={styles.forgotPassText}>Quên mật khẩu?</Text>
+            </TouchableOpacity>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Chưa có tài khoản? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-              <Text style={styles.link}>Đăng ký ngay</Text>
+            {/* Nút Sign In màu Đỏ Đậm */}
+            <TouchableOpacity 
+              style={[styles.signInBtn, loading && styles.btnDisabled]} 
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.signInBtnText}>Sign In</Text>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.registerFooterRow}>
+              <Text style={styles.footerNormalText}>Chưa có tài khoản? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+                <Text style={styles.registerLinkText}>Đăng ký ngay</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Nút Xem Trang Chủ (Lúc khác) cho Khách */}
+            <TouchableOpacity 
+              style={styles.browseGuestBtn} 
+              onPress={() => navigation.replace('Home')}
+            >
+              <Text style={styles.browseGuestBtnText}>Để lúc khác ➔ Khám phá Trang Chủ 🍔</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAF3E0', // Màu nền kem ấm cúng
+    backgroundColor: '#FFC107', // Màu vàng rực rỡ theo mockup
   },
-  scrollContainer: {
+  scrollContent: {
     flexGrow: 1,
+  },
+  yellowHeaderSection: {
+    height: 180,
+    backgroundColor: '#FFC107',
     justifyContent: 'center',
-    padding: 24,
-  },
-  header: {
     alignItems: 'center',
-    marginBottom: 40,
+    paddingHorizontal: 20,
   },
-  title: {
+  loginTitleText: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#D84315', // Màu đỏ cam kích thích vị giác
+    color: '#1A1D1E',
+    marginBottom: 6,
+  },
+  loginSubtitleText: {
+    fontSize: 13,
+    color: '#424242',
+    fontWeight: '600',
+  },
+  whiteFormCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 24,
+    paddingTop: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1A1D1E',
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  textInput: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 14,
+    color: '#1A1D1E',
+    marginBottom: 12,
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
     marginBottom: 8,
   },
-  subtitle: {
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 14,
-    color: '#555',
-    textAlign: 'center',
-    lineHeight: 20,
+    color: '#1A1D1E',
   },
-  form: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+  eyeBtn: {
+    paddingHorizontal: 14,
+  },
+  eyeIcon: {
+    fontSize: 16,
+  },
+  forgotPassBtn: {
+    alignSelf: 'flex-end',
+    marginBottom: 24,
+  },
+  forgotPassText: {
+    color: '#D32F2F',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  signInBtn: {
+    backgroundColor: '#D32F2F', // Màu đỏ nút Sign In
+    borderRadius: 24,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: '#D32F2F',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-    marginTop: 12,
+  btnDisabled: {
+    backgroundColor: '#EF9A9A',
   },
-  input: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-    color: '#333',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    marginBottom: 12,
-  },
-  button: {
-    backgroundColor: '#FF8F00', // Màu cam nổi bật
-    borderRadius: 8,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  buttonDisabled: {
-    backgroundColor: '#FFB74D',
-  },
-  buttonText: {
-    color: '#fff',
+  signInBtnText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
-  footer: {
+  registerFooterRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 20,
+    marginBottom: 20,
   },
-  footerText: {
+  footerNormalText: {
     fontSize: 14,
-    color: '#666',
+    color: '#616161',
   },
-  link: {
+  registerLinkText: {
     fontSize: 14,
-    color: '#D84315',
+    color: '#D32F2F',
+    fontWeight: 'bold',
+  },
+  browseGuestBtn: {
+    backgroundColor: '#FFF8E1',
+    borderRadius: 20,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFE0B2',
+  },
+  browseGuestBtnText: {
+    color: '#F57F17',
+    fontSize: 13,
     fontWeight: 'bold',
   },
 });
