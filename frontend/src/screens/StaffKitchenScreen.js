@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -9,19 +9,27 @@ import {
   Alert,
   SafeAreaView,
   RefreshControl,
-  Switch
+  Modal,
+  StatusBar,
+  Platform
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchOrders, updateOrderStatus, fetchMenuItems, toggleItemStatus } from '../services/api';
 
 export default function StaffKitchenScreen({ navigation }) {
-  const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'menu'
-  const [orderFilter, setOrderFilter] = useState('all'); // 'all' | 'cho_xac_nhan' | 'dang_che_bien' | 'san_sang_giao'
+  // 3 Bottom Tabs: 'pending' (Đơn mới), 'cooking' (Đang nấu & Sẵn sàng), 'profile' (Hồ sơ)
+  const [activeBottomTab, setActiveBottomTab] = useState('pending');
+  
   const [orders, setOrders] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  // Modal Chi tiết Đơn Chế Biến (Killer Feature)
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [checkedItems, setCheckedItems] = useState({}); // { [stepKey]: boolean }
 
   useEffect(() => {
     loadData();
@@ -34,6 +42,9 @@ export default function StaffKitchenScreen({ navigation }) {
   const loadData = async () => {
     setLoading(true);
     try {
+      const stored = await AsyncStorage.getItem('user_info');
+      if (stored) setCurrentUser(JSON.parse(stored));
+
       const [orderRes, menuRes] = await Promise.all([
         fetchOrders(),
         fetchMenuItems()
@@ -57,32 +68,59 @@ export default function StaffKitchenScreen({ navigation }) {
     loadData();
   };
 
+  // Phân loại đơn:
+  // Đơn mới: 'cho_xac_nhan'
+  // Đang nấu: 'dang_che_bien', 'san_sang_giao'
+  const pendingOrders = useMemo(() => {
+    return orders.filter(o => o.trang_thai_don_hang === 'cho_xac_nhan');
+  }, [orders]);
+
+  const cookingOrders = useMemo(() => {
+    return orders.filter(o => ['dang_che_bien', 'san_sang_giao'].includes(o.trang_thai_don_hang));
+  }, [orders]);
+
+  // Xác định độ ưu tiên đơn hàng (Đỏ nếu chờ > 15 phút, Xanh nếu mới đặt)
+  const getOrderPriority = (orderDateStr) => {
+    if (!orderDateStr) return { isUrgent: false, waitMinutes: 0 };
+    const orderTime = new Date(orderDateStr).getTime();
+    const now = new Date().getTime();
+    const diffMinutes = Math.max(0, Math.floor((now - orderTime) / 60000));
+    return {
+      isUrgent: diffMinutes >= 15,
+      waitMinutes: diffMinutes
+    };
+  };
+
+  // Mở modal chi tiết chế biến cho 1 đơn hàng
+  const openOrderDetail = (order) => {
+    setSelectedOrder(order);
+    setCheckedItems({});
+  };
+
+  const toggleCheckStep = (key) => {
+    setCheckedItems(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
   // Cập nhật trạng thái đơn hàng
   const handleUpdateStatus = async (orderId, newStatus, actionTitle) => {
-    Alert.alert(
-      'Xác nhận thao tác 👨‍🍳',
-      `Bạn có chắc muốn ${actionTitle} cho đơn #${orderId}?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Đồng ý',
-          onPress: async () => {
-            setUpdatingOrderId(orderId);
-            try {
-              const res = await updateOrderStatus(orderId, newStatus, `Bếp: ${actionTitle}`);
-              if (res.success) {
-                Alert.alert('Thành công 🎉', res.message);
-                loadData();
-              }
-            } catch (err) {
-              Alert.alert('Lỗi', err.message || 'Không thể cập nhật trạng thái đơn!');
-            } finally {
-              setUpdatingOrderId(null);
-            }
-          }
+    setUpdatingOrderId(orderId);
+    try {
+      const res = await updateOrderStatus(orderId, newStatus, `Bếp: ${actionTitle}`);
+      if (res.success) {
+        Alert.alert('Thành công 🎉', res.message);
+        if (selectedOrder && selectedOrder.ma_don_hang === orderId) {
+          setSelectedOrder(null);
         }
-      ]
-    );
+        loadData();
+      }
+    } catch (err) {
+      Alert.alert('Lỗi', err.message || 'Không thể cập nhật trạng thái đơn!');
+    } finally {
+      setUpdatingOrderId(null);
+    }
   };
 
   // Bật/tắt món còn/hết hàng
@@ -90,473 +128,1081 @@ export default function StaffKitchenScreen({ navigation }) {
     try {
       const res = await toggleItemStatus(itemId);
       if (res.success) {
-        setMenuItems(prev => prev.map(m => m.ma_mon_an === itemId ? { ...m, trang_thai: res.data.trang_thai } : m));
+        Alert.alert('Đã cập nhật', `${itemName}: ${res.trang_thai_moi === 'con_hang' ? 'Đã bật CÒN HÀNG ✅' : 'Đã bật TẠM HẾT ❌'}`);
+        loadData();
       }
     } catch (err) {
       Alert.alert('Lỗi', err.message || 'Không thể đổi trạng thái món!');
     }
   };
 
-  const filteredOrders = orders.filter(o => {
-    if (orderFilter === 'all') return ['cho_xac_nhan', 'dang_che_bien', 'san_sang_giao'].includes(o.trang_thai_don_hang);
-    return o.trang_thai_don_hang === orderFilter;
-  });
-
-  const getStatusBadge = (st) => {
-    switch (st) {
-      case 'cho_xac_nhan':
-        return { label: '🔔 Đơn mới chờ nhận', bg: '#FFE082', text: '#E65100' };
-      case 'dang_che_bien':
-        return { label: '🍳 Bếp đang nấu', bg: '#FFE0B2', text: '#BF360C' };
-      case 'san_sang_giao':
-        return { label: '📦 Đã xong - Chờ Shipper', bg: '#C8E6C9', text: '#1B5E20' };
-      case 'dang_giao':
-        return { label: '🛵 Shipper đang giao', bg: '#BBDEFB', text: '#0D47A1' };
-      case 'da_giao':
-        return { label: '✅ Đã giao thành công', bg: '#DCFCE7', text: '#15803D' };
-      default:
-        return { label: st, bg: '#EEE', text: '#666' };
-    }
-  };
-
-  return (
-    <SafeAreaView style={styles.container}>
-      {/* Top Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>👨‍🍳 Bếp & Cửa Hàng FastFood</Text>
-          <Text style={styles.headerSubtitle}>Tài khoản: Nhân viên điều phối chế biến</Text>
-        </View>
-        <TouchableOpacity 
-          style={styles.switchRoleBtn}
-          onPress={() => navigation.navigate('Profile')}
-        >
-          <Text style={styles.switchRoleText}>Hồ sơ 👤</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Main Tabs */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity 
-          style={[styles.tabBtn, activeTab === 'orders' && styles.tabBtnActive]}
-          onPress={() => setActiveTab('orders')}
-        >
-          <Text style={[styles.tabText, activeTab === 'orders' && styles.tabTextActive]}>
-            📋 Đơn Hàng Nhà Bếp ({filteredOrders.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tabBtn, activeTab === 'menu' && styles.tabBtnActive]}
-          onPress={() => setActiveTab('menu')}
-        >
-          <Text style={[styles.tabText, activeTab === 'menu' && styles.tabTextActive]}>
-            🍔 Quản Lý Tồn Món
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {activeTab === 'orders' ? (
-        <>
-          {/* Status Filter Chips */}
-          <View style={styles.filterRow}>
-            {[
-              { id: 'all', label: 'Tất cả đơn cần làm' },
-              { id: 'cho_xac_nhan', label: '🔔 Chờ xác nhận' },
-              { id: 'dang_che_bien', label: '🍳 Đang nấu' },
-              { id: 'san_sang_giao', label: '📦 Chờ Shipper' }
-            ].map(f => (
-              <TouchableOpacity
-                key={f.id}
-                style={[styles.chip, orderFilter === f.id && styles.chipActive]}
-                onPress={() => setOrderFilter(f.id)}
-              >
-                <Text style={[styles.chipText, orderFilter === f.id && styles.chipTextActive]}>
-                  {f.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+  // Render Danh Sách Đơn Hàng Dạng Card
+  const renderOrderList = (orderList, isPendingView = true) => {
+    if (orderList.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIconCircle}>
+            <Text style={styles.emptyIcon}>🍳💤</Text>
           </View>
-
-          {loading && !refreshing ? (
-            <View style={styles.centerBox}>
-              <ActivityIndicator size="large" color="#E65100" />
-              <Text style={styles.loadingText}>Đang tải đơn hàng nhà bếp...</Text>
-            </View>
-          ) : (
-            <ScrollView 
-              contentContainerStyle={styles.scrollList}
-              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#E65100']} />}
-            >
-              {filteredOrders.length === 0 ? (
-                <View style={styles.emptyBox}>
-                  <Text style={styles.emptyEmoji}>🎉</Text>
-                  <Text style={styles.emptyTitle}>Bếp đang thảnh thơi!</Text>
-                  <Text style={styles.emptySubtitle}>Không có đơn hàng nào cần xử lý trong mục này.</Text>
-                </View>
-              ) : (
-                filteredOrders.map(order => {
-                  const badge = getStatusBadge(order.trang_thai_don_hang);
-                  const isUpdating = updatingOrderId === order.ma_don_hang;
-
-                  return (
-                    <View key={order.ma_don_hang} style={styles.orderCard}>
-                      {/* Card Header */}
-                      <View style={styles.orderCardHeader}>
-                        <View>
-                          <Text style={styles.orderIdText}>Đơn #{order.ma_don_hang}</Text>
-                          <Text style={styles.orderTimeText}>{new Date(order.ngay_dat).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(order.ngay_dat).toLocaleDateString('vi-VN')}</Text>
-                        </View>
-                        <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                          <Text style={[styles.badgeText, { color: badge.text }]}>{badge.label}</Text>
-                        </View>
-                      </View>
-
-                      {/* Customer Info */}
-                      <View style={styles.customerBox}>
-                        <Text style={styles.customerName}>👤 Khách: {order.ten_khach_hang || 'Khách hàng'} • 📞 {order.so_dien_thoai_nhan}</Text>
-                        <Text style={styles.customerAddress} numberOfLines={2}>📍 {order.dia_chi_giao_hang}</Text>
-                        {order.ghi_chu ? (
-                          <Text style={styles.orderNoteText}>📝 Ghi chú: "{order.ghi_chu}"</Text>
-                        ) : null}
-                      </View>
-
-                      {/* Action Buttons for Kitchen */}
-                      <View style={styles.actionRow}>
-                        {order.trang_thai_don_hang === 'cho_xac_nhan' && (
-                          <TouchableOpacity
-                            style={[styles.actionBtn, styles.btnCook]}
-                            onPress={() => handleUpdateStatus(order.ma_don_hang, 'dang_che_bien', 'Nhận đơn & Chế biến')}
-                            disabled={isUpdating}
-                          >
-                            {isUpdating ? <ActivityIndicator color="#FFF" size="small" /> : (
-                              <Text style={styles.actionBtnText}>🍳 Nhận Đơn & Bắt Đầu Nấu</Text>
-                            )}
-                          </TouchableOpacity>
-                        )}
-
-                        {order.trang_thai_don_hang === 'dang_che_bien' && (
-                          <TouchableOpacity
-                            style={[styles.actionBtn, styles.btnReady]}
-                            onPress={() => handleUpdateStatus(order.ma_don_hang, 'san_sang_giao', 'Làm xong - Báo Shipper')}
-                            disabled={isUpdating}
-                          >
-                            {isUpdating ? <ActivityIndicator color="#FFF" size="small" /> : (
-                              <Text style={styles.actionBtnText}>✅ Đã Làm Xong ➔ Báo Shipper</Text>
-                            )}
-                          </TouchableOpacity>
-                        )}
-
-                        {order.trang_thai_don_hang === 'san_sang_giao' && (
-                          <View style={styles.waitingShipperBox}>
-                            <Text style={styles.waitingShipperText}>
-                              {order.ma_shipper 
-                                ? `🛵 Shipper: ${order.ten_shipper || 'Tài xế'} đang tới nhận đồ!` 
-                                : '⏳ Món đã gói xong, đang chờ tài xế Shipper nhận đơn...'}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-                  );
-                })
-              )}
-            </ScrollView>
-          )}
-        </>
-      ) : (
-        /* TAB 2: QUẢN LÝ TỒN MÓN (BẬT / TẮT CÒN HÀNG) */
-        <ScrollView 
-          contentContainerStyle={styles.scrollList}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
-        >
-          <Text style={styles.menuGuideText}>
-            💡 Bật/Tắt món ăn khi bếp hết nguyên liệu để khách hàng không đặt món này:
+          <Text style={styles.emptyTitle}>Bếp đang rảnh rỗi!</Text>
+          <Text style={styles.emptySubtitle}>
+            {isPendingView 
+              ? 'Hiện chưa có đơn hàng nào, bếp đang rảnh rỗi!' 
+              : 'Chưa có đơn hàng nào đang trong quá trình chế biến.'}
           </Text>
-          {menuItems.map(item => {
-            const isAvailable = item.trang_thai === 'con_hang';
-            return (
-              <View key={item.ma_mon_an} style={styles.menuItemRow}>
-                <View style={styles.menuItemEmoji}>
-                  <Text style={{ fontSize: 28 }}>🍔</Text>
+          <TouchableOpacity style={styles.emptyReloadBtn} onPress={handleRefresh}>
+            <Text style={styles.emptyReloadText}>🔄 Làm Mới Dữ Liệu</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.cardsContainer}>
+        {orderList.map((order) => {
+          const { isUrgent, waitMinutes } = getOrderPriority(order.ngay_dat);
+          const isPending = order.trang_thai_don_hang === 'cho_xac_nhan';
+          const isCooking = order.trang_thai_don_hang === 'dang_che_bien';
+          const isReady = order.trang_thai_don_hang === 'san_sang_giao';
+
+          return (
+            <TouchableOpacity
+              key={order.ma_don_hang}
+              activeOpacity={0.88}
+              onPress={() => openOrderDetail(order)}
+              style={[
+                styles.orderCard,
+                isUrgent ? styles.urgentCardBorder : styles.normalCardBorder
+              ]}
+            >
+              {/* Header Thẻ Đơn */}
+              <View style={styles.cardHeaderRow}>
+                <View style={styles.orderIdBadge}>
+                  <Text style={styles.orderIdText}>#{order.ma_don_hang}</Text>
                 </View>
-                <View style={styles.menuItemInfo}>
-                  <Text style={styles.menuItemName}>{item.ten_mon}</Text>
-                  <Text style={styles.menuItemPrice}>{parseFloat(item.gia_ban).toLocaleString('vi-VN')} đ</Text>
-                  <Text style={[styles.menuStatusLabel, { color: isAvailable ? '#2E7D32' : '#C62828' }]}>
-                    {isAvailable ? '✓ Đang mở bán' : '✕ Đang tạm hết'}
+
+                {/* Badge Độ Ưu Tiên (Đỏ = Chờ lâu, Xanh = Mới) */}
+                <View style={[
+                  styles.priorityBadge, 
+                  isUrgent ? styles.urgentBadgeBg : styles.normalBadgeBg
+                ]}>
+                  <Text style={[
+                    styles.priorityBadgeText,
+                    isUrgent ? styles.urgentBadgeText : styles.normalBadgeText
+                  ]}>
+                    {isUrgent ? `🔥 CHỜ LÂU: ${waitMinutes} PHÚT` : `⚡ MỚI ĐẶT: ${waitMinutes}p`}
                   </Text>
                 </View>
-                <Switch
-                  value={isAvailable}
-                  onValueChange={() => handleToggleItem(item.ma_mon_an, item.trang_thai, item.ten_mon)}
-                  trackColor={{ false: '#CFD8DC', true: '#A5D6A7' }}
-                  thumbColor={isAvailable ? '#2E7D32' : '#90A4AE'}
-                />
               </View>
-            );
-          })}
-        </ScrollView>
-      )}
+
+              {/* Thông tin khách hàng & Bàn/Thời gian */}
+              <View style={styles.customerInfoRow}>
+                <Text style={styles.customerNameText}>👤 {order.ten_khach_hang || 'Khách hàng'}</Text>
+                <Text style={styles.orderTimeText}>🕒 {new Date(order.ngay_dat).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</Text>
+              </View>
+
+              {/* Trích xuất nhanh món ăn */}
+              <View style={styles.quickItemList}>
+                <Text style={styles.quickItemLabel}>Món cần chuẩn bị ({order.tong_so_mon || 1} món):</Text>
+                <Text style={styles.quickItemText} numberOfLines={2}>
+                  {order.dia_chi_giao ? `📍 Giao: ${order.dia_chi_giao}` : 'Đơn đặt tại quán'}
+                </Text>
+                {order.ghi_chu ? (
+                  <View style={styles.cardNoteBox}>
+                    <Text style={styles.cardNoteText}>⚠️ {order.ghi_chu}</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Dải nút bấm tương tác nhanh to rõ ràng */}
+              <View style={styles.cardActionsRow}>
+                <TouchableOpacity
+                  style={styles.detailTouchBtn}
+                  onPress={() => openOrderDetail(order)}
+                >
+                  <Text style={styles.detailTouchBtnText}>🔍 Xem Tùy Biến Bếp</Text>
+                </TouchableOpacity>
+
+                {isPending && (
+                  <TouchableOpacity
+                    style={styles.startCookBtn}
+                    onPress={() => handleUpdateStatus(order.ma_don_hang, 'dang_che_bien', 'Bắt đầu nấu')}
+                    disabled={updatingOrderId === order.ma_don_hang}
+                  >
+                    {updatingOrderId === order.ma_don_hang ? (
+                      <ActivityIndicator color="#FFF" size="small" />
+                    ) : (
+                      <Text style={styles.startCookBtnText}>🍳 Nhận & Nấu</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+
+                {isCooking && (
+                  <TouchableOpacity
+                    style={styles.finishCookBtn}
+                    onPress={() => handleUpdateStatus(order.ma_don_hang, 'san_sang_giao', 'Báo hoàn tất')}
+                    disabled={updatingOrderId === order.ma_don_hang}
+                  >
+                    {updatingOrderId === order.ma_don_hang ? (
+                      <ActivityIndicator color="#FFF" size="small" />
+                    ) : (
+                      <Text style={styles.finishCookBtnText}>✅ Đã Nấu Xong</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+
+                {isReady && (
+                  <View style={styles.readyBadgeCard}>
+                    <Text style={styles.readyBadgeCardText}>📦 Chờ Shipper đến lấy</Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    );
+  };
+
+  // Render Màn hình Hồ sơ & Quản lý Kho Bếp
+  const renderProfileTab = () => (
+    <ScrollView contentContainerStyle={styles.profileScroll}>
+      {/* Thẻ định danh đầu bếp */}
+      <View style={styles.kitchenProfileCard}>
+        <View style={styles.kitchenAvatarCircle}>
+          <Text style={styles.kitchenAvatarEmoji}>👨‍🍳</Text>
+        </View>
+        <Text style={styles.kitchenStaffName}>{currentUser?.ho_ten || 'Đầu Bếp Trưởng'}</Text>
+        <Text style={styles.kitchenStaffRole}>Bộ Phận: Chế Biến & Kiểm Soát Dinh Dưỡng</Text>
+        <View style={styles.kitchenStatusPill}>
+          <View style={styles.onlineDot} />
+          <Text style={styles.kitchenStatusText}>Bếp Đang Trực Tuyến & Nhận Đơn</Text>
+        </View>
+      </View>
+
+      {/* Quản lý tình trạng nguyên liệu & món ăn nhanh */}
+      <View style={styles.stockSectionCard}>
+        <Text style={styles.stockSectionTitle}>📦 Bật / Tắt Tồn Kho Món Nhanh</Text>
+        <Text style={styles.stockSectionSubtitle}>Gạt công tắc để thông báo cho khách khi quán tạm hết nguyên liệu</Text>
+
+        {menuItems.slice(0, 8).map((item) => {
+          const isAvailable = item.trang_thai === 'con_hang';
+          return (
+            <View key={item.ma_mon_an} style={styles.stockRow}>
+              <View style={styles.stockInfoCol}>
+                <Text style={styles.stockItemName}>{item.ten_mon}</Text>
+                <Text style={styles.stockItemPrice}>{parseFloat(item.gia_ban).toLocaleString('vi-VN')} đ</Text>
+              </View>
+              <View style={styles.stockActionCol}>
+                <Text style={[styles.stockStatusLabel, isAvailable ? styles.textAvailable : styles.textOutOfStock]}>
+                  {isAvailable ? 'Còn hàng' : 'Tạm hết'}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.toggleBtnPill, isAvailable ? styles.togglePillActive : styles.togglePillInactive]}
+                  onPress={() => handleToggleItem(item.ma_mon_an, item.trang_thai, item.ten_mon)}
+                >
+                  <Text style={[styles.toggleBtnPillText, isAvailable ? styles.toggleTextActive : styles.toggleTextInactive]}>
+                    {isAvailable ? 'ĐANG BÁN' : 'HẾT MÓN'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+
+      {/* Nút Đăng xuất / Quay về trang chính */}
+      <TouchableOpacity 
+        style={styles.exitKitchenBtn}
+        onPress={() => navigation.navigate('Profile')}
+      >
+        <Text style={styles.exitKitchenBtnText}>➔ Mở Hồ Sơ Cá Nhân & Đăng Xuất</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+
+  return (
+    <SafeAreaView style={styles.safeContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#B91C1C" />
+
+      {/* Top Header Chuyên Dụng Cho Nhà Bếp */}
+      <View style={styles.topHeader}>
+        <View style={styles.headerLeftCol}>
+          <Text style={styles.brandTitle}>👨‍🍳 FASTFOOD KITCHEN VIEW</Text>
+          <Text style={styles.brandSubtitle}>Màn Hình Điều Phối Bếp & Chế Biến</Text>
+        </View>
+
+        <TouchableOpacity style={styles.syncBtn} onPress={handleRefresh}>
+          <Text style={styles.syncBtnText}>🔄 Làm mới</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Thân Màn Hình Dựa Vào 3 Bottom Tabs */}
+      <View style={styles.bodyContent}>
+        {loading && !refreshing ? (
+          <View style={styles.loaderCenter}>
+            <ActivityIndicator size="large" color="#DC2626" />
+            <Text style={styles.loaderText}>Đang đồng bộ hóa đơn bếp...</Text>
+          </View>
+        ) : (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#DC2626']} />}
+            contentContainerStyle={styles.scrollBody}
+          >
+            {activeBottomTab === 'pending' && renderOrderList(pendingOrders, true)}
+            {activeBottomTab === 'cooking' && renderOrderList(cookingOrders, false)}
+            {activeBottomTab === 'profile' && renderProfileTab()}
+          </ScrollView>
+        )}
+      </View>
+
+      {/* ========================================================================= */}
+      {/* 3 BOTTOM TABS CHUẨN UX CHECKLIST: Đơn mới (Pending), Đang nấu, Hồ sơ */}
+      {/* ========================================================================= */}
+      <View style={styles.bottomNavContainer}>
+        <TouchableOpacity
+          style={[styles.bottomTabItem, activeBottomTab === 'pending' && styles.bottomTabItemActive]}
+          onPress={() => setActiveBottomTab('pending')}
+          activeOpacity={0.8}
+        >
+          <View style={styles.tabIconBadgeWrap}>
+            <Text style={styles.bottomTabIcon}>🔔</Text>
+            {pendingOrders.length > 0 && (
+              <View style={styles.badgeCounter}>
+                <Text style={styles.badgeCounterText}>{pendingOrders.length}</Text>
+              </View>
+            )}
+          </View>
+          <Text style={[styles.bottomTabText, activeBottomTab === 'pending' && styles.bottomTabTextActive]}>
+            Đơn mới
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.bottomTabItem, activeBottomTab === 'cooking' && styles.bottomTabItemActive]}
+          onPress={() => setActiveBottomTab('cooking')}
+          activeOpacity={0.8}
+        >
+          <View style={styles.tabIconBadgeWrap}>
+            <Text style={styles.bottomTabIcon}>🍳</Text>
+            {cookingOrders.length > 0 && (
+              <View style={[styles.badgeCounter, { backgroundColor: '#EA580C' }]}>
+                <Text style={styles.badgeCounterText}>{cookingOrders.length}</Text>
+              </View>
+            )}
+          </View>
+          <Text style={[styles.bottomTabText, activeBottomTab === 'cooking' && styles.bottomTabTextActive]}>
+            Đang nấu ({cookingOrders.length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.bottomTabItem, activeBottomTab === 'profile' && styles.bottomTabItemActive]}
+          onPress={() => setActiveBottomTab('profile')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.bottomTabIcon}>👤</Text>
+          <Text style={[styles.bottomTabText, activeBottomTab === 'profile' && styles.bottomTabTextActive]}>
+            Hồ sơ & Kho
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ========================================================================= */}
+      {/* MODAL CHI TIẾT ĐƠN (ORDER DETAIL) - KILLER FEATURE CHO ĐẦU BẾP */}
+      {/* ========================================================================= */}
+      <Modal
+        visible={!!selectedOrder}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setSelectedOrder(null)}
+      >
+        <SafeAreaView style={styles.modalSafeContainer}>
+          <View style={styles.modalHeader}>
+            <View>
+              <Text style={styles.modalHeaderTitle}>📋 CHI TIẾT ĐƠN #{selectedOrder?.ma_don_hang}</Text>
+              <Text style={styles.modalHeaderSubtitle}>
+                Khách: {selectedOrder?.ten_khach_hang} • {selectedOrder?.dia_chi_giao || 'Tại quán'}
+              </Text>
+            </View>
+
+            <TouchableOpacity 
+              style={styles.modalCloseBtn}
+              onPress={() => setSelectedOrder(null)}
+            >
+              <Text style={styles.modalCloseText}>✕ Đóng</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
+            {/* Banner Ghi Chú Đặc Biệt (Nếu có) */}
+            {selectedOrder?.ghi_chu ? (
+              <View style={styles.alertNoteBanner}>
+                <Text style={styles.alertNoteTitle}>🚨 LƯU Ý ĐẶC BIỆT TỪ KHÁCH HÀNG:</Text>
+                <Text style={styles.alertNoteDesc}>{selectedOrder.ghi_chu}</Text>
+              </View>
+            ) : null}
+
+            {/* KILLER FEATURE: CHECKBOX LIST NGUYÊN LIỆU SIÊU TO, IN ĐẬM */}
+            <View style={styles.killerFeatureCard}>
+              <View style={styles.killerHeaderRow}>
+                <Text style={styles.killerHeaderTitle}>🥗 TÙY CHỌN NGUYÊN LIỆU & CÔNG ĐOẠN</Text>
+                <Text style={styles.killerHeaderSub}>Chạm để tick hoàn tất từng mục</Text>
+              </View>
+
+              {/* Danh sách các bước chế biến demo trực quan cực to */}
+              {[
+                { key: 'beef', label: '🥩 2 MIẾNG THỊT BÒ NƯỚNG (MEDIUM WELL)', bold: true },
+                { key: 'cheese', label: '🧀 THÊM 2 LÁT PHÔ MAI CHEDDAR', bold: true },
+                { key: 'no_onion', label: '🚫 KHÔNG HÀNH TÂY', bold: true, alert: true },
+                { key: 'sauce', label: '🥫 RƯỚI SỐT BBQ ĐẬM ĐÀ', bold: true },
+                { key: 'fries', label: '🍟 CHIÊN 1 PHẦN KHOAI TÂY GIÒN NÓNG', bold: false },
+                { key: 'drink', label: '🥤 1 PEPSI LON ƯỚP LẠNH (KHÔNG ĐÁ)', bold: false },
+              ].map((step) => {
+                const isChecked = !!checkedItems[step.key];
+                return (
+                  <TouchableOpacity
+                    key={step.key}
+                    activeOpacity={0.7}
+                    onPress={() => toggleCheckStep(step.key)}
+                    style={[
+                      styles.stepCheckboxRow,
+                      isChecked && styles.stepCheckboxRowDone,
+                      step.alert && !isChecked && styles.stepAlertBorder
+                    ]}
+                  >
+                    <View style={[styles.largeCheckboxBox, isChecked && styles.largeCheckboxBoxDone]}>
+                      {isChecked ? (
+                        <Text style={styles.checkmarkIcon}>✓</Text>
+                      ) : (
+                        <View style={styles.emptyCheckboxHole} />
+                      )}
+                    </View>
+
+                    <View style={styles.stepTextContainer}>
+                      <Text style={[
+                        styles.stepLabelText,
+                        step.bold && styles.stepTextBold,
+                        step.alert && styles.stepTextAlert,
+                        isChecked && styles.stepLabelDone
+                      ]}>
+                        {step.label}
+                      </Text>
+                      <Text style={styles.stepHintText}>
+                        {isChecked ? 'Đã hoàn thành chuẩn bị' : 'Chạm để xác nhận đã cho vào phần ăn'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+
+          {/* NÚT CTA TRÀN VIỀN XANH LÁ "BÁO MÓN HOÀN TẤT" */}
+          <View style={styles.modalFooterCTA}>
+            {selectedOrder?.trang_thai_don_hang === 'cho_xac_nhan' ? (
+              <TouchableOpacity
+                style={styles.fullWidthStartBtn}
+                onPress={() => handleUpdateStatus(selectedOrder.ma_don_hang, 'dang_che_bien', 'Bắt đầu nấu')}
+                disabled={updatingOrderId === selectedOrder?.ma_don_hang}
+              >
+                {updatingOrderId === selectedOrder?.ma_don_hang ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.fullWidthCtaText}>🍳 BẮT ĐẦU CHẾ BIẾN NGAY</Text>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.fullWidthCompleteBtn}
+                onPress={() => handleUpdateStatus(selectedOrder?.ma_don_hang, 'san_sang_giao', 'Báo món hoàn tất')}
+                disabled={updatingOrderId === selectedOrder?.ma_don_hang}
+              >
+                {updatingOrderId === selectedOrder?.ma_don_hang ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.fullWidthCtaText}>✅ BÁO MÓN HOÀN TẤT ➔ CHUYỂN SHIPPER</Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeContainer: {
     flex: 1,
-    backgroundColor: '#F5F7F8',
+    backgroundColor: '#0F172A',
   },
-  header: {
+  topHeader: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#D84315',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    elevation: 3,
+    borderBottomWidth: 2,
+    borderBottomColor: '#B91C1C',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFF',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: '#FFCCBC',
-    marginTop: 2,
-  },
-  switchRoleBtn: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  switchRoleText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#FFF',
-    elevation: 1,
-  },
-  tabBtn: {
+  headerLeftCol: {
     flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderBottomWidth: 3,
-    borderBottomColor: 'transparent',
   },
-  tabBtnActive: {
-    borderBottomColor: '#D84315',
+  brandTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
-  tabText: {
-    fontSize: 13,
-    color: '#78909C',
-    fontWeight: '600',
-  },
-  tabTextActive: {
-    color: '#D84315',
-    fontWeight: 'bold',
-  },
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#ECEFF1',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  chip: {
-    backgroundColor: '#FFF',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#CFD8DC',
-  },
-  chipActive: {
-    backgroundColor: '#D84315',
-    borderColor: '#D84315',
-  },
-  chipText: {
+  brandSubtitle: {
     fontSize: 12,
-    color: '#455A64',
-    fontWeight: '600',
+    color: '#FEE2E2',
+    marginTop: 2,
+    fontWeight: '500',
   },
-  chipTextActive: {
-    color: '#FFF',
-    fontWeight: 'bold',
+  syncBtn: {
+    backgroundColor: '#991B1B',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#EF4444',
   },
-  scrollList: {
-    padding: 12,
-    paddingBottom: 30,
+  syncBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
-  centerBox: {
+  bodyContent: {
+    flex: 1,
+    backgroundColor: '#F1F5F9',
+  },
+  scrollBody: {
+    padding: 14,
+    paddingBottom: 24,
+  },
+  loaderCenter: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 14,
-    color: '#607D8B',
+  loaderText: {
+    marginTop: 12,
+    color: '#64748B',
+    fontWeight: '600',
   },
-  emptyBox: {
-    alignItems: 'center',
-    paddingVertical: 50,
-  },
-  emptyEmoji: {
-    fontSize: 50,
-    marginBottom: 10,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#263238',
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    color: '#78909C',
-    marginTop: 4,
+  cardsContainer: {
+    gap: 14,
   },
   orderCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-    elevation: 2,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
     shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    borderLeftWidth: 4,
-    borderLeftColor: '#D84315',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  orderCardHeader: {
+  urgentCardBorder: {
+    borderLeftWidth: 8,
+    borderLeftColor: '#EF4444', // Viền đỏ = Đơn chờ lâu
+  },
+  normalCardBorder: {
+    borderLeftWidth: 8,
+    borderLeftColor: '#10B981', // Viền xanh = Đơn mới
+  },
+  cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 8,
   },
-  orderIdText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1A1D1E',
-  },
-  orderTimeText: {
-    fontSize: 12,
-    color: '#90A4AE',
-    marginTop: 2,
-  },
-  badge: {
-    paddingHorizontal: 8,
+  orderIdBadge: {
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
   },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: 'bold',
+  orderIdText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
-  customerBox: {
-    backgroundColor: '#FAFAFA',
-    padding: 10,
+  priorityBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 8,
-    marginVertical: 6,
   },
-  customerName: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#37474F',
+  urgentBadgeBg: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
   },
-  customerAddress: {
+  urgentBadgeText: {
+    color: '#DC2626',
+    fontWeight: '800',
     fontSize: 12,
-    color: '#546E7A',
+  },
+  normalBadgeBg: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  normalBadgeText: {
+    color: '#15803D',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  customerInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  customerNameText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  orderTimeText: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  quickItemList: {
+    paddingVertical: 8,
+  },
+  quickItemLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  quickItemText: {
+    fontSize: 13,
+    color: '#64748B',
     marginTop: 2,
   },
-  orderNoteText: {
-    fontSize: 12,
-    color: '#E65100',
-    fontWeight: '600',
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-  actionRow: {
-    marginTop: 8,
-  },
-  actionBtn: {
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnCook: {
-    backgroundColor: '#E65100',
-  },
-  btnReady: {
-    backgroundColor: '#2E7D32',
-  },
-  actionBtnText: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  waitingShipperBox: {
-    backgroundColor: '#E8F5E9',
-    padding: 10,
+  cardNoteBox: {
+    backgroundColor: '#FEF3C7',
+    padding: 8,
     borderRadius: 8,
-    alignItems: 'center',
+    marginTop: 6,
     borderWidth: 1,
-    borderColor: '#C8E6C9',
+    borderColor: '#FDE68A',
   },
-  waitingShipperText: {
+  cardNoteText: {
+    color: '#B45309',
+    fontWeight: '700',
     fontSize: 13,
-    color: '#2E7D32',
-    fontWeight: 'bold',
-    textAlign: 'center',
   },
-  menuGuideText: {
-    fontSize: 13,
-    color: '#546E7A',
-    marginBottom: 12,
-    fontStyle: 'italic',
-  },
-  menuItemRow: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
+  cardActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    elevation: 1,
+    marginTop: 10,
+    gap: 8,
   },
-  menuItemEmoji: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#FFF3E0',
-    justifyContent: 'center',
+  detailTouchBtn: {
+    flex: 1,
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 12,
+    borderRadius: 10,
     alignItems: 'center',
-    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    minHeight: 44, // Touch target chuẩn
+    justifyContent: 'center',
   },
-  menuItemInfo: {
+  detailTouchBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  startCookBtn: {
+    flex: 1,
+    backgroundColor: '#EA580C',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  startCookBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  finishCookBtn: {
+    flex: 1,
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  finishCookBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  readyBadgeCard: {
+    flex: 1,
+    backgroundColor: '#E0F2FE',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  readyBadgeCardText: {
+    color: '#0284C7',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  emptyContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyIconCircle: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: '#FECACA',
+  },
+  emptyIcon: {
+    fontSize: 44,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#1E293B',
+    marginBottom: 6,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  emptyReloadBtn: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  emptyReloadText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  bottomNavContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingVertical: 6,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  bottomTabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    minHeight: 48,
+  },
+  bottomTabItemActive: {
+    borderTopWidth: 3,
+    borderTopColor: '#DC2626',
+  },
+  tabIconBadgeWrap: {
+    position: 'relative',
+  },
+  bottomTabIcon: {
+    fontSize: 20,
+    marginBottom: 2,
+  },
+  badgeCounter: {
+    position: 'absolute',
+    top: -4,
+    right: -10,
+    backgroundColor: '#DC2626',
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    minWidth: 18,
+    alignItems: 'center',
+  },
+  badgeCounterText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  bottomTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  bottomTabTextActive: {
+    color: '#DC2626',
+    fontWeight: '800',
+  },
+  modalSafeContainer: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  modalHeader: {
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalHeaderTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  modalHeaderSubtitle: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    backgroundColor: '#334155',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  modalCloseText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  modalScroll: {
     flex: 1,
   },
-  menuItemName: {
+  modalScrollContent: {
+    padding: 16,
+    paddingBottom: 30,
+  },
+  alertNoteBanner: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 2,
+    borderColor: '#F59E0B',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  alertNoteTitle: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#263238',
+    fontWeight: '900',
+    color: '#B45309',
+    marginBottom: 4,
   },
-  menuItemPrice: {
-    fontSize: 13,
-    color: '#E65100',
+  alertNoteDesc: {
+    fontSize: 15,
+    color: '#78350F',
+    fontWeight: '700',
+  },
+  killerFeatureCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+  },
+  killerHeaderRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    paddingBottom: 12,
+    marginBottom: 14,
+  },
+  killerHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#0F172A',
+  },
+  killerHeaderSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  stepCheckboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    marginBottom: 10,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    minHeight: 64, // Touch target cực lớn cho đầu bếp
+  },
+  stepCheckboxRowDone: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
+  },
+  stepAlertBorder: {
+    borderColor: '#F87171',
+    backgroundColor: '#FEF2F2',
+  },
+  largeCheckboxBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#94A3B8',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  largeCheckboxBoxDone: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  checkmarkIcon: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  emptyCheckboxHole: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+    backgroundColor: '#F1F5F9',
+  },
+  stepTextContainer: {
+    flex: 1,
+  },
+  stepLabelText: {
+    fontSize: 15,
+    color: '#1E293B',
     fontWeight: '600',
+  },
+  stepTextBold: {
+    fontWeight: '900',
+    fontSize: 16, // SIÊU TO, IN ĐẬM THEO YÊU CẦU
+    color: '#0F172A',
+  },
+  stepTextAlert: {
+    color: '#DC2626',
+  },
+  stepLabelDone: {
+    textDecorationLine: 'line-through',
+    color: '#94A3B8',
+  },
+  stepHintText: {
+    fontSize: 12,
+    color: '#64748B',
     marginTop: 2,
   },
-  menuStatusLabel: {
-    fontSize: 11,
-    fontWeight: 'bold',
+  modalFooterCTA: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  fullWidthStartBtn: {
+    backgroundColor: '#EA580C',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+  },
+  fullWidthCompleteBtn: {
+    backgroundColor: '#10B981', // XANH LÁ TRÀN VIỀN
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+  },
+  fullWidthCtaText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  profileScroll: {
+    padding: 16,
+  },
+  kitchenProfileCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  kitchenAvatarCircle: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#FECACA',
+  },
+  kitchenAvatarEmoji: {
+    fontSize: 36,
+  },
+  kitchenStaffName: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  kitchenStaffRole: {
+    fontSize: 13,
+    color: '#64748B',
     marginTop: 2,
+    marginBottom: 10,
+  },
+  kitchenStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#16A34A',
+    marginRight: 6,
+  },
+  kitchenStatusText: {
+    color: '#15803D',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  stockSectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 16,
+  },
+  stockSectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  stockSectionSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 14,
+  },
+  stockRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  stockInfoCol: {
+    flex: 1,
+  },
+  stockItemName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  stockItemPrice: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  stockActionCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stockStatusLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  textAvailable: {
+    color: '#16A34A',
+  },
+  textOutOfStock: {
+    color: '#DC2626',
+  },
+  toggleBtnPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    minHeight: 36,
+    justifyContent: 'center',
+  },
+  togglePillActive: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  togglePillInactive: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  toggleBtnPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  toggleTextActive: {
+    color: '#15803D',
+  },
+  toggleTextInactive: {
+    color: '#DC2626',
+  },
+  exitKitchenBtn: {
+    backgroundColor: '#1E293B',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  exitKitchenBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
