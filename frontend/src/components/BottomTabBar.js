@@ -1,115 +1,120 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { StyleSheet, Text, View, TouchableOpacity, Platform, SafeAreaView } from 'react-native';
 
+/**
+ * BottomTabBar Component chuẩn hóa theo Checklist.design:
+ * - 4 Tab: Home, Search, Cart, Profile
+ * - Trạng thái Active: Màu chủ đạo (#00A896), in đậm
+ * - Trạng thái Inactive: Màu xám (#9E9E9E)
+ * - Tối ưu SafeArea cho iOS Home Indicator & tai thỏ
+ */
 export default function BottomTabBar({ activeTab, navigation }) {
-  const handleAccountPress = async () => {
-    const token = await AsyncStorage.getItem('user_token');
-    if (token) {
-      const storedUser = await AsyncStorage.getItem('user_info');
-      const user = storedUser ? JSON.parse(storedUser) : {};
-      Alert.alert(
-        'Thông tin tài khoản 👤',
-        `Xin chào: ${user.ho_ten || 'Khách hàng'}\nEmail: ${user.email || 'N/A'}\nSĐT: ${user.so_dien_thoai || 'N/A'}`,
-        [
-          { text: 'Đóng', style: 'cancel' },
-          { 
-            text: 'Đăng xuất', 
-            style: 'destructive',
-            onPress: async () => {
-              await AsyncStorage.removeItem('user_token');
-              await AsyncStorage.removeItem('user_info');
-              Alert.alert('Thông báo', 'Đã đăng xuất tài khoản thành công.');
-              navigation.navigate('Home');
-            }
-          }
-        ]
-      );
-    } else {
-      navigation.navigate('Login');
-    }
-  };
-
   const tabs = [
-    { key: 'Home', label: 'Home', icon: '🏠', action: () => navigation.navigate('Home') },
-    { key: 'Cart', label: 'Cart', icon: '🛒', action: () => navigation.navigate('Cart') },
-    { key: 'OrdersList', label: 'Orders', icon: '📋', action: () => navigation.navigate('OrdersList') },
-    { key: 'Account', label: 'Account', icon: '👤', action: handleAccountPress },
+    { 
+      key: 'Home', 
+      label: 'Home', 
+      icon: '🏠', 
+      action: () => navigation.navigate('Home') 
+    },
+    { 
+      key: 'Search', 
+      label: 'Search', 
+      icon: '🔍', 
+      action: () => navigation.navigate('Search') 
+    },
+    { 
+      key: 'Cart', 
+      label: 'Cart', 
+      icon: '🛒', 
+      action: () => navigation.navigate('Cart') 
+    },
+    { 
+      key: 'Profile', 
+      label: 'Profile', 
+      icon: '👤', 
+      action: () => navigation.navigate('Profile') 
+    },
   ];
 
   return (
-    <View style={styles.tabBarContainer}>
-      {tabs.map((tab) => {
-        const isActive = activeTab === tab.key;
-        return (
-          <TouchableOpacity
-            key={tab.key}
-            style={styles.tabItem}
-            activeOpacity={0.7}
-            onPress={tab.action}
-          >
-            <View style={[styles.iconContainer, isActive && styles.activeIconBg]}>
-              <Text style={[styles.tabIcon, isActive && styles.activeTabIcon]}>{tab.icon}</Text>
-            </View>
-            <Text style={[styles.tabLabel, isActive && styles.activeTabLabel]}>
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
+    <View style={styles.safeContainer}>
+      <View style={styles.tabBarContainer}>
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.key;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={styles.tabItem}
+              activeOpacity={0.7}
+              onPress={tab.action}
+            >
+              <View style={[styles.iconContainer, isActive && styles.activeIconBg]}>
+                <Text style={[styles.tabIcon, isActive && styles.activeTabIcon]}>
+                  {tab.icon}
+                </Text>
+              </View>
+              <Text style={[styles.tabLabel, isActive && styles.activeTabLabel]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  safeContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 10,
+  },
   tabBarContainer: {
     flexDirection: 'row',
-    height: 64,
-    backgroundColor: '#FFF8F0',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#FFE0B2',
+    height: Platform.OS === 'ios' ? 76 : 64,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 8,
+    paddingHorizontal: 8,
+    paddingBottom: Platform.OS === 'ios' ? 16 : 6,
+    paddingTop: 6,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
   },
   iconContainer: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 2,
   },
   activeIconBg: {
-    backgroundColor: '#FFF3E0',
+    backgroundColor: '#E0F2F1', // Nền xanh bạc hà nhạt cho tab đang chọn
   },
   tabIcon: {
-    fontSize: 18,
-    opacity: 0.6,
+    fontSize: 19,
+    opacity: 0.5,
   },
   activeTabIcon: {
     opacity: 1,
   },
   tabLabel: {
     fontSize: 11,
-    color: '#9E9E9E',
+    color: '#94A3B8', // Màu xám cho Inactive
     fontWeight: '500',
   },
   activeTabLabel: {
-    color: '#FF5722',
-    fontWeight: 'bold',
+    color: '#00A896', // Màu chủ đạo của app cho Active
+    fontWeight: '700',
   },
 });

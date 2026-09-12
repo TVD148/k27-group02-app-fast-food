@@ -12,6 +12,8 @@ import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import CustomNutritionScreen from '../screens/CustomNutritionScreen';
 import PaymentScreen from '../screens/PaymentScreen';
+import SearchScreen from '../screens/SearchScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 
 const Stack = createStackNavigator();
 
@@ -89,6 +91,16 @@ export function AppNavigator() {
         name="OrderTracking" 
         component={OrderTrackingScreen} 
         options={{ title: 'Theo Dõi Đơn Hàng' }}
+      />
+      <Stack.Screen 
+        name="Search" 
+        component={SearchScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="Profile" 
+        component={ProfileScreen} 
+        options={{ title: 'Hồ Sơ & Cài Đặt 👤' }}
       />
       <Stack.Screen 
         name="OrdersList" 

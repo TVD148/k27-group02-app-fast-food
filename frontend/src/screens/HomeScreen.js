@@ -16,6 +16,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchCategories, fetchItems, logoutUser } from '../services/api';
 import BottomTabBar from '../components/BottomTabBar';
+import EmptyState from '../components/EmptyState';
 
 const { width } = Dimensions.get('window');
 
@@ -324,13 +325,17 @@ export default function HomeScreen({ navigation }) {
         {loadingFoods ? (
           <ActivityIndicator color="#00A896" style={styles.loader} />
         ) : foods.length === 0 ? (
-          <View style={styles.emptySearchContainer}>
-            <View style={styles.emptyPlateContainer}>
-              <Text style={styles.emptyPlateEmoji}>🍽️</Text>
-            </View>
-            <Text style={styles.emptySearchTitle}>Không tìm thấy món ăn nào!</Text>
-            <Text style={styles.emptySearchSubtitle}>Rất tiếc, chúng tôi không tìm thấy kết quả phù hợp cho tìm kiếm của bạn.</Text>
-          </View>
+          <EmptyState
+            icon="🍽️"
+            title="Không tìm thấy món ăn nào!"
+            description="Rất tiếc, chúng tôi không tìm thấy kết quả phù hợp cho tìm kiếm của bạn. Hãy thử chọn danh mục khác hoặc tải lại nhé!"
+            buttonText="Tải lại thực đơn 🔄"
+            onButtonPress={() => {
+              setSelectedCategory('');
+              setSearchQuery('');
+              loadFoodsData('', '');
+            }}
+          />
         ) : (
           <FlatList
             data={foods}
