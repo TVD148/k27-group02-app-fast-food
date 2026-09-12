@@ -49,6 +49,15 @@ export default function CartScreen({ navigation }) {
 
   const handleUpdateQty = async (cartItemId, currentQty, delta) => {
     const newQty = currentQty + delta;
+    if (newQty < 1) {
+      Alert.alert('Thông báo', 'Số lượng tối thiểu là 1 phần. Nếu muốn xóa món này, bạn hãy bấm nút (✕).');
+      return;
+    }
+    if (newQty > 10) {
+      Alert.alert('Thông báo', 'Số lượng tối đa cho mỗi món ăn là 10 phần!');
+      return;
+    }
+
     try {
       const response = await updateCartItem(cartItemId, newQty);
       if (response.success) {
@@ -157,17 +166,21 @@ export default function CartScreen({ navigation }) {
             
             <View style={styles.qtyControlContainer}>
               <TouchableOpacity 
-                style={styles.qtyBtnMinus} 
+                style={[styles.qtyBtnMinus, item.so_luong <= 1 && styles.qtyBtnMinusDisabled]} 
                 onPress={() => handleUpdateQty(item.ma_chi_tiet_gio, item.so_luong, -1)}
+                disabled={item.so_luong <= 1}
+                activeOpacity={0.6}
               >
-                <Text style={styles.qtyBtnMinusText}>-</Text>
+                <Text style={[styles.qtyBtnMinusText, item.so_luong <= 1 && styles.qtyBtnDisabledText]}>-</Text>
               </TouchableOpacity>
               
               <Text style={styles.qtyText}>{item.so_luong}</Text>
               
               <TouchableOpacity 
-                style={styles.qtyBtnPlus} 
+                style={[styles.qtyBtnPlus, item.so_luong >= 10 && styles.qtyBtnPlusDisabled]} 
                 onPress={() => handleUpdateQty(item.ma_chi_tiet_gio, item.so_luong, 1)}
+                disabled={item.so_luong >= 10}
+                activeOpacity={0.6}
               >
                 <Text style={styles.qtyBtnPlusText}>+</Text>
               </TouchableOpacity>
@@ -405,10 +418,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFF',
   },
+  qtyBtnMinusDisabled: {
+    backgroundColor: '#F5F5F5',
+    borderColor: '#EEEEEE',
+    opacity: 0.6,
+  },
   qtyBtnMinusText: {
     fontSize: 14,
     fontWeight: 'bold',
     color: '#616161',
+  },
+  qtyBtnDisabledText: {
+    color: '#BDBDBD',
   },
   qtyText: {
     fontSize: 14,
@@ -423,6 +444,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF5722',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  qtyBtnPlusDisabled: {
+    backgroundColor: '#BDBDBD',
+    opacity: 0.6,
   },
   qtyBtnPlusText: {
     fontSize: 14,

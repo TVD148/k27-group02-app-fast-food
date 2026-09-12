@@ -224,6 +224,12 @@ const addToCart = async (req, res) => {
     if (matchingItem) {
       // Đã có trùng món & option & tùy biến dinh dưỡng => Cập nhật tăng số lượng
       const newQuantity = matchingItem.so_luong + parseInt(so_luong);
+      if (newQuantity > 10) {
+        return res.status(400).json({
+          success: false,
+          message: `Số lượng tối đa cho mỗi món trong giỏ hàng là 10 phần! (Hiện đã có ${matchingItem.so_luong} phần)`
+        });
+      }
       if (newQuantity > food.so_luong_ton) {
         return res.status(400).json({
           success: false,
@@ -284,12 +290,18 @@ const updateCartItem = async (req, res) => {
     const item = cartItems[0];
     const newQty = so_luong !== undefined ? parseInt(so_luong) : item.so_luong;
 
-    // Nếu số lượng <= 0 thì tiến hành xóa món khỏi giỏ
-    if (newQty <= 0) {
-      await db.query('DELETE FROM chi_tiet_gio_hang WHERE ma_chi_tiet_gio = ?', [cartItemId]);
-      return res.status(200).json({
-        success: true,
-        message: 'Đã xóa sản phẩm khỏi giỏ hàng!'
+    // Giới hạn số lượng món trong giỏ: Min là 1, Max là 10
+    if (newQty < 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Số lượng tối thiểu là 1 phần! Nếu muốn xóa món khỏi giỏ hàng, vui lòng bấm nút xóa (✕).'
+      });
+    }
+
+    if (newQty > 10) {
+      return res.status(400).json({
+        success: false,
+        message: 'Số lượng tối đa cho mỗi món trong giỏ hàng là 10 phần!'
       });
     }
 
