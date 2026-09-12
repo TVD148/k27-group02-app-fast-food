@@ -16,7 +16,7 @@ const getCart = async (req, res) => {
     const userId = req.user.id;
     const cartId = await getOrCreateCartId(userId);
 
-    // Truy vấn danh sách món ăn trong giỏ hàng
+    // Truy vấn danh sách món ăn trong giỏ hàng (kèm thông tin dinh dưỡng tùy biến)
     const [cartItems] = await db.query(`
       SELECT 
         ctgh.ma_chi_tiet_gio,
@@ -25,19 +25,26 @@ const getCart = async (req, res) => {
         ctgh.so_luong,
         ctgh.tuy_chon_da_chon,
         ctgh.gia_tam_tinh,
+        ctgh.dinh_duong_tuy_bien,
         m.ten_mon,
         m.hinh_anh,
         m.gia_ban AS gia_goc,
         m.so_luong_ton,
-        m.trang_thai AS trang_thai_mon
+        m.trang_thai AS trang_thai_mon,
+        m.ma_danh_muc
       FROM chi_tiet_gio_hang ctgh
       JOIN mon_an m ON ctgh.ma_mon_an = m.ma_mon_an
       WHERE ctgh.ma_gio_hang = ?
       ORDER BY ctgh.ma_chi_tiet_gio DESC
     `, [cartId]);
 
-    // Xử lý đọc danh sách tên tùy chọn cho từng item trong giỏ
+    // Bảng tham chiếu Calo mặc định cho từng món nếu chưa có tùy biến riêng
+    const defaultCaloMap = { 1: 985, 2: 720, 3: 480, 4: 310, 5: 0, 6: 120, 7: 550, 8: 1100 };
+
+    // Xử lý đọc danh sách tên tùy chọn & dinh dưỡng cho từng item trong giỏ
     let tongTienGioHang = 0;
+    let tongCaloGioHang = 0;
+
     const formattedItems = await Promise.all(cartItems.map(async (item) => {
       tongTienGioHang += parseFloat(item.gia_tam_tinh);
       
@@ -65,6 +72,26 @@ const getCart = async (req, res) => {
         }));
       }
 
+      // Xử lý dữ liệu dinh dưỡng tùy biến
+      let customNutrition = null;
+      let caloPerItem = defaultCaloMap[item.ma_mon_an] || 350;
+
+      if (item.dinh_duong_tuy_bien) {
+        try {
+          customNutrition = typeof item.dinh_duong_tuy_bien === 'string'
+            ? JSON.parse(item.dinh_duong_tuy_bien)
+            : item.dinh_duong_tuy_bien;
+          if (customNutrition && customNutrition.calo !== undefined) {
+            caloPerItem = parseFloat(customNutrition.calo);
+          }
+        } catch (e) {
+          console.error('Lỗi parse dinh_duong_tuy_bien:', e);
+        }
+      }
+
+      const totalItemCalo = caloPerItem * item.so_luong;
+      tongCaloGioHang += totalItemCalo;
+
       return {
         ma_chi_tiet_gio: item.ma_chi_tiet_gio,
         ma_mon_an: item.ma_mon_an,
@@ -76,7 +103,11 @@ const getCart = async (req, res) => {
         trang_thai_mon: item.trang_thai_mon,
         tuy_chon_da_chon: optionDetails,
         tuy_chon_ids: selectedOptionIds,
-        gia_tam_tinh: parseFloat(item.gia_tam_tinh)
+        gia_tam_tinh: parseFloat(item.gia_tam_tinh),
+        dinh_duong_tuy_bien: customNutrition,
+        calo: caloPerItem,
+        tong_calo_item: totalItemCalo,
+        la_mon_dong_san: [5, 6].includes(item.ma_mon_an) || item.ma_danh_muc === 3
       };
     }));
 
@@ -87,7 +118,8 @@ const getCart = async (req, res) => {
         ma_gio_hang: cartId,
         items: formattedItems,
         tong_so_luong: formattedItems.reduce((acc, curr) => acc + curr.so_luong, 0),
-        tong_tien: tongTienGioHang
+        tong_tien: tongTienGioHang,
+        tong_calo: Math.round(tongCaloGioHang)
       }
     });
   } catch (error) {
@@ -103,7 +135,7 @@ const getCart = async (req, res) => {
 const addToCart = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { ma_mon_an, so_luong = 1, tuy_chon_da_chon = [] } = req.body;
+    const { ma_mon_an, so_luong = 1, tuy_chon_da_chon = [], dinh_duong_tuy_bien = null } = req.body;
 
     if (!ma_mon_an || parseInt(so_luong) <= 0) {
       return res.status(400).json({
@@ -132,7 +164,7 @@ const addToCart = async (req, res) => {
     // 2. Lấy giỏ hàng của user
     const cartId = await getOrCreateCartId(userId);
 
-    // 3. Tính đơn giá món kèm tùy chọn (Size, Topping)
+    // 3. Tính đơn giá món kèm tùy chọn (Size, Topping) hoặc tùy biến dinh dưỡng
     let extraCost = 0;
     const optionIds = Array.isArray(tuy_chon_da_chon) ? tuy_chon_da_chon.map(Number) : [];
     
@@ -144,12 +176,28 @@ const addToCart = async (req, res) => {
       extraCost = options.reduce((sum, opt) => sum + parseFloat(opt.gia_tang_them), 0);
     }
 
-    const unitPrice = parseFloat(food.gia_ban) + extraCost;
+    // Kiểm tra nếu có dinh dưỡng tùy biến với đơn giá riêng
+    let customUnitPrice = null;
+    let customNutritionJson = null;
+    if (dinh_duong_tuy_bien) {
+      const parsedDD = typeof dinh_duong_tuy_bien === 'string'
+        ? JSON.parse(dinh_duong_tuy_bien)
+        : dinh_duong_tuy_bien;
+      if (parsedDD && parsedDD.gia_sau_tuy_bien) {
+        customUnitPrice = parseFloat(parsedDD.gia_sau_tuy_bien);
+      }
+      customNutritionJson = typeof dinh_duong_tuy_bien === 'string'
+        ? dinh_duong_tuy_bien
+        : JSON.stringify(dinh_duong_tuy_bien);
+    }
+
+    const basePrice = customUnitPrice !== null ? customUnitPrice : parseFloat(food.gia_ban);
+    const unitPrice = basePrice + extraCost;
 
     // Chuẩn hóa chuỗi JSON mảng tùy chọn đã sắp xếp để so sánh trùng lặp
     const sortedOptionJson = JSON.stringify(optionIds.sort((a, b) => a - b));
 
-    // 4. Kiểm tra xem món ăn với ĐÚNG TÙY CHỌN này đã có trong giỏ chưa
+    // 4. Kiểm tra xem món ăn với ĐÚNG TÙY CHỌN & ĐÚNG NGUYÊN LIỆU TÙY BIẾN này đã có trong giỏ chưa
     const [existingItems] = await db.query(
       'SELECT * FROM chi_tiet_gio_hang WHERE ma_gio_hang = ? AND ma_mon_an = ?',
       [cartId, ma_mon_an]
@@ -164,14 +212,17 @@ const addToCart = async (req, res) => {
           : item.tuy_chon_da_chon;
       }
       const existingSortedJson = JSON.stringify(existingOptions.map(Number).sort((a, b) => a - b));
-      if (sortedOptionJson === existingSortedJson) {
+      
+      // So sánh cả tùy chọn và cấu hình dinh dưỡng tùy biến
+      const existingNutritionJson = item.dinh_duong_tuy_bien || null;
+      if (sortedOptionJson === existingSortedJson && customNutritionJson === existingNutritionJson) {
         matchingItem = item;
         break;
       }
     }
 
     if (matchingItem) {
-      // Đã có trùng món & option => Cập nhật tăng số lượng
+      // Đã có trùng món & option & tùy biến dinh dưỡng => Cập nhật tăng số lượng
       const newQuantity = matchingItem.so_luong + parseInt(so_luong);
       if (newQuantity > food.so_luong_ton) {
         return res.status(400).json({
@@ -189,8 +240,8 @@ const addToCart = async (req, res) => {
       // Chưa có => Thêm dòng mới vào giỏ
       const subtotal = unitPrice * parseInt(so_luong);
       await db.query(
-        'INSERT INTO chi_tiet_gio_hang (ma_gio_hang, ma_mon_an, so_luong, tuy_chon_da_chon, gia_tam_tinh) VALUES (?, ?, ?, ?, ?)',
-        [cartId, ma_mon_an, parseInt(so_luong), sortedOptionJson, subtotal]
+        'INSERT INTO chi_tiet_gio_hang (ma_gio_hang, ma_mon_an, so_luong, tuy_chon_da_chon, gia_tam_tinh, dinh_duong_tuy_bien) VALUES (?, ?, ?, ?, ?, ?)',
+        [cartId, ma_mon_an, parseInt(so_luong), sortedOptionJson, subtotal, customNutritionJson]
       );
     }
 
@@ -207,21 +258,12 @@ const addToCart = async (req, res) => {
   }
 };
 
-// 3. CẬP NHẬT SỐ LƯỢNG MÓN TRONG GIỎ (PUT /api/cart/update/:id)
+// 3. CẬP NHẬT SỐ LƯỢNG MÓN HOẶC TÙY BIẾN DINH DƯỠNG TRONG GIỎ (PUT /api/cart/update/:id)
 const updateCartItem = async (req, res) => {
   try {
     const userId = req.user.id;
     const cartItemId = req.params.id;
-    const { so_luong } = req.body;
-
-    if (so_luong === undefined) {
-      return res.status(400).json({
-        success: false,
-        message: 'Vui lòng cung cấp số lượng mới!'
-      });
-    }
-
-    const newQty = parseInt(so_luong);
+    const { so_luong, dinh_duong_tuy_bien } = req.body;
 
     // Kiểm tra chi tiết giỏ hàng có tồn tại và thuộc giỏ hàng của user không
     const [cartItems] = await db.query(`
@@ -240,6 +282,7 @@ const updateCartItem = async (req, res) => {
     }
 
     const item = cartItems[0];
+    const newQty = so_luong !== undefined ? parseInt(so_luong) : item.so_luong;
 
     // Nếu số lượng <= 0 thì tiến hành xóa món khỏi giỏ
     if (newQty <= 0) {
@@ -274,17 +317,43 @@ const updateCartItem = async (req, res) => {
       }
     }
 
-    const unitPrice = parseFloat(item.gia_ban) + extraCost;
+    // Xác định đơn giá theo dinh dưỡng tùy biến
+    let customNutritionJson = item.dinh_duong_tuy_bien;
+    let customUnitPrice = null;
+
+    if (dinh_duong_tuy_bien !== undefined) {
+      customNutritionJson = typeof dinh_duong_tuy_bien === 'string'
+        ? dinh_duong_tuy_bien
+        : JSON.stringify(dinh_duong_tuy_bien);
+      const parsed = typeof dinh_duong_tuy_bien === 'string'
+        ? JSON.parse(dinh_duong_tuy_bien)
+        : dinh_duong_tuy_bien;
+      if (parsed && parsed.gia_sau_tuy_bien) {
+        customUnitPrice = parseFloat(parsed.gia_sau_tuy_bien);
+      }
+    } else if (item.dinh_duong_tuy_bien) {
+      try {
+        const parsed = typeof item.dinh_duong_tuy_bien === 'string'
+          ? JSON.parse(item.dinh_duong_tuy_bien)
+          : item.dinh_duong_tuy_bien;
+        if (parsed && parsed.gia_sau_tuy_bien) {
+          customUnitPrice = parseFloat(parsed.gia_sau_tuy_bien);
+        }
+      } catch (e) {}
+    }
+
+    const basePrice = customUnitPrice !== null ? customUnitPrice : parseFloat(item.gia_ban);
+    const unitPrice = basePrice + extraCost;
     const newSubtotal = unitPrice * newQty;
 
     await db.query(
-      'UPDATE chi_tiet_gio_hang SET so_luong = ?, gia_tam_tinh = ? WHERE ma_chi_tiet_gio = ?',
-      [newQty, newSubtotal, cartItemId]
+      'UPDATE chi_tiet_gio_hang SET so_luong = ?, gia_tam_tinh = ?, dinh_duong_tuy_bien = ? WHERE ma_chi_tiet_gio = ?',
+      [newQty, newSubtotal, customNutritionJson, cartItemId]
     );
 
     return res.status(200).json({
       success: true,
-      message: 'Cập nhật số lượng giỏ hàng thành công!'
+      message: 'Cập nhật giỏ hàng thành công!'
     });
   } catch (error) {
     return res.status(500).json({

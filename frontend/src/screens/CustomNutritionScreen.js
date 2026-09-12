@@ -10,10 +10,10 @@ import {
   SafeAreaView 
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchItemNutrition, calculateNutrition, addToCart } from '../services/api';
+import { fetchItemNutrition, calculateNutrition, addToCart, updateCartItem } from '../services/api';
 
 export default function CustomNutritionScreen({ route, navigation }) {
-  const { itemId, foodName: initialFoodName } = route.params || {};
+  const { itemId, foodName: initialFoodName, cartItemId, initialQuantities } = route.params || {};
 
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState(false);
@@ -45,14 +45,18 @@ export default function CustomNutritionScreen({ route, navigation }) {
         const isPackaged = response.data.la_mon_dong_san || false;
         setIsPrepackaged(isPackaged);
 
-        // Chỉ lọc các nguyên liệu có thể tùy biến (nguyên liệu cố định đã được lọc từ backend hoặc ở đây)
+        // Chỉ lọc các nguyên liệu có thể tùy biến (lọc bỏ các nguyên liệu cố định bắt buộc)
         const recipeList = (response.data.cong_thuc_nguyen_lieu || []).filter(item => item.co_the_tuy_bien === 1);
         setRecipe(recipeList);
 
-        // Khởi tạo map số lượng mặc định (giới hạn min 1)
+        // Khởi tạo map số lượng (nếu đang sửa từ giỏ hàng thì lấy định lượng cũ, ngược lại lấy mặc định)
         const initialQty = {};
         recipeList.forEach(item => {
-          initialQty[item.ma_nguyen_lieu] = Math.max(1, parseFloat(item.so_luong_mac_dinh));
+          if (initialQuantities && initialQuantities[item.ma_nguyen_lieu] !== undefined) {
+            initialQty[item.ma_nguyen_lieu] = parseFloat(initialQuantities[item.ma_nguyen_lieu]);
+          } else {
+            initialQty[item.ma_nguyen_lieu] = Math.max(1, parseFloat(item.so_luong_mac_dinh));
+          }
         });
         setQuantities(initialQty);
 
@@ -117,20 +121,44 @@ export default function CustomNutritionScreen({ route, navigation }) {
 
     setAdding(true);
     try {
-      // Gọi API thêm món vào giỏ với giá sau tùy biến
-      const response = await addToCart(itemId, 1, []);
-      if (response.success) {
-        Alert.alert(
-          'Thành công 🎉',
-          `Đã thêm '${foodData?.ten_mon}' với tùy chỉnh dinh dưỡng vào giỏ hàng!`,
-          [
-            { text: 'Xem giỏ hàng', onPress: () => navigation.navigate('Cart') },
-            { text: 'Tiếp tục xem món', style: 'cancel' }
-          ]
-        );
+      // Đóng gói cấu hình dinh dưỡng tùy biến và giá sau tùy biến
+      const customNutritionPayload = {
+        calo: nutrition.calo,
+        protein: nutrition.protein,
+        carbs: nutrition.carbs,
+        fat: nutrition.fat,
+        gia_sau_tuy_bien: nutrition.gia_sau_tuy_bien,
+        chi_tiet_nguyen_lieu: quantities
+      };
+
+      if (cartItemId) {
+        // Đang tùy biến lại từ giỏ hàng => cập nhật chi tiết giỏ hàng hiện tại
+        const response = await updateCartItem(cartItemId, undefined, customNutritionPayload);
+        if (response.success) {
+          Alert.alert(
+            'Đã cập nhật giỏ hàng 🎉',
+            `Món '${foodData?.ten_mon}' đã được cập nhật dinh dưỡng và giá mới!`,
+            [
+              { text: 'Về giỏ hàng', onPress: () => navigation.navigate('Cart') }
+            ]
+          );
+        }
+      } else {
+        // Thêm mới món đã tùy biến vào giỏ hàng
+        const response = await addToCart(itemId, 1, [], customNutritionPayload);
+        if (response.success) {
+          Alert.alert(
+            'Thành công 🎉',
+            `Đã thêm '${foodData?.ten_mon}' với tùy chỉnh dinh dưỡng vào giỏ hàng!`,
+            [
+              { text: 'Xem giỏ hàng', onPress: () => navigation.navigate('Cart') },
+              { text: 'Tiếp tục xem món', style: 'cancel' }
+            ]
+          );
+        }
       }
     } catch (error) {
-      Alert.alert('Lỗi', error.message || 'Không thể thêm món tùy biến vào giỏ!');
+      Alert.alert('Lỗi', error.message || 'Không thể cập nhật món tùy biến vào giỏ!');
     } finally {
       setAdding(false);
     }
@@ -147,15 +175,6 @@ export default function CustomNutritionScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 0. Thanh tiêu đề Navbar */}
-      <View style={styles.topNavBar}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={styles.backButtonText}>← Quay lại</Text>
-        </TouchableOpacity>
-        <Text style={styles.topNavTitle}>Tùy Biến Dinh Dưỡng</Text>
-        <View style={{ width: 60 }} />
-      </View>
-
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* 1. Card ảnh & thông tin món ăn */}
         <View style={styles.headerFoodCard}>
@@ -165,7 +184,11 @@ export default function CustomNutritionScreen({ route, navigation }) {
           <View style={styles.foodHeaderInfo}>
             <Text style={styles.foodTitle}>{foodData?.ten_mon || initialFoodName}</Text>
             <Text style={styles.foodBadge}>
-              {isPrepackaged ? 'Sản phẩm đóng gói sẵn' : 'Chế độ Tùy biến Dinh dưỡng (Killer Feature)'}
+              {isPrepackaged 
+                ? 'Sản phẩm đóng gói sẵn' 
+                : cartItemId 
+                  ? '🔄 Đang chỉnh sửa món trong giỏ hàng' 
+                  : 'Chế độ Tùy biến Dinh dưỡng (Killer Feature)'}
             </Text>
             <Text style={styles.basePriceText}>
               Giá gốc: {foodData?.gia_ban_goc?.toLocaleString('vi-VN')} đ
@@ -292,7 +315,7 @@ export default function CustomNutritionScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Nút thêm vào giỏ hàng + Giá tiền tính toán động */}
+        {/* Nút thêm/cập nhật vào giỏ hàng + Giá tiền tính toán động */}
         <TouchableOpacity
           style={[styles.addToCartBtn, adding && styles.btnDisabled]}
           onPress={handleAddToCart}
@@ -303,7 +326,9 @@ export default function CustomNutritionScreen({ route, navigation }) {
             <ActivityIndicator color="#FFF" />
           ) : (
             <View style={styles.addToCartBtnContent}>
-              <Text style={styles.addToCartBtnText}>Thêm vào giỏ hàng</Text>
+              <Text style={styles.addToCartBtnText}>
+                {cartItemId ? 'Cập nhật món trong giỏ 🔄' : 'Thêm vào giỏ hàng'}
+              </Text>
               <Text style={styles.addToCartPriceText}>
                 {(nutrition.gia_sau_tuy_bien || foodData?.gia_ban_goc || 0).toLocaleString('vi-VN')} đ
               </Text>
@@ -325,30 +350,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-  },
-  topNavBar: {
-    height: 52,
-    backgroundColor: '#00A896',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-  },
-  backButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 12,
-  },
-  backButtonText: {
-    color: '#FFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  topNavTitle: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   loadingText: {
     marginTop: 10,

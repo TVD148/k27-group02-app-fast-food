@@ -108,54 +108,91 @@ export default function CartScreen({ navigation }) {
     );
   };
 
-  const renderCartItem = ({ item }) => (
-    <View style={styles.cartItemCard}>
-      <View style={styles.foodEmojiContainer}>
-        <Text style={styles.foodEmoji}>🍔</Text>
-      </View>
+  const renderCartItem = ({ item }) => {
+    const itemCalo = item.calo || (item.dinh_duong_tuy_bien ? item.dinh_duong_tuy_bien.calo : 350);
+    const totalItemCalo = item.tong_calo_item || (itemCalo * item.so_luong);
 
-      <View style={styles.cartItemInfo}>
-        <View style={styles.cartItemHeader}>
-          <Text style={styles.foodName} numberOfLines={1}>{item.ten_mon}</Text>
-          <TouchableOpacity onPress={() => handleRemoveItem(item.ma_chi_tiet_gio, item.ten_mon)}>
-            <Text style={styles.deleteText}>✕</Text>
-          </TouchableOpacity>
+    return (
+      <View style={styles.cartItemCard}>
+        <View style={styles.foodEmojiContainer}>
+          <Text style={styles.foodEmoji}>🍔</Text>
         </View>
 
-        {item.tuy_chon_da_chon && item.tuy_chon_da_chon.length > 0 && (
-          <View style={styles.optionsContainer}>
-            {item.tuy_chon_da_chon.map((opt, idx) => (
-              <Text key={idx} style={styles.optionText}>
-                • {opt.ten_nhom}: {opt.ten_gia_tri} {opt.gia_tang_them > 0 ? `(+${opt.gia_tang_them.toLocaleString('vi-VN')}đ)` : ''}
+        <View style={styles.cartItemInfo}>
+          <View style={styles.cartItemHeader}>
+            <Text style={styles.foodName} numberOfLines={1}>{item.ten_mon}</Text>
+            <TouchableOpacity onPress={() => handleRemoveItem(item.ma_chi_tiet_gio, item.ten_mon)}>
+              <Text style={styles.deleteText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Huy hiệu ghi chú đã tùy biến dinh dưỡng */}
+          {item.dinh_duong_tuy_bien && (
+            <View style={styles.customNutritionTag}>
+              <Text style={styles.customNutritionTagText}>
+                ✓ Đã tùy chỉnh dinh dưỡng ({item.dinh_duong_tuy_bien.calo} kcal)
               </Text>
-            ))}
-          </View>
-        )}
+            </View>
+          )}
 
-        <View style={styles.cartItemFooter}>
-          <Text style={styles.itemPrice}>{item.gia_tam_tinh.toLocaleString('vi-VN')} đ</Text>
-          
-          <View style={styles.qtyControlContainer}>
-            <TouchableOpacity 
-              style={styles.qtyBtnMinus} 
-              onPress={() => handleUpdateQty(item.ma_chi_tiet_gio, item.so_luong, -1)}
-            >
-              <Text style={styles.qtyBtnMinusText}>-</Text>
-            </TouchableOpacity>
-            
-            <Text style={styles.qtyText}>{item.so_luong}</Text>
-            
-            <TouchableOpacity 
-              style={styles.qtyBtnPlus} 
-              onPress={() => handleUpdateQty(item.ma_chi_tiet_gio, item.so_luong, 1)}
-            >
-              <Text style={styles.qtyBtnPlusText}>+</Text>
-            </TouchableOpacity>
+          {item.tuy_chon_da_chon && item.tuy_chon_da_chon.length > 0 && (
+            <View style={styles.optionsContainer}>
+              {item.tuy_chon_da_chon.map((opt, idx) => (
+                <Text key={idx} style={styles.optionText}>
+                  • {opt.ten_nhom}: {opt.ten_gia_tri} {opt.gia_tang_them > 0 ? `(+${opt.gia_tang_them.toLocaleString('vi-VN')}đ)` : ''}
+                </Text>
+              ))}
+            </View>
+          )}
+
+          {/* Dòng hiển thị Calo riêng biệt */}
+          <View style={styles.calorieRow}>
+            <Text style={styles.itemCaloText}>
+              🔥 {itemCalo} kcal/phần {item.so_luong > 1 ? `(Tổng: ${totalItemCalo} kcal)` : ''}
+            </Text>
           </View>
+
+          <View style={styles.cartItemFooter}>
+            <Text style={styles.itemPrice}>{parseFloat(item.gia_tam_tinh).toLocaleString('vi-VN')} đ</Text>
+            
+            <View style={styles.qtyControlContainer}>
+              <TouchableOpacity 
+                style={styles.qtyBtnMinus} 
+                onPress={() => handleUpdateQty(item.ma_chi_tiet_gio, item.so_luong, -1)}
+              >
+                <Text style={styles.qtyBtnMinusText}>-</Text>
+              </TouchableOpacity>
+              
+              <Text style={styles.qtyText}>{item.so_luong}</Text>
+              
+              <TouchableOpacity 
+                style={styles.qtyBtnPlus} 
+                onPress={() => handleUpdateQty(item.ma_chi_tiet_gio, item.so_luong, 1)}
+              >
+                <Text style={styles.qtyBtnPlusText}>+</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Nút Tùy biến lại đặt ở dưới của mỗi món cho dễ bấm */}
+          {!item.la_mon_dong_san && (
+            <TouchableOpacity 
+              style={styles.reCustomizeBottomBtn}
+              onPress={() => navigation.navigate('CustomNutrition', {
+                itemId: item.ma_mon_an,
+                foodName: item.ten_mon,
+                cartItemId: item.ma_chi_tiet_gio,
+                initialQuantities: item.dinh_duong_tuy_bien?.chi_tiet_nguyen_lieu
+              })}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.reCustomizeBottomText}>🥗 Tùy biến lại món ăn</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   if (loading && !refreshing) {
     return (
@@ -168,6 +205,7 @@ export default function CartScreen({ navigation }) {
   const items = cartData?.items || [];
   const shippingFee = items.length > 0 ? 15000 : 0;
   const grandTotal = (cartData?.tong_tien || 0) + shippingFee;
+  const totalCartCalo = cartData?.tong_calo || items.reduce((acc, i) => acc + ((i.calo || 350) * i.so_luong), 0);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -206,8 +244,13 @@ export default function CartScreen({ navigation }) {
             showsVerticalScrollIndicator={false}
           />
 
-          {/* Bottom Card: Review Payment and Address */}
+          {/* Bottom Card: Review Payment, Calorie and Address */}
           <View style={styles.summaryCard}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>🔥 Tổng lượng Calo:</Text>
+              <Text style={styles.calorieTotalValue}>{totalCartCalo.toLocaleString('vi-VN')} kcal</Text>
+            </View>
+
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Tiền hàng tạm tính:</Text>
               <Text style={styles.summaryValue}>{cartData?.tong_tien.toLocaleString('vi-VN')} đ</Text>
@@ -425,6 +468,49 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#FF5722',
+  },
+  calorieTotalValue: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#E65100',
+  },
+  calorieRow: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  itemCaloText: {
+    fontSize: 12,
+    color: '#E65100',
+    fontWeight: '600',
+  },
+  reCustomizeBottomBtn: {
+    marginTop: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    backgroundColor: '#E0F2F1',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#80CBC4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reCustomizeBottomText: {
+    fontSize: 12,
+    color: '#00796B',
+    fontWeight: '700',
+  },
+  customNutritionTag: {
+    backgroundColor: '#DCFCE7',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginBottom: 4,
+  },
+  customNutritionTagText: {
+    fontSize: 11,
+    color: '#16A34A',
+    fontWeight: 'bold',
   },
   checkoutBtn: {
     backgroundColor: '#FF5722',

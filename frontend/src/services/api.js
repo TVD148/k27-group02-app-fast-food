@@ -158,24 +158,31 @@ export const fetchCart = async () => {
   }
 };
 
-// Thêm món vào giỏ hàng
-export const addToCart = async (ma_mon_an, so_luong = 1, tuy_chon_da_chon = []) => {
+// Thêm món vào giỏ hàng (hỗ trợ tùy biến dinh dưỡng)
+export const addToCart = async (ma_mon_an, so_luong = 1, tuy_chon_da_chon = [], dinh_duong_tuy_bien = null) => {
   try {
-    const response = await api.post('/cart/add', {
+    const payload = {
       ma_mon_an,
       so_luong,
       tuy_chon_da_chon
-    });
+    };
+    if (dinh_duong_tuy_bien) {
+      payload.dinh_duong_tuy_bien = dinh_duong_tuy_bien;
+    }
+    const response = await api.post('/cart/add', payload);
     return response.data;
   } catch (error) {
     throw error.response?.data || new Error('Lỗi kết nối máy chủ!');
   }
 };
 
-// Cập nhật số lượng món trong giỏ hàng
-export const updateCartItem = async (ma_chi_tiet_gio, so_luong) => {
+// Cập nhật số lượng hoặc tùy biến dinh dưỡng món trong giỏ hàng
+export const updateCartItem = async (ma_chi_tiet_gio, so_luong, dinh_duong_tuy_bien = null) => {
   try {
-    const response = await api.put(`/cart/update/${ma_chi_tiet_gio}`, { so_luong });
+    const payload = {};
+    if (so_luong !== undefined && so_luong !== null) payload.so_luong = so_luong;
+    if (dinh_duong_tuy_bien) payload.dinh_duong_tuy_bien = dinh_duong_tuy_bien;
+    const response = await api.put(`/cart/update/${ma_chi_tiet_gio}`, payload);
     return response.data;
   } catch (error) {
     throw error.response?.data || new Error('Lỗi kết nối máy chủ!');
