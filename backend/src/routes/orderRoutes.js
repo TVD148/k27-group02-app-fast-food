@@ -12,10 +12,16 @@ router.post('/', orderController.createOrder);
 // 2. Lấy danh sách đơn hàng (Có hỗ trợ lọc theo trạng thái ?status=...)
 router.get('/', orderController.getOrders);
 
-// 3. Xem chi tiết đơn hàng & tiến trình theo dõi timeline
+// 3. Thống kê giao hàng của tài xế Shipper
+router.get('/shipper/stats', orderController.getShipperStats);
+
+// 4. Xem chi tiết đơn hàng & tiến trình theo dõi timeline
 router.get('/:id', orderController.getOrderDetail);
 
-// 4. Cập nhật trạng thái đơn hàng (Dành cho Khách hủy đơn, Bếp nhận đơn, Shipper giao, Admin...)
+// 5. Cập nhật trạng thái đơn hàng (Dành cho Khách hủy đơn, Bếp nhận đơn, Shipper giao, Admin...)
 router.put('/:id/status', orderController.updateOrderStatus);
+
+// 6. Tài xế Shipper nhận đơn giao
+router.put('/:id/accept-delivery', orderController.acceptDelivery);
 
 module.exports = router;

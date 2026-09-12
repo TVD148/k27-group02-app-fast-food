@@ -294,11 +294,251 @@ const deleteItem = async (req, res) => {
   }
 };
 
+// 4. Bật/Tắt trạng thái còn hàng / hết hàng của món ăn (PUT /api/admin/items/:id/toggle-status)
+const toggleItemStatus = async (req, res) => {
+  try {
+    const itemId = req.params.id;
+    const [items] = await db.query('SELECT ma_mon_an, ten_mon, trang_thai FROM mon_an WHERE ma_mon_an = ?', [itemId]);
+    if (items.length === 0) {
+      return res.status(404).json({ success: false, message: 'Món ăn không tồn tại!' });
+    }
+
+    const currentStatus = items[0].trang_thai;
+    const newStatus = currentStatus === 'con_hang' ? 'het_hang' : 'con_hang';
+
+    await db.query('UPDATE mon_an SET trang_thai = ? WHERE ma_mon_an = ?', [newStatus, itemId]);
+
+    return res.status(200).json({
+      success: true,
+      message: `Đã đổi trạng thái món '${items[0].ten_mon}' thành '${newStatus === 'con_hang' ? 'Còn hàng' : 'Hết hàng'}'!`,
+      data: { ma_mon_an: parseInt(itemId), trang_thai: newStatus }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi đổi trạng thái món.', error: error.message });
+  }
+};
+
+// ============================================================================
+// III. QUẢN LÝ VOUCHER & MÃ GIẢM GIÁ (CRUD VOUCHERS)
+// ============================================================================
+
+// 1. Lấy toàn bộ voucher (GET /api/admin/vouchers)
+const getAdminVouchers = async (req, res) => {
+  try {
+    const [vouchers] = await db.query('SELECT * FROM ma_giam_gia ORDER BY ma_voucher DESC');
+    return res.status(200).json({ success: true, data: vouchers });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi tải voucher.', error: error.message });
+  }
+};
+
+// 2. Tạo voucher mới (POST /api/admin/vouchers)
+const createVoucher = async (req, res) => {
+  try {
+    const { 
+      ma_code, 
+      ten_voucher, 
+      mo_ta = '', 
+      loai_giam_gia = 'so_tien', 
+      gia_tri_giam = 0, 
+      giam_toi_da = 0, 
+      don_hang_toi_thieu = 0, 
+      so_luong_phat_hanh = 100,
+      ngay_ket_thuc = '2026-12-31 23:59:59'
+    } = req.body;
+
+    if (!ma_code || !ten_voucher || !gia_tri_giam) {
+      return res.status(400).json({ success: false, message: 'Mã code, Tên voucher và Giá trị giảm là bắt buộc!' });
+    }
+
+    // Kiểm tra trùng mã code
+    const [existing] = await db.query('SELECT ma_voucher FROM ma_giam_gia WHERE ma_code = ?', [ma_code.toUpperCase().trim()]);
+    if (existing.length > 0) {
+      return res.status(400).json({ success: false, message: 'Mã voucher này đã tồn tại trên hệ thống!' });
+    }
+
+    const [result] = await db.query(`
+      INSERT INTO ma_giam_gia (
+        ma_code, ten_voucher, mo_ta, loai_giam_gia, gia_tri_giam, giam_toi_da, 
+        don_hang_toi_thieu, so_luong_phat_hanh, so_luong_da_dung, ngay_bat_dau, ngay_ket_thuc, trang_thai
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NOW(), ?, 'hoat_dong')
+    `, [
+      ma_code.toUpperCase().trim(),
+      ten_voucher.trim(),
+      mo_ta,
+      loai_giam_gia,
+      parseFloat(gia_tri_giam),
+      parseFloat(giam_toi_da || gia_tri_giam),
+      parseFloat(don_hang_toi_thieu || 0),
+      parseInt(so_luong_phat_hanh || 100),
+      ngay_ket_thuc
+    ]);
+
+    return res.status(201).json({
+      success: true,
+      message: `Đã tạo mã giảm giá '${ma_code.toUpperCase().trim()}' thành công!`,
+      data: { ma_voucher: result.insertId }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi tạo voucher.', error: error.message });
+  }
+};
+
+// 3. Xóa voucher (DELETE /api/admin/vouchers/:id)
+const deleteVoucher = async (req, res) => {
+  try {
+    const voucherId = req.params.id;
+    await db.query('DELETE FROM ma_giam_gia WHERE ma_voucher = ?', [voucherId]);
+    return res.status(200).json({ success: true, message: 'Đã xóa voucher thành công!' });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi xóa voucher.', error: error.message });
+  }
+};
+
+// 4. Bật/Tắt trạng thái voucher (PUT /api/admin/vouchers/:id/toggle)
+const toggleVoucherStatus = async (req, res) => {
+  try {
+    const voucherId = req.params.id;
+    const [vouchers] = await db.query('SELECT ma_voucher, trang_thai FROM ma_giam_gia WHERE ma_voucher = ?', [voucherId]);
+    if (vouchers.length === 0) {
+      return res.status(404).json({ success: false, message: 'Voucher không tồn tại!' });
+    }
+    const newStatus = vouchers[0].trang_thai === 'hoat_dong' ? 'tam_dung' : 'hoat_dong';
+    await db.query('UPDATE ma_giam_gia SET trang_thai = ? WHERE ma_voucher = ?', [newStatus, voucherId]);
+    return res.status(200).json({ success: true, message: `Đã đổi trạng thái voucher thành '${newStatus}'!` });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi đổi trạng thái voucher.', error: error.message });
+  }
+};
+
+// ============================================================================
+// IV. QUẢN LÝ TÀI KHOẢN & NGƯỜI DÙNG (USERS & ROLES)
+// ============================================================================
+
+// 1. Lấy danh sách người dùng (GET /api/admin/users)
+const getUsers = async (req, res) => {
+  try {
+    const [users] = await db.query(`
+      SELECT u.ma_nguoi_dung, u.ho_ten, u.email, u.so_dien_thoai, u.dia_chi, u.ma_vai_tro, u.trang_thai, u.ngay_tao,
+             v.ten_vai_tro
+      FROM nguoi_dung u
+      JOIN vai_tro v ON u.ma_vai_tro = v.ma_vai_tro
+      ORDER BY u.ma_nguoi_dung DESC
+    `);
+    return res.status(200).json({ success: true, data: users });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi lấy danh sách người dùng.', error: error.message });
+  }
+};
+
+// 2. Tạo tài khoản mới (Nhân viên / Shipper / Khách) (POST /api/admin/users)
+const createUser = async (req, res) => {
+  try {
+    const bcrypt = require('bcryptjs');
+    const { ho_ten, email, mat_khau = '123456', so_dien_thoai, dia_chi = '', ma_vai_tro = 2 } = req.body;
+
+    if (!ho_ten || !so_dien_thoai) {
+      return res.status(400).json({ success: false, message: 'Họ tên và Số điện thoại là bắt buộc!' });
+    }
+
+    const [existing] = await db.query('SELECT ma_nguoi_dung FROM nguoi_dung WHERE so_dien_thoai = ?', [so_dien_thoai.trim()]);
+    if (existing.length > 0) {
+      return res.status(400).json({ success: false, message: 'Số điện thoại này đã được đăng ký trên hệ thống!' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(mat_khau, salt);
+
+    const [result] = await db.query(`
+      INSERT INTO nguoi_dung (ho_ten, email, mat_khau, so_dien_thoai, dia_chi, ma_vai_tro, trang_thai)
+      VALUES (?, ?, ?, ?, ?, ?, 'hoat_dong')
+    `, [ho_ten.trim(), email ? email.trim() : null, hashedPassword, so_dien_thoai.trim(), dia_chi, parseInt(ma_vai_tro)]);
+
+    return res.status(201).json({
+      success: true,
+      message: `Đã tạo tài khoản cho '${ho_ten}' thành công! (Mật khẩu mặc định: ${mat_khau})`,
+      data: { ma_nguoi_dung: result.insertId }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi tạo tài khoản.', error: error.message });
+  }
+};
+
+// 3. Đổi vai trò tài khoản (PUT /api/admin/users/:id/role)
+const updateUserRole = async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { ma_vai_tro } = req.body;
+    if (!ma_vai_tro) {
+      return res.status(400).json({ success: false, message: 'Vui lòng chọn vai trò mới!' });
+    }
+    await db.query('UPDATE nguoi_dung SET ma_vai_tro = ? WHERE ma_nguoi_dung = ?', [parseInt(ma_vai_tro), userId]);
+    return res.status(200).json({ success: true, message: 'Cập nhật quyền tài khoản thành công!' });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi cập nhật vai trò.', error: error.message });
+  }
+};
+
+// ============================================================================
+// V. BÁO CÁO THỐNG KÊ DOANH THU (DASHBOARD STATS)
+// ============================================================================
+
+const getDashboardStats = async (req, res) => {
+  try {
+    // Tổng doanh thu từ đơn đã giao thành công
+    const [revenue] = await db.query('SELECT COALESCE(SUM(tong_thanh_toan), 0) as total_revenue FROM don_hang WHERE trang_thai_don_hang = "da_giao"');
+    // Tổng số đơn theo trạng thái
+    const [ordersCount] = await db.query('SELECT COUNT(*) as total_orders FROM don_hang');
+    const [ordersPending] = await db.query('SELECT COUNT(*) as pending_orders FROM don_hang WHERE trang_thai_don_hang IN ("cho_xac_nhan", "dang_che_bien")');
+    const [ordersDelivered] = await db.query('SELECT COUNT(*) as delivered_orders FROM don_hang WHERE trang_thai_don_hang = "da_giao"');
+    // Tổng số món ăn
+    const [foodsCount] = await db.query('SELECT COUNT(*) as total_foods FROM mon_an');
+    // Tổng số người dùng theo vai trò
+    const [usersStaff] = await db.query('SELECT COUNT(*) as total_staff FROM nguoi_dung WHERE ma_vai_tro = 2');
+    const [usersShipper] = await db.query('SELECT COUNT(*) as total_shipper FROM nguoi_dung WHERE ma_vai_tro = 4');
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        total_revenue: parseFloat(revenue[0].total_revenue || 0),
+        total_orders: ordersCount[0].total_orders || 0,
+        pending_orders: ordersPending[0].pending_orders || 0,
+        delivered_orders: ordersDelivered[0].delivered_orders || 0,
+        total_foods: foodsCount[0].total_foods || 0,
+        total_staff: usersStaff[0].total_staff || 0,
+        total_shipper: usersShipper[0].total_shipper || 0
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi lấy thống kê dashboard.', error: error.message });
+  }
+};
+
+// 6. Lấy danh sách nguyên liệu dinh dưỡng (GET /api/admin/ingredients)
+const getIngredients = async (req, res) => {
+  try {
+    const [ingredients] = await db.query('SELECT * FROM nguyen_lieu ORDER BY ma_nguyen_lieu ASC');
+    return res.status(200).json({ success: true, data: ingredients });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi lấy danh sách nguyên liệu.', error: error.message });
+  }
+};
+
 module.exports = {
   createCategory,
   updateCategory,
   deleteCategory,
   createItem,
   updateItem,
-  deleteItem
+  deleteItem,
+  toggleItemStatus,
+  getAdminVouchers,
+  createVoucher,
+  deleteVoucher,
+  toggleVoucherStatus,
+  getUsers,
+  createUser,
+  updateUserRole,
+  getDashboardStats,
+  getIngredients
 };

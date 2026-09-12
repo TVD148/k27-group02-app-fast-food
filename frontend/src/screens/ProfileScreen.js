@@ -11,11 +11,13 @@ import {
   Platform 
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { loginUser } from '../services/api';
 import BottomTabBar from '../components/BottomTabBar';
 
 export default function ProfileScreen({ navigation }) {
   const [user, setUser] = useState(null);
   const [currentAddress, setCurrentAddress] = useState(null);
+  const [switching, setSwitching] = useState(false);
   
   // Các state công tắc Switch thông báo chuẩn UX Checklist
   const [orderNotif, setOrderNotif] = useState(true);
@@ -46,6 +48,37 @@ export default function ProfileScreen({ navigation }) {
       }
     } catch (e) {
       setUser(null);
+    }
+  };
+
+  // Đổi tài khoản demo nhanh
+  const handleSwitchAccount = async (phone, pass, roleTitle) => {
+    setSwitching(true);
+    try {
+      const res = await loginUser(phone, pass);
+      if (res.success) {
+        setUser(res.data.user);
+        Alert.alert(
+          'Đã chuyển tài khoản 🎉',
+          `Hiện tại bạn đang ở vai trò: ${roleTitle} (${res.data.user.ho_ten})`,
+          [
+            { 
+              text: 'OK', 
+              onPress: () => {
+                const r = res.data.user.ma_vai_tro;
+                if (r === 2) navigation.navigate('StaffKitchen');
+                else if (r === 4) navigation.navigate('Shipper');
+                else if (r === 3) navigation.navigate('Admin');
+                else loadUserInfo();
+              }
+            }
+          ]
+        );
+      }
+    } catch (e) {
+      Alert.alert('Lỗi', e.message || 'Không thể chuyển tài khoản!');
+    } finally {
+      setSwitching(false);
     }
   };
 
@@ -141,8 +174,22 @@ export default function ProfileScreen({ navigation }) {
               <View style={styles.userInfoBox}>
                 <Text style={styles.userName}>{user.ho_ten || 'Khách hàng FastFood'}</Text>
                 <Text style={styles.userSubText}>{user.email || user.so_dien_thoai || 'Thành viên thân thiết'}</Text>
-                <View style={styles.memberBadge}>
-                  <Text style={styles.memberBadgeText}>⭐ Thành viên Vàng</Text>
+                <View style={[
+                  styles.memberBadge, 
+                  user.ma_vai_tro === 3 && { backgroundColor: '#EDE7F6' },
+                  user.ma_vai_tro === 2 && { backgroundColor: '#FBE9E7' },
+                  user.ma_vai_tro === 4 && { backgroundColor: '#E0F2F1' },
+                ]}>
+                  <Text style={[
+                    styles.memberBadgeText,
+                    user.ma_vai_tro === 3 && { color: '#6A1B9A' },
+                    user.ma_vai_tro === 2 && { color: '#D84315' },
+                    user.ma_vai_tro === 4 && { color: '#00897B' },
+                  ]}>
+                    {user.ma_vai_tro === 3 ? '👑 Quản Trị Viên (Admin)' :
+                     user.ma_vai_tro === 2 ? '🧑‍🍳 Nhân Viên Bếp / Quán' :
+                     user.ma_vai_tro === 4 ? '🛵 Tài Xế Shipper' : '⭐ Khách Hàng Thân Thiết'}
+                  </Text>
                 </View>
               </View>
             ) : (
@@ -159,7 +206,99 @@ export default function ProfileScreen({ navigation }) {
             )}
           </View>
 
-          {/* 2. Menu List theo cấu trúc nhóm chuẩn Checklist.design */}
+          {/* 2. CHỨC NĂNG NGHIỆP VỤ CHUYÊN TRÁCH THEO VAI TRÒ */}
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>Chức năng nghiệp vụ chuyên trách</Text>
+            <View style={styles.menuCard}>
+              {user?.ma_vai_tro === 3 && (
+                <TouchableOpacity 
+                  style={[styles.menuItemRow, styles.menuItemBorder]}
+                  onPress={() => navigation.navigate('Admin')}
+                >
+                  <View style={[styles.menuIconCircle, { backgroundColor: '#EDE7F6' }]}>
+                    <Text style={styles.menuIconText}>👑</Text>
+                  </View>
+                  <View style={styles.menuTextBox}>
+                    <Text style={[styles.menuLabel, { color: '#6A1B9A', fontWeight: 'bold' }]}>FastFood Admin Portal</Text>
+                    <Text style={styles.menuDesc}>Quản lý món, tùy biến, voucher, nhân sự, doanh thu</Text>
+                  </View>
+                  <Text style={styles.chevronIcon}>›</Text>
+                </TouchableOpacity>
+              )}
+
+              {(user?.ma_vai_tro === 2 || user?.ma_vai_tro === 3) && (
+                <TouchableOpacity 
+                  style={[styles.menuItemRow, styles.menuItemBorder]}
+                  onPress={() => navigation.navigate('StaffKitchen')}
+                >
+                  <View style={[styles.menuIconCircle, { backgroundColor: '#FBE9E7' }]}>
+                    <Text style={styles.menuIconText}>🍳</Text>
+                  </View>
+                  <View style={styles.menuTextBox}>
+                    <Text style={[styles.menuLabel, { color: '#D84315', fontWeight: 'bold' }]}>Màn Hình Bếp & Cửa Hàng</Text>
+                    <Text style={styles.menuDesc}>Nhận đơn, nấu món, xem dinh dưỡng, báo shipper</Text>
+                  </View>
+                  <Text style={styles.chevronIcon}>›</Text>
+                </TouchableOpacity>
+              )}
+
+              {(user?.ma_vai_tro === 4 || user?.ma_vai_tro === 3) && (
+                <TouchableOpacity 
+                  style={styles.menuItemRow}
+                  onPress={() => navigation.navigate('Shipper')}
+                >
+                  <View style={[styles.menuIconCircle, { backgroundColor: '#E0F2F1' }]}>
+                    <Text style={styles.menuIconText}>🛵</Text>
+                  </View>
+                  <View style={styles.menuTextBox}>
+                    <Text style={[styles.menuLabel, { color: '#00897B', fontWeight: 'bold' }]}>Màn Hình Shipper Giao Hàng</Text>
+                    <Text style={styles.menuDesc}>Nhận đơn chờ, gọi khách, thu tiền COD</Text>
+                  </View>
+                  <Text style={styles.chevronIcon}>›</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* 3. CHUYỂN ĐỔI NHANH VAI TRÒ THỬ NGHIỆM */}
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>⚡ Chuyển đổi nhanh vai trò thử nghiệm</Text>
+            <View style={styles.switchRoleGrid}>
+              <TouchableOpacity 
+                style={[styles.switchRoleChip, user?.ma_vai_tro === 3 && styles.switchRoleChipActive]}
+                onPress={() => handleSwitchAccount('0912345678', '123456', 'Quản trị viên')}
+                disabled={switching}
+              >
+                <Text style={[styles.switchRoleChipText, user?.ma_vai_tro === 3 && styles.switchRoleChipTextActive]}>👑 Admin</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.switchRoleChip, user?.ma_vai_tro === 2 && styles.switchRoleChipActive]}
+                onPress={() => handleSwitchAccount('0934567890', '123456', 'Nhân viên Bếp')}
+                disabled={switching}
+              >
+                <Text style={[styles.switchRoleChipText, user?.ma_vai_tro === 2 && styles.switchRoleChipTextActive]}>🧑‍🍳 Bếp</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.switchRoleChip, user?.ma_vai_tro === 4 && styles.switchRoleChipActive]}
+                onPress={() => handleSwitchAccount('0945678901', '123456', 'Shipper')}
+                disabled={switching}
+              >
+                <Text style={[styles.switchRoleChipText, user?.ma_vai_tro === 4 && styles.switchRoleChipTextActive]}>🛵 Shipper</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.switchRoleChip, user?.ma_vai_tro === 1 && styles.switchRoleChipActive]}
+                onPress={() => handleSwitchAccount('0923456789', '123456', 'Khách hàng')}
+                disabled={switching}
+              >
+                <Text style={[styles.switchRoleChipText, user?.ma_vai_tro === 1 && styles.switchRoleChipTextActive]}>🛍️ Khách</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* 4. Menu List theo cấu trúc nhóm chuẩn Checklist.design */}
           {menuSections.map((section, sIndex) => (
             <View key={sIndex} style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>{section.title}</Text>
@@ -472,5 +611,32 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: 12,
     color: '#94A3B8',
+  },
+  switchRoleGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  switchRoleChip: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  switchRoleChipActive: {
+    backgroundColor: '#00A896',
+    borderColor: '#00A896',
+  },
+  switchRoleChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  switchRoleChipTextActive: {
+    color: '#FFFFFF',
   },
 });

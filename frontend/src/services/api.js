@@ -360,4 +360,155 @@ export const fetchPaymentDetail = async (orderId) => {
   }
 };
 
+// ============================================================================
+// VI. CÁC API VẬN HÀNH CHO SHIPPER & BẾP (KITCHEN & DELIVERY)
+// ============================================================================
+
+// Shipper nhận đơn giao
+export const acceptOrderDelivery = async (orderId) => {
+  try {
+    const response = await api.put(`/orders/${orderId}/accept-delivery`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể nhận đơn giao!');
+  }
+};
+
+// Lấy thống kê giao hàng của Shipper
+export const fetchShipperStats = async () => {
+  try {
+    const response = await api.get('/orders/shipper/stats');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể lấy thống kê giao hàng!');
+  }
+};
+
+// Bật/tắt trạng thái Còn hàng / Hết hàng của món ăn
+export const toggleItemStatus = async (itemId) => {
+  try {
+    const response = await api.put(`/admin/items/${itemId}/toggle-status`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể đổi trạng thái món ăn!');
+  }
+};
+
+// ============================================================================
+// VII. CÁC API QUẢN TRỊ VIÊN (ADMIN DASHBOARD & CRUD)
+// ============================================================================
+
+// Lấy thống kê tổng quan doanh thu & đơn hàng
+export const fetchDashboardStats = async () => {
+  try {
+    const response = await api.get('/admin/dashboard-stats');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể lấy thống kê quản trị!');
+  }
+};
+
+// CRUD Món ăn
+export const createFoodItem = async (foodData) => {
+  try {
+    const response = await api.post('/admin/items', foodData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể thêm món ăn mới!');
+  }
+};
+
+export const updateFoodItem = async (itemId, foodData) => {
+  try {
+    const response = await api.put(`/admin/items/${itemId}`, foodData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể cập nhật món ăn!');
+  }
+};
+
+export const deleteFoodItem = async (itemId) => {
+  try {
+    const response = await api.delete(`/admin/items/${itemId}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể xóa món ăn!');
+  }
+};
+
+// Quản lý Voucher
+export const fetchAdminVouchers = async () => {
+  try {
+    const response = await api.get('/admin/vouchers');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể tải danh sách voucher!');
+  }
+};
+
+export const createAdminVoucher = async (voucherData) => {
+  try {
+    const response = await api.post('/admin/vouchers', voucherData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể tạo mã voucher mới!');
+  }
+};
+
+export const deleteAdminVoucher = async (voucherId) => {
+  try {
+    const response = await api.delete(`/admin/vouchers/${voucherId}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể xóa voucher!');
+  }
+};
+
+export const toggleAdminVoucher = async (voucherId) => {
+  try {
+    const response = await api.put(`/admin/vouchers/${voucherId}/toggle`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể đổi trạng thái voucher!');
+  }
+};
+
+// Quản lý Tài khoản người dùng & Nhân sự
+export const fetchAdminUsers = async () => {
+  try {
+    const response = await api.get('/admin/users');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể tải danh sách người dùng!');
+  }
+};
+
+export const createAdminUser = async (userData) => {
+  try {
+    const response = await api.post('/admin/users', userData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể tạo tài khoản mới!');
+  }
+};
+
+export const updateAdminUserRole = async (userId, ma_vai_tro) => {
+  try {
+    const response = await api.put(`/admin/users/${userId}/role`, { ma_vai_tro });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể cập nhật quyền tài khoản!');
+  }
+};
+
+// Danh sách nguyên liệu dinh dưỡng
+export const fetchAdminIngredients = async () => {
+  try {
+    const response = await api.get('/admin/ingredients');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể tải danh sách nguyên liệu!');
+  }
+};
+
 export default api;

@@ -60,13 +60,28 @@ export default function LoginScreen({ navigation }) {
     try {
       const response = await loginUser(emailOrPhone.trim(), password);
       if (response.success) {
+        const userRole = response.data?.user?.ma_vai_tro;
+        let roleName = 'Khách hàng';
+        let targetScreen = 'Home';
+
+        if (userRole === 2) {
+          roleName = 'Nhân viên Bếp';
+          targetScreen = 'StaffKitchen';
+        } else if (userRole === 4) {
+          roleName = 'Tài xế Shipper';
+          targetScreen = 'Shipper';
+        } else if (userRole === 3) {
+          roleName = 'Quản trị viên (Admin)';
+          targetScreen = 'Admin';
+        }
+
         Alert.alert(
           'Đăng nhập thành công 🎉',
-          `Chào mừng ${response.data?.user?.ho_ten || ''} trở lại với Fast Food!`,
+          `Chào mừng ${response.data?.user?.ho_ten || ''} (${roleName}) trở lại với Fast Food!`,
           [
             { 
-              text: 'Bắt đầu đặt món', 
-              onPress: () => navigation.replace('Home')
+              text: 'Bắt đầu ngay 🚀', 
+              onPress: () => navigation.replace(targetScreen)
             }
           ]
         );
@@ -75,6 +90,31 @@ export default function LoginScreen({ navigation }) {
       }
     } catch (error) {
       Alert.alert('Lỗi', error.message || 'Không thể kết nối đến máy chủ, vui lòng thử lại!');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Đăng nhập nhanh dành cho demo & chấm bài
+  const handleQuickLogin = async (phone, pass) => {
+    setEmailOrPhone(phone);
+    setPassword(pass);
+    setLoading(true);
+    try {
+      const response = await loginUser(phone, pass);
+      if (response.success) {
+        const userRole = response.data?.user?.ma_vai_tro;
+        let targetScreen = 'Home';
+        if (userRole === 2) targetScreen = 'StaffKitchen';
+        else if (userRole === 4) targetScreen = 'Shipper';
+        else if (userRole === 3) targetScreen = 'Admin';
+
+        navigation.replace(targetScreen);
+      } else {
+        Alert.alert('Lỗi', response.message || 'Không thể đăng nhập!');
+      }
+    } catch (error) {
+      Alert.alert('Lỗi', error.message || 'Không thể kết nối máy chủ!');
     } finally {
       setLoading(false);
     }
@@ -205,6 +245,40 @@ export default function LoginScreen({ navigation }) {
                 <Text style={styles.socialIcon}>🍎</Text>
                 <Text style={styles.appleBtnText}>Apple</Text>
               </TouchableOpacity>
+            </View>
+
+            {/* ⚡ Cụm Đăng Nhập Nhanh Demo Roles */}
+            <View style={styles.quickLoginContainer}>
+              <Text style={styles.quickLoginTitle}>⚡ Đăng nhập nhanh tài khoản thử nghiệm:</Text>
+              <View style={styles.quickLoginGrid}>
+                <TouchableOpacity 
+                  style={[styles.quickRoleBtn, { backgroundColor: '#EDE7F6' }]}
+                  onPress={() => handleQuickLogin('0912345678', '123456')}
+                >
+                  <Text style={[styles.quickRoleText, { color: '#6A1B9A' }]}>👑 Admin</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.quickRoleBtn, { backgroundColor: '#FBE9E7' }]}
+                  onPress={() => handleQuickLogin('0934567890', '123456')}
+                >
+                  <Text style={[styles.quickRoleText, { color: '#D84315' }]}>🧑‍🍳 Bếp</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.quickRoleBtn, { backgroundColor: '#E0F2F1' }]}
+                  onPress={() => handleQuickLogin('0945678901', '123456')}
+                >
+                  <Text style={[styles.quickRoleText, { color: '#00897B' }]}>🛵 Shipper</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.quickRoleBtn, { backgroundColor: '#E8F5E9' }]}
+                  onPress={() => handleQuickLogin('0923456789', '123456')}
+                >
+                  <Text style={[styles.quickRoleText, { color: '#2E7D32' }]}>🛍️ Khách</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Link chuyển sang trang Đăng Ký */}
@@ -430,5 +504,35 @@ const styles = StyleSheet.create({
     color: '#B45309',
     fontSize: 13,
     fontWeight: '700',
+  },
+  quickLoginContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  quickLoginTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#475569',
+    marginBottom: 8,
+  },
+  quickLoginGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  quickRoleBtn: {
+    flex: 1,
+    minWidth: '45%',
+    paddingVertical: 9,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  quickRoleText: {
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });

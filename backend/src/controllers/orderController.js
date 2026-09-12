@@ -213,10 +213,11 @@ const getOrders = async (req, res) => {
       query += ' AND d.ma_nguoi_dung = ?';
       params.push(userId);
     } else if (userRole === 4) {
-      // Nếu là Shipper (ma_vai_tro = 4), lấy các đơn được phân công hoặc đơn chờ giao
-      query += ' AND (d.ma_shipper = ? OR d.trang_thai_don_hang = "dang_che_bien")';
+      // Nếu là Shipper (ma_vai_tro = 4), lấy các đơn được phân công hoặc đơn sẵn sàng chờ giao
+      query += ' AND (d.ma_shipper = ? OR d.trang_thai_don_hang = "san_sang_giao")';
       params.push(userId);
     }
+    // Nhân viên (role 2) và Admin (role 3) xem toàn bộ danh sách đơn hàng để chế biến/quản lý
 
     // Lọc theo trạng thái đơn nếu có
     if (status) {
@@ -341,7 +342,7 @@ const updateOrderStatus = async (req, res) => {
     const orderId = req.params.id;
     const { trang_thai_moi, ghi_chu = '', ma_shipper } = req.body;
 
-    const validStatuses = ['cho_xac_nhan', 'dang_che_bien', 'dang_giao', 'da_giao', 'da_huy'];
+    const validStatuses = ['cho_xac_nhan', 'dang_che_bien', 'san_sang_giao', 'dang_giao', 'da_giao', 'da_huy'];
     if (!validStatuses.includes(trang_thai_moi)) {
       return res.status(400).json({
         success: false,
@@ -456,9 +457,104 @@ const updateOrderStatus = async (req, res) => {
   }
 };
 
+// 5. SHIPPER NHẬN ĐƠN HÀNG (PUT /api/orders/:id/accept-delivery)
+const acceptDelivery = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.ma_vai_tro;
+    const orderId = req.params.id;
+
+    if (userRole !== 4 && userRole !== 3) {
+      return res.status(403).json({
+        success: false,
+        message: 'Chỉ tài xế giao hàng (Shipper) mới có quyền nhận đơn này!'
+      });
+    }
+
+    const [orders] = await db.query('SELECT * FROM don_hang WHERE ma_don_hang = ?', [orderId]);
+    if (orders.length === 0) {
+      return res.status(404).json({ success: false, message: 'Đơn hàng không tồn tại!' });
+    }
+
+    const order = orders[0];
+    if (order.trang_thai_don_hang !== 'san_sang_giao' && order.trang_thai_don_hang !== 'dang_che_bien') {
+      return res.status(400).json({
+        success: false,
+        message: `Đơn hàng đang ở trạng thái '${order.trang_thai_don_hang}', không thể nhận giao!`
+      });
+    }
+
+    if (order.ma_shipper && order.ma_shipper !== userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Đơn hàng này đã có tài xế khác nhận!'
+      });
+    }
+
+    const [users] = await db.query('SELECT ho_ten FROM nguoi_dung WHERE ma_nguoi_dung = ?', [userId]);
+    const shipperName = users.length > 0 ? users[0].ho_ten : 'Tài xế';
+
+    // Cập nhật ma_shipper và chuyển sang dang_giao (đang đi giao)
+    await db.query(
+      'UPDATE don_hang SET ma_shipper = ?, trang_thai_don_hang = "dang_giao" WHERE ma_don_hang = ?',
+      [userId, orderId]
+    );
+
+    // Ghi log
+    await db.query(`
+      INSERT INTO lich_su_trang_thai_don (
+        ma_don_hang, trang_thai_cu, trang_thai_moi, ghi_chu, nguoi_thuc_hien
+      ) VALUES (?, ?, ?, ?, ?)
+    `, [orderId, order.trang_thai_don_hang, 'dang_giao', 'Shipper đã tới quán nhận đồ ăn và bắt đầu đi giao cho khách', `${shipperName} (Shipper)`]);
+
+    return res.status(200).json({
+      success: true,
+      message: `Tài xế ${shipperName} đã nhận đơn #${orderId} thành công!`,
+      data: { ma_don_hang: parseInt(orderId), trang_thai: 'dang_giao' }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi nhận đơn giao.', error: error.message });
+  }
+};
+
+// 6. THỐNG KÊ GIAO HÀNG CHO SHIPPER (GET /api/orders/shipper/stats)
+const getShipperStats = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    // Tổng số đơn đã giao thành công
+    const [delivered] = await db.query(
+      'SELECT COUNT(*) as total_delivered, COALESCE(SUM(tong_thanh_toan), 0) as total_cod FROM don_hang WHERE ma_shipper = ? AND trang_thai_don_hang = "da_giao"',
+      [userId]
+    );
+    // Số đơn đang giao
+    const [delivering] = await db.query(
+      'SELECT COUNT(*) as total_delivering FROM don_hang WHERE ma_shipper = ? AND trang_thai_don_hang = "dang_giao"',
+      [userId]
+    );
+    // Số đơn có sẵn chờ nhận
+    const [available] = await db.query(
+      'SELECT COUNT(*) as total_available FROM don_hang WHERE trang_thai_don_hang = "san_sang_giao" AND ma_shipper IS NULL'
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        total_delivered: delivered[0].total_delivered || 0,
+        total_cod: parseFloat(delivered[0].total_cod || 0),
+        total_delivering: delivering[0].total_delivering || 0,
+        total_available: available[0].total_available || 0
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi thống kê shipper.', error: error.message });
+  }
+};
+
 module.exports = {
   createOrder,
   getOrders,
   getOrderDetail,
-  updateOrderStatus
+  updateOrderStatus,
+  acceptDelivery,
+  getShipperStats
 };

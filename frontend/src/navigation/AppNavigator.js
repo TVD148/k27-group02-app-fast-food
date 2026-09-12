@@ -15,6 +15,9 @@ import PaymentScreen from '../screens/PaymentScreen';
 import SearchScreen from '../screens/SearchScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import AddressScreen from '../screens/AddressScreen';
+import StaffKitchenScreen from '../screens/StaffKitchenScreen';
+import ShipperScreen from '../screens/ShipperScreen';
+import AdminScreen from '../screens/AdminScreen';
 
 const Stack = createStackNavigator();
 
@@ -114,6 +117,23 @@ export function AppNavigator() {
         name="OrderTracking" 
         component={OrderTrackingScreen} 
         options={{ title: 'Theo Dõi Đơn Hàng' }}
+      />
+
+      {/* 7. Các màn hình chuyên trách theo vai trò (Bếp, Shipper, Admin) */}
+      <Stack.Screen 
+        name="StaffKitchen" 
+        component={StaffKitchenScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="Shipper" 
+        component={ShipperScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="Admin" 
+        component={AdminScreen} 
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );
