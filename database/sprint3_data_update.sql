@@ -64,6 +64,17 @@ INSERT INTO `mon_an_nguyen_lieu` (`ma_mon_an`, `ma_nguyen_lieu`, `so_luong_mac_d
 INSERT INTO `mon_an_nguyen_lieu` (`ma_mon_an`, `ma_nguyen_lieu`, `so_luong_mac_dinh`, `co_the_tuy_bien`, `so_luong_toi_da`) VALUES
 (4, 10, 1.00, 1, 3.00); -- Khoai tây chiên
 
+-- 2.5 Món 7: Combo Gà Giòn Độc Hành (ma_mon_an = 7)
+INSERT INTO `mon_an_nguyen_lieu` (`ma_mon_an`, `ma_nguyen_lieu`, `so_luong_mac_dinh`, `co_the_tuy_bien`, `so_luong_toi_da`) VALUES
+(7, 4, 1.00, 1, 5.00), -- 1 miếng Gà rán giòn (cho phép tùy biến 1-5 miếng)
+(7, 10, 1.00, 1, 3.00); -- 1 phần Khoai tây chiên
+
+-- 2.6 Món 8: Combo Đôi Lứa No Nê (ma_mon_an = 8)
+INSERT INTO `mon_an_nguyen_lieu` (`ma_mon_an`, `ma_nguyen_lieu`, `so_luong_mac_dinh`, `co_the_tuy_bien`, `so_luong_toi_da`) VALUES
+(8, 4, 3.00, 1, 5.00), -- 3 miếng Gà (2 cho burger, 1 gà rán)
+(8, 3, 2.00, 1, 5.00), -- 2 lát Phô mai
+(8, 10, 1.00, 1, 3.00); -- 1 phần Khoai tây chiên
+
 -- ============================================================================
 -- 3. NẠP DỮ LIỆU MẪU: ma_giam_gia (Danh sách mã khuyến mãi / Voucher)
 -- ============================================================================

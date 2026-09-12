@@ -149,6 +149,21 @@ export default function ProductDetailScreen({ route, navigation }) {
 
   if (!food) return null;
 
+  const isPrepackaged = (() => {
+    if (!food) return false;
+    const catName = (food.ten_danh_muc || '').toLowerCase();
+    const foodName = (food.ten_mon || '').toLowerCase();
+    return (
+      catName.includes('uống') ||
+      catName.includes('drink') ||
+      foodName.includes('(lon)') ||
+      foodName.includes('(chai)') ||
+      foodName.includes('pepsi') ||
+      foodName.includes('coca') ||
+      foodName.includes('nước suối')
+    );
+  })();
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -199,17 +214,29 @@ export default function ProductDetailScreen({ route, navigation }) {
             </View>
           ))}
 
-        {/* Banner Tùy biến Dinh dưỡng Killer Feature */}
-        <TouchableOpacity 
-          style={styles.nutritionBannerBtn}
-          onPress={() => navigation.navigate('CustomNutrition', { itemId: food.ma_mon_an, foodName: food.ten_mon })}
-        >
-          <View style={styles.nutritionBannerLeft}>
-            <Text style={styles.nutritionBannerTitle}>🥗 Tùy biến Dinh dưỡng (Killer Feature)</Text>
-            <Text style={styles.nutritionBannerDesc}>Tính toán Calo, Protein, Carbs, Fat theo định lượng cá nhân</Text>
+        {/* 5. Phân biệt: Món đóng sẵn vs Món quán tự làm */}
+        {isPrepackaged ? (
+          <View style={styles.prepackagedBanner}>
+            <Text style={styles.prepackagedIcon}>🥫</Text>
+            <View style={styles.prepackagedTextContainer}>
+              <Text style={styles.prepackagedTitle}>Sản phẩm đóng sẵn nguyên bản</Text>
+              <Text style={styles.prepackagedDesc}>
+                Sản phẩm đóng lon/chai theo tiêu chuẩn nhà sản xuất, không hỗ trợ tùy chỉnh nguyên liệu.
+              </Text>
+            </View>
           </View>
-          <Text style={styles.nutritionBannerArrow}>➔</Text>
-        </TouchableOpacity>
+        ) : (
+          <TouchableOpacity 
+            style={styles.nutritionBannerBtn}
+            onPress={() => navigation.navigate('CustomNutrition', { itemId: food.ma_mon_an, foodName: food.ten_mon })}
+          >
+            <View style={styles.nutritionBannerLeft}>
+              <Text style={styles.nutritionBannerTitle}>🥗 Tùy biến Dinh dưỡng (Killer Feature)</Text>
+              <Text style={styles.nutritionBannerDesc}>Tăng giảm thịt, phô mai, rau... tính toán Calo & Giá tự động</Text>
+            </View>
+            <Text style={styles.nutritionBannerArrow}>➔</Text>
+          </TouchableOpacity>
+        )}
 
         </View>
       </ScrollView>
@@ -418,5 +445,33 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#00A896',
     fontWeight: 'bold',
+  },
+  prepackagedBanner: {
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  prepackagedIcon: {
+    fontSize: 26,
+    marginRight: 12,
+  },
+  prepackagedTextContainer: {
+    flex: 1,
+  },
+  prepackagedTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#475569',
+  },
+  prepackagedDesc: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+    lineHeight: 16,
   },
 });

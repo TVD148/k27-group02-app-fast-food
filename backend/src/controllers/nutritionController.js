@@ -87,6 +87,10 @@ const getItemDefaultNutrition = async (req, res) => {
       };
     });
 
+    // 2.4 Chỉ trả về các nguyên liệu có thể tùy biến (loại bỏ các nguyên liệu cố định không cho tăng/giảm)
+    const customizableItems = items.filter(item => item.co_the_tuy_bien === 1);
+    const la_mon_dong_san = customizableItems.length === 0;
+
     return res.status(200).json({
       success: true,
       message: `Tải công thức dinh dưỡng cho món '${food.ten_mon}' thành công`,
@@ -94,13 +98,14 @@ const getItemDefaultNutrition = async (req, res) => {
         ma_mon_an: food.ma_mon_an,
         ten_mon: food.ten_mon,
         gia_ban_goc: parseFloat(food.gia_ban),
+        la_mon_dong_san: la_mon_dong_san,
         tong_dinh_duong_mac_dinh: {
           calo: parseFloat(tong_calo.toFixed(2)),
           protein: parseFloat(tong_protein.toFixed(2)),
           carbs: parseFloat(tong_carbs.toFixed(2)),
           fat: parseFloat(tong_fat.toFixed(2))
         },
-        cong_thuc_nguyen_lieu: items
+        cong_thuc_nguyen_lieu: customizableItems
       }
     });
   } catch (error) {
@@ -153,27 +158,29 @@ const calculateCustomNutrition = async (req, res) => {
       finalQuantityMap.set(r.ma_nguyen_lieu, parseFloat(r.so_luong_mac_dinh));
     });
 
-    // Cập nhật các tùy chỉnh từ phía khách hàng
+    // Cập nhật các tùy chỉnh từ phía khách hàng (giới hạn min 1, max 5 cho các món có thể tùy biến)
     dieu_chinh_nguyen_lieu.forEach(item => {
       const maNL = parseInt(item.ma_nguyen_lieu);
-      const qty = Math.max(0, parseFloat(item.so_luong));
+      const reqQty = parseFloat(item.so_luong);
 
-      // Nếu nguyên liệu nằm trong công thức và có quy định tối đa
       const rule = defaultRecipeMap.get(maNL);
       if (rule) {
-        if (rule.co_the_tuy_bien === 0 && qty !== parseFloat(rule.so_luong_mac_dinh)) {
+        if (rule.co_the_tuy_bien === 0) {
           // Nguyên liệu cố định không được thay đổi
           return;
         }
-        const maxQty = parseFloat(rule.so_luong_toi_da || 3);
-        finalQuantityMap.set(maNL, Math.min(qty, maxQty));
+        // Giới hạn tối thiểu là 1 để món ăn không bị rỗng ruột và tiền không về 0, tối đa là 5
+        const minQty = 1;
+        const maxQty = Math.min(5, parseFloat(rule.so_luong_toi_da || 5));
+        const clampedQty = Math.max(minQty, Math.min(maxQty, reqQty));
+        finalQuantityMap.set(maNL, clampedQty);
       } else {
         // Nguyên liệu chọn thêm ngoài công thức mặc định
-        finalQuantityMap.set(maNL, Math.min(qty, 3));
+        finalQuantityMap.set(maNL, Math.max(1, Math.min(5, reqQty)));
       }
     });
 
-    // 3.4 Tính toán dinh dưỡng và giá phụ thu
+    // 3.4 Tính toán dinh dưỡng và giá phụ thu / giảm trừ
     let tong_calo = 0;
     let tong_protein = 0;
     let tong_carbs = 0;
@@ -195,12 +202,12 @@ const calculateCustomNutrition = async (req, res) => {
       tong_carbs += carbs;
       tong_fat += fat;
 
-      // Tính phụ thu nếu số lượng vượt quá mặc định
+      // Tính phụ thu hoặc giảm trừ khi thay đổi số lượng nguyên liệu
       const defRule = defaultRecipeMap.get(maNL);
       const defQty = defRule ? parseFloat(defRule.so_luong_mac_dinh) : 0;
-      if (soLuong > defQty) {
-        const extraQty = soLuong - defQty;
-        phu_thu_nguyen_lieu += extraQty * parseFloat(nl.don_gia_thay_doi);
+      if (defRule && defRule.co_the_tuy_bien === 1) {
+        const deltaQty = soLuong - defQty;
+        phu_thu_nguyen_lieu += deltaQty * parseFloat(nl.don_gia_thay_doi);
       }
 
       chi_tiet_nguyen_lieu_tuy_bien.push({
@@ -216,7 +223,8 @@ const calculateCustomNutrition = async (req, res) => {
       });
     });
 
-    const gia_sau_tuy_bien = giaGoc + phu_thu_nguyen_lieu;
+    // Giá sau tùy biến không nhỏ hơn mức tối thiểu 10.000đ
+    const gia_sau_tuy_bien = Math.max(10000, giaGoc + phu_thu_nguyen_lieu);
 
     return res.status(200).json({
       success: true,

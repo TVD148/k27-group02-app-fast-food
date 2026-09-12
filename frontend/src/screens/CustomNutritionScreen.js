@@ -22,6 +22,7 @@ export default function CustomNutritionScreen({ route, navigation }) {
   const [foodData, setFoodData] = useState(null);
   const [recipe, setRecipe] = useState([]);
   const [quantities, setQuantities] = useState({});
+  const [isPrepackaged, setIsPrepackaged] = useState(false);
   const [nutrition, setNutrition] = useState({
     calo: 0,
     protein: 0,
@@ -41,13 +42,17 @@ export default function CustomNutritionScreen({ route, navigation }) {
       const response = await fetchItemNutrition(itemId);
       if (response.success) {
         setFoodData(response.data);
-        const recipeList = response.data.cong_thuc_nguyen_lieu || [];
+        const isPackaged = response.data.la_mon_dong_san || false;
+        setIsPrepackaged(isPackaged);
+
+        // Chỉ lọc các nguyên liệu có thể tùy biến (nguyên liệu cố định đã được lọc từ backend hoặc ở đây)
+        const recipeList = (response.data.cong_thuc_nguyen_lieu || []).filter(item => item.co_the_tuy_bien === 1);
         setRecipe(recipeList);
 
-        // Khởi tạo map số lượng mặc định
+        // Khởi tạo map số lượng mặc định (giới hạn min 1)
         const initialQty = {};
         recipeList.forEach(item => {
-          initialQty[item.ma_nguyen_lieu] = parseFloat(item.so_luong_mac_dinh);
+          initialQty[item.ma_nguyen_lieu] = Math.max(1, parseFloat(item.so_luong_mac_dinh));
         });
         setQuantities(initialQty);
 
@@ -87,9 +92,10 @@ export default function CustomNutritionScreen({ route, navigation }) {
     }
   };
 
-  const handleQtyChange = (maNL, delta, maxQty = 3) => {
-    const current = quantities[maNL] || 0;
-    const newQty = Math.max(0, Math.min(maxQty, current + delta));
+  // Giới hạn tăng/giảm nguyên liệu: Thấp nhất là 1 (không về 0, tiền không về 0), tối đa là 5
+  const handleQtyChange = (maNL, delta) => {
+    const current = quantities[maNL] || 1;
+    const newQty = Math.max(1, Math.min(5, current + delta));
     const newMap = { ...quantities, [maNL]: newQty };
     setQuantities(newMap);
     fetchCalculatedNutrition(itemId, newMap);
@@ -111,12 +117,12 @@ export default function CustomNutritionScreen({ route, navigation }) {
 
     setAdding(true);
     try {
-      // Gọi API thêm món vào giỏ
+      // Gọi API thêm món vào giỏ với giá sau tùy biến
       const response = await addToCart(itemId, 1, []);
       if (response.success) {
         Alert.alert(
           'Thành công 🎉',
-          `Đã thêm '${foodData?.ten_mon}' tùy chỉnh dinh dưỡng vào giỏ hàng!`,
+          `Đã thêm '${foodData?.ten_mon}' với tùy chỉnh dinh dưỡng vào giỏ hàng!`,
           [
             { text: 'Xem giỏ hàng', onPress: () => navigation.navigate('Cart') },
             { text: 'Tiếp tục xem món', style: 'cancel' }
@@ -141,80 +147,126 @@ export default function CustomNutritionScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* 0. Thanh tiêu đề Navbar */}
+      <View style={styles.topNavBar}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <Text style={styles.backButtonText}>← Quay lại</Text>
+        </TouchableOpacity>
+        <Text style={styles.topNavTitle}>Tùy Biến Dinh Dưỡng</Text>
+        <View style={{ width: 60 }} />
+      </View>
+
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* 1. Card ảnh & thông tin món ăn thu nhỏ */}
+        {/* 1. Card ảnh & thông tin món ăn */}
         <View style={styles.headerFoodCard}>
           <View style={styles.foodImageContainer}>
-            <Text style={styles.foodEmoji}>🥗</Text>
+            <Text style={styles.foodEmoji}>{isPrepackaged ? '🥤' : '🥗'}</Text>
           </View>
           <View style={styles.foodHeaderInfo}>
             <Text style={styles.foodTitle}>{foodData?.ten_mon || initialFoodName}</Text>
-            <Text style={styles.foodBadge}>Chế độ Tùy biến Dinh dưỡng (Killer Feature)</Text>
-            <Text style={styles.basePriceText}>Giá gốc: {foodData?.gia_ban_goc?.toLocaleString('vi-VN')} đ</Text>
+            <Text style={styles.foodBadge}>
+              {isPrepackaged ? 'Sản phẩm đóng gói sẵn' : 'Chế độ Tùy biến Dinh dưỡng (Killer Feature)'}
+            </Text>
+            <Text style={styles.basePriceText}>
+              Giá gốc: {foodData?.gia_ban_goc?.toLocaleString('vi-VN')} đ
+            </Text>
           </View>
         </View>
 
         {/* 2. Danh sách các nguyên liệu tùy biến */}
         <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>🥬 Tùy chỉnh khẩu phần nguyên liệu</Text>
+          <Text style={styles.sectionTitle}>
+            {isPrepackaged ? 'ℹ️ Thông tin sản phẩm' : '🥬 Tùy chỉnh khẩu phần nguyên liệu'}
+          </Text>
           <Text style={styles.sectionSubtitle}>
-            Tăng/giảm nguyên liệu để điều chỉnh lượng Calo, Đạm, Tinh bột & Chất béo theo nhu cầu sức khỏe của bạn.
+            {isPrepackaged 
+              ? 'Sản phẩm nước uống đóng chai/lon sẵn theo quy cách nhà sản xuất, không hỗ trợ điều chỉnh nguyên liệu.'
+              : 'Tăng/giảm nguyên liệu để điều chỉnh lượng Calo, Đạm, Tinh bột & Chất béo theo nhu cầu sức khỏe của bạn.'
+            }
           </Text>
 
-          {recipe.map((item) => {
-            const currentQty = quantities[item.ma_nguyen_lieu] || 0;
-            const isFixed = item.co_the_tuy_bien === 0;
+          {/* Nếu là món đóng sẵn hoặc không có nguyên liệu tùy biến */}
+          {recipe.length === 0 ? (
+            <View style={styles.prepackagedInfoBox}>
+              <Text style={styles.prepackagedInfoEmoji}>🥤</Text>
+              <Text style={styles.prepackagedInfoTitle}>Sản phẩm đóng gói sẵn nguyên bản</Text>
+              <Text style={styles.prepackagedInfoDesc}>
+                Đây là sản phẩm đóng lon/chai theo tiêu chuẩn chất lượng từ nhà sản xuất (như Pepsi, nước giải khát...). Quán giữ nguyên bản và không hỗ trợ thay đổi nguyên liệu.
+              </Text>
+              <View style={styles.prepackagedBadgeBox}>
+                <Text style={styles.prepackagedBadgeText}>✓ Dinh dưỡng tiêu chuẩn từ NSX</Text>
+              </View>
+            </View>
+          ) : (
+            /* Danh sách nguyên liệu tự làm cho phép tùy chỉnh (Min 1, Max 5) */
+            recipe.map((item) => {
+              const currentQty = quantities[item.ma_nguyen_lieu] || 1;
+              const defQty = parseFloat(item.so_luong_mac_dinh);
+              const delta = currentQty - defQty;
 
-            return (
-              <View key={item.ma_nguyen_lieu} style={styles.ingredientRow}>
-                <View style={styles.ingredientInfo}>
-                  <View style={styles.nameRow}>
-                    <Text style={styles.ingredientName}>{item.ten_nguyen_lieu}</Text>
-                    {isFixed ? (
-                      <View style={styles.fixedBadge}>
-                        <Text style={styles.fixedBadgeText}>Cố định</Text>
+              return (
+                <View key={item.ma_nguyen_lieu} style={styles.ingredientRow}>
+                  <View style={styles.ingredientInfo}>
+                    <View style={styles.nameRow}>
+                      <Text style={styles.ingredientName}>{item.ten_nguyen_lieu}</Text>
+                      {item.don_gia_thay_doi > 0 ? (
+                        <Text style={styles.extraPriceTag}>
+                          {parseFloat(item.don_gia_thay_doi).toLocaleString('vi-VN')} đ/{item.don_vi_tinh}
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    <Text style={styles.macroDetailText}>
+                      🔥 {item.calo} kcal | 🥩 {item.protein}g P | 🌾 {item.carbs}g C | 🥑 {item.fat}g F
+                    </Text>
+
+                    {/* Hiển thị chênh lệch giá khi tăng hoặc giảm */}
+                    {delta !== 0 && (
+                      <View style={[styles.deltaBadge, delta > 0 ? styles.deltaPlus : styles.deltaMinus]}>
+                        <Text style={[styles.deltaText, delta > 0 ? styles.deltaTextPlus : styles.deltaTextMinus]}>
+                          {delta > 0 
+                            ? `+${(delta * item.don_gia_thay_doi).toLocaleString('vi-VN')} đ (Thêm ${delta} ${item.don_vi_tinh})`
+                            : `-${((-delta) * item.don_gia_thay_doi).toLocaleString('vi-VN')} đ (Giảm ${-delta} ${item.don_vi_tinh})`
+                          }
+                        </Text>
                       </View>
-                    ) : item.don_gia_thay_doi > 0 ? (
-                      <Text style={styles.extraPriceTag}>+{(parseFloat(item.don_gia_thay_doi)).toLocaleString('vi-VN')}đ/{item.don_vi_tinh}</Text>
-                    ) : null}
+                    )}
                   </View>
 
-                  <Text style={styles.macroDetailText}>
-                    🔥 {item.calo} kcal | 🥩 {item.protein}g P | 🌾 {item.carbs}g C | 🥑 {item.fat}g F
-                  </Text>
+                  {/* Bộ điều khiển tăng/giảm số lượng: Min 1, Max 5 */}
+                  <View style={styles.qtyControls}>
+                    <TouchableOpacity
+                      style={[styles.qtyBtn, currentQty <= 1 && styles.btnDisabled]}
+                      disabled={currentQty <= 1}
+                      onPress={() => handleQtyChange(item.ma_nguyen_lieu, -1)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.qtyBtnText, currentQty <= 1 && styles.qtyBtnTextDisabled]}>-</Text>
+                    </TouchableOpacity>
+
+                    <Text style={styles.qtyValueText}>{currentQty} {item.don_vi_tinh}</Text>
+
+                    <TouchableOpacity
+                      style={[styles.qtyBtn, currentQty >= 5 && styles.btnDisabled]}
+                      disabled={currentQty >= 5}
+                      onPress={() => handleQtyChange(item.ma_nguyen_lieu, 1)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.qtyBtnText, currentQty >= 5 && styles.qtyBtnTextDisabled]}>+</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-
-                {/* Bộ điều khiển tăng giảm số lượng */}
-                <View style={styles.qtyControls}>
-                  <TouchableOpacity
-                    style={[styles.qtyBtn, isFixed && styles.btnDisabled]}
-                    disabled={isFixed || currentQty <= 0}
-                    onPress={() => handleQtyChange(item.ma_nguyen_lieu, -1, item.so_luong_toi_da)}
-                  >
-                    <Text style={styles.qtyBtnText}>-</Text>
-                  </TouchableOpacity>
-
-                  <Text style={styles.qtyValueText}>{currentQty} {item.don_vi_tinh}</Text>
-
-                  <TouchableOpacity
-                    style={[styles.qtyBtn, isFixed && styles.btnDisabled]}
-                    disabled={isFixed || currentQty >= item.so_luong_toi_da}
-                    onPress={() => handleQtyChange(item.ma_nguyen_lieu, 1, item.so_luong_toi_da)}
-                  >
-                    <Text style={styles.qtyBtnText}>+</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          })}
+              );
+            })
+          )}
         </View>
       </ScrollView>
 
-      {/* 3. Bottom Bar Cố Định ở Đáy: Thanh Thước Đo Dinh Dưỡng Dộng (Macro Bar) */}
+      {/* 3. Bottom Bar Cố Định ở Đáy: Thanh Thước Đo Dinh Dưỡng Động (Macro Bar) */}
       <View style={styles.macroBottomBar}>
         <View style={styles.macroHeaderRow}>
           <Text style={styles.macroTitle}>📊 Thước đo chỉ số dinh dưỡng</Text>
-          {calculating && <ActivityIndicator size="small" color="#FF5722" />}
+          {calculating && <ActivityIndicator size="small" color="#00A896" />}
         </View>
 
         {/* Bảng 4 chỉ số Calo, Protein, Carbs, Fat */}
@@ -245,13 +297,16 @@ export default function CustomNutritionScreen({ route, navigation }) {
           style={[styles.addToCartBtn, adding && styles.btnDisabled]}
           onPress={handleAddToCart}
           disabled={adding}
+          activeOpacity={0.85}
         >
           {adding ? (
             <ActivityIndicator color="#FFF" />
           ) : (
             <View style={styles.addToCartBtnContent}>
               <Text style={styles.addToCartBtnText}>Thêm vào giỏ hàng</Text>
-              <Text style={styles.addToCartPriceText}>{nutrition.gia_sau_tuy_bien?.toLocaleString('vi-VN')} đ</Text>
+              <Text style={styles.addToCartPriceText}>
+                {(nutrition.gia_sau_tuy_bien || foodData?.gia_ban_goc || 0).toLocaleString('vi-VN')} đ
+              </Text>
             </View>
           )}
         </TouchableOpacity>
@@ -270,6 +325,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  topNavBar: {
+    height: 52,
+    backgroundColor: '#00A896',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+  },
+  backButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 12,
+  },
+  backButtonText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  topNavTitle: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   loadingText: {
     marginTop: 10,
@@ -309,106 +388,173 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   foodTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: 'bold',
-    color: '#1A1D1E',
+    color: '#1E293B',
+    marginBottom: 4,
   },
   foodBadge: {
     fontSize: 11,
     color: '#00A896',
-    fontWeight: 'bold',
-    marginTop: 2,
+    fontWeight: '600',
+    marginBottom: 4,
   },
   basePriceText: {
     fontSize: 13,
-    color: '#FF5722',
-    fontWeight: 'bold',
-    marginTop: 4,
+    color: '#64748B',
+    fontWeight: '500',
   },
   sectionContainer: {
     backgroundColor: '#FFF',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
     elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#1A1D1E',
+    color: '#1E293B',
+    marginBottom: 4,
   },
   sectionSubtitle: {
     fontSize: 12,
-    color: '#78909C',
-    marginTop: 4,
+    color: '#64748B',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  prepackagedInfoBox: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  prepackagedInfoEmoji: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  prepackagedInfoTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#334155',
+    marginBottom: 6,
+  },
+  prepackagedInfoDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
     marginBottom: 14,
-    lineHeight: 17,
+  },
+  prepackagedBadgeBox: {
+    backgroundColor: '#E0F2F1',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  prepackagedBadgeText: {
+    color: '#00796B',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   ingredientRow: {
-    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#F1F5F9',
   },
   ingredientInfo: {
-    marginBottom: 8,
+    flex: 1,
+    marginRight: 10,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 4,
   },
   ingredientName: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#1A1D1E',
+    fontWeight: '700',
+    color: '#1E293B',
     marginRight: 8,
-  },
-  fixedBadge: {
-    backgroundColor: '#ECEFF1',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  fixedBadgeText: {
-    fontSize: 10,
-    color: '#607D8B',
-    fontWeight: 'bold',
   },
   extraPriceTag: {
     fontSize: 11,
-    color: '#FF5722',
-    fontWeight: 'bold',
+    fontWeight: '600',
+    color: '#64748B',
   },
   macroDetailText: {
     fontSize: 11,
-    color: '#6C757D',
-    marginTop: 3,
+    color: '#94A3B8',
+    marginBottom: 4,
+  },
+  deltaBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 2,
+  },
+  deltaPlus: {
+    backgroundColor: '#DCFCE7',
+  },
+  deltaMinus: {
+    backgroundColor: '#FEF3C7',
+  },
+  deltaText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  deltaTextPlus: {
+    color: '#16A34A',
+  },
+  deltaTextMinus: {
+    color: '#D97706',
   },
   qtyControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 3,
   },
   qtyBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#FF5722',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#00A896',
     justifyContent: 'center',
     alignItems: 'center',
   },
   btnDisabled: {
-    backgroundColor: '#CFD8DC',
+    backgroundColor: '#E2E8F0',
   },
   qtyBtnText: {
-    color: '#FFF',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: 'bold',
+    color: '#FFF',
+    lineHeight: 19,
+  },
+  qtyBtnTextDisabled: {
+    color: '#94A3B8',
   },
   qtyValueText: {
     fontSize: 13,
     fontWeight: 'bold',
-    color: '#1A1D1E',
-    paddingHorizontal: 12,
+    color: '#1E293B',
+    paddingHorizontal: 10,
+    minWidth: 50,
+    textAlign: 'center',
   },
   macroBottomBar: {
     position: 'absolute',
@@ -416,30 +562,31 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#FFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 16,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 20,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
+    shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 10,
+    shadowRadius: 6,
   },
   macroHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   macroTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
-    color: '#1A1D1E',
+    color: '#333',
   },
   macroGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   macroCardCalo: {
     flex: 1,
@@ -506,7 +653,7 @@ const styles = StyleSheet.create({
     fontWeight: 'normal',
   },
   addToCartBtn: {
-    backgroundColor: '#FF5722',
+    backgroundColor: '#00A896',
     borderRadius: 24,
     paddingVertical: 14,
     paddingHorizontal: 20,

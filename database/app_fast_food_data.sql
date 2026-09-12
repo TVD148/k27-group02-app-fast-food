@@ -58,7 +58,7 @@ INSERT INTO `danh_muc` (`ma_danh_muc`, `ten_danh_muc`, `mo_ta`, `hinh_anh`) VALU
 INSERT INTO `mon_an` (`ma_mon_an`, `ten_mon`, `mo_ta`, `gia_ban`, `hinh_anh`, `ma_danh_muc`, `trang_thai`) VALUES
 (1, 'Burger Bò Cực Hạn', 'Nhân 2 lớp thịt bò Úc nướng thơm lừng, phô mai Cheddar béo ngậy', 69000, 'burger_bo.png', 1, 'con_hang'),
 (2, 'Burger Gà Giòn Sốt Mayo', 'Bánh mì kẹp phi-lê gà rán giòn rụm kết hợp sốt mayonnaise béo', 49000, 'burger_ga.png', 1, 'con_hang'),
-(3, 'Gà Rán Giòn Rụm (1 Miếng)', '1 miếng gà rán giòn rụm bên ngoài, mọng nước bên trong', 35000, 'ga_ran_1.png', 2, 'con_hang'),
+(3, 'Gà Rán Giòn Rụm (2 Miếng)', '2 miếng gà rán giòn rụm bên ngoài, mọng nước bên trong', 40000, 'ga_ran_1.png', 2, 'con_hang'),
 (4, 'Khoai Tây Chiên Cỡ Vừa', 'Khoai tây cắt lát chiên vàng giòn, chấm kèm tương cà', 25000, 'fries.png', 2, 'con_hang'),
 (5, 'Pepsi Không Calo (Lon)', 'Nước ngọt Pepsi vị chanh thanh mát, không chứa calo', 15000, 'pepsi.png', 3, 'con_hang'),
 (6, 'Trà Đào Sả Đá', 'Trà đào mát lạnh kết hợp miếng đào tươi giòn và hương sả', 29000, 'tra_dao.png', 3, 'con_hang'),

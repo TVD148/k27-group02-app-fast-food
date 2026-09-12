@@ -104,7 +104,7 @@ export default function HomeScreen({ navigation }) {
   const DEFAULT_FOODS = [
     { ma_mon_an: 1, ten_mon: 'Burger Bò Cực Hạn (Double Cheese)', ma_danh_muc: 1, ten_danh_muc: 'Burger', gia_ban: 89000, mo_ta: '2 miếng thịt bò Mỹ nướng lửa hồng, phô mai Cheddar tan chảy, xà lách & sốt đặc biệt.', hinh_anh: '🍔', danh_gia: 4.9 },
     { ma_mon_an: 2, ten_mon: 'Burger Gà Giòn Sốt Mayo', ma_danh_muc: 1, ten_danh_muc: 'Burger', gia_ban: 65000, mo_ta: 'Gà phi lê chiên xù giòn rụm, phô mai lát & sốt Mayonnaise thơm béo.', hinh_anh: '🍔', danh_gia: 4.8 },
-    { ma_mon_an: 3, ten_mon: 'Gà Rán Giòn Rụm (2 Miếng)', ma_danh_muc: 2, ten_danh_muc: 'Gà Rán', gia_ban: 72000, mo_ta: '2 miếng đùi & cánh gà tẩm bột giòn tan chuẩn vị Fast Food.', hinh_anh: '🍗', danh_gia: 4.9 },
+    { ma_mon_an: 3, ten_mon: 'Gà Rán Giòn Rụm (2 Miếng)', ma_danh_muc: 2, ten_danh_muc: 'Gà Rán', gia_ban: 40000, mo_ta: '2 miếng đùi & cánh gà tẩm bột giòn tan chuẩn vị Fast Food.', hinh_anh: '🍗', danh_gia: 4.9 },
     { ma_mon_an: 4, ten_mon: 'Khoai Tây Chiên Lớn (Jumbo Fries)', ma_danh_muc: 3, ten_danh_muc: 'Khoai Tây', gia_ban: 35000, mo_ta: 'Khoai tây chiên giòn rụm rắc chút muối biển vị đậm đà.', hinh_anh: '🍟', danh_gia: 4.7 },
     { ma_mon_an: 5, ten_mon: 'Pizza Haiwaiian Hải Sản', ma_danh_muc: 1, ten_danh_muc: 'Pizza', gia_ban: 129000, mo_ta: 'Pizza dứa, tôm tươi, mực giòn & phô mai Mozzarella kéo sợi.', hinh_anh: '🍕', danh_gia: 4.9 },
     { ma_mon_an: 6, ten_mon: 'Trà Đào Cam Sả Lạnh', ma_danh_muc: 4, ten_danh_muc: 'Đồ Uống', gia_ban: 32000, mo_ta: 'Trà đào thơm nồng thanh mát kết hợp lát cam tươi và sả thơm.', hinh_anh: '🥤', danh_gia: 4.8 },
