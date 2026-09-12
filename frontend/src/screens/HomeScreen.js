@@ -54,7 +54,21 @@ export default function HomeScreen({ navigation }) {
       // Tải địa chỉ mặc định đã chọn
       const storedAddr = await AsyncStorage.getItem('default_address');
       if (storedAddr) {
-        setDefaultAddress(JSON.parse(storedAddr));
+        const parsed = JSON.parse(storedAddr);
+        if (parsed.address && parsed.address.includes('Lê Duẩn')) {
+          const sample = {
+            id: '1',
+            label: 'Nhà riêng',
+            name: 'Trần Văn Đình',
+            phone: '0378876126',
+            address: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
+            isDefault: true
+          };
+          setDefaultAddress(sample);
+          await AsyncStorage.setItem('default_address', JSON.stringify(sample));
+        } else {
+          setDefaultAddress(parsed);
+        }
       } else {
         const savedList = await AsyncStorage.getItem('saved_addresses');
         if (savedList) {
@@ -68,7 +82,7 @@ export default function HomeScreen({ navigation }) {
             label: 'Nhà riêng',
             name: 'Trần Văn Đình',
             phone: '0378876126',
-            address: '123 Đường Lê Duẩn, Phường Bến Nghé, Quận 1, TP.HCM',
+            address: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
             isDefault: true
           };
           setDefaultAddress(sample);

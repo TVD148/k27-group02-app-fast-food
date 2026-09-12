@@ -56,6 +56,21 @@ export default function CheckoutScreen({ route, navigation }) {
       const storedDefault = await AsyncStorage.getItem('default_address');
       if (storedDefault) {
         const parsed = JSON.parse(storedDefault);
+        if (parsed.address && parsed.address.includes('Lê Duẩn')) {
+          const sample = {
+            id: '1',
+            label: 'Nhà riêng',
+            name: 'Trần Văn Đình',
+            phone: '0378876126',
+            address: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
+            isDefault: true
+          };
+          setDefaultAddress(sample);
+          setAddress(sample.address);
+          setPhone(sample.phone);
+          await AsyncStorage.setItem('default_address', JSON.stringify(sample));
+          return;
+        }
         setDefaultAddress(parsed);
         setAddress(parsed.address || '');
         setPhone(parsed.phone || '0378876126');
@@ -86,7 +101,7 @@ export default function CheckoutScreen({ route, navigation }) {
           icon: '🏠',
           name: user.ho_ten || 'Trần Văn Đình',
           phone: user.so_dien_thoai || '0378876126',
-          address: user.dia_chi || '123 Đường Lê Duẩn, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+          address: user.dia_chi || '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
           isDefault: true
         };
         setDefaultAddress(fallback);
@@ -96,14 +111,14 @@ export default function CheckoutScreen({ route, navigation }) {
         return;
       }
 
-      // 4. Mặc định dự phòng chuẩn TP.HCM
+      // 4. Mặc định dự phòng chuẩn khu vực
       const sample = {
         id: '1',
         label: 'Nhà riêng',
         icon: '🏠',
         name: 'Trần Văn Đình',
         phone: '0378876126',
-        address: '123 Đường Lê Duẩn, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+        address: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
         isDefault: true
       };
       setDefaultAddress(sample);

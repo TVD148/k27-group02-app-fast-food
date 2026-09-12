@@ -22,16 +22,16 @@ const INITIAL_ADDRESSES = [
     icon: '🏠',
     name: 'Trần Văn Đình',
     phone: '0378876126',
-    address: '123 Đường Lê Duẩn, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+    address: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
     isDefault: true,
   },
   {
     id: '2',
-    label: 'Công ty',
-    icon: '🏢',
+    label: 'Trường học',
+    icon: '🏫',
     name: 'Trần Văn Đình',
     phone: '0378876126',
-    address: 'Tòa nhà Landmark 81, 720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP. Hồ Chí Minh',
+    address: 'Trường Đại học Bình Dương (BDU), TP. Thủ Dầu Một, Bình Dương',
     isDefault: false,
   }
 ];
@@ -59,9 +59,17 @@ export default function AddressScreen({ navigation, route }) {
     try {
       const stored = await AsyncStorage.getItem('saved_addresses');
       if (stored) {
-        setAddresses(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        // Tự động nâng cấp nếu bộ nhớ còn giữ địa chỉ mock cũ (Lê Duẩn Quận 1)
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].address && parsed[0].address.includes('Lê Duẩn')) {
+          setAddresses(INITIAL_ADDRESSES);
+          await AsyncStorage.setItem('saved_addresses', JSON.stringify(INITIAL_ADDRESSES));
+          await AsyncStorage.setItem('default_address', JSON.stringify(INITIAL_ADDRESSES[0]));
+        } else {
+          setAddresses(parsed);
+        }
       } else {
-        // Khởi tạo 2 địa chỉ mẫu tiện lợi ban đầu
+        // Khởi tạo địa chỉ ban đầu chuẩn khu vực
         setAddresses(INITIAL_ADDRESSES);
         await AsyncStorage.setItem('saved_addresses', JSON.stringify(INITIAL_ADDRESSES));
         await AsyncStorage.setItem('default_address', JSON.stringify(INITIAL_ADDRESSES[0]));
@@ -131,68 +139,95 @@ export default function AddressScreen({ navigation, route }) {
 
   // HÀM REVERSE GEOCODING TỪ TỌA ĐỘ GPS THỰC TẾ SANG ĐỊA CHỈ TIẾNG VIỆT CHÍNH XÁC
   const reverseGeocodeCoords = async (lat, lon) => {
-    let streetOrPlace = '';
-    
-    // 1. Lấy tên địa điểm/tên đường từ Photon (OpenStreetMap data)
-    try {
-      const pRes = await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lon}`);
-      if (pRes.ok) {
-        const pData = await pRes.json();
-        if (pData.features && pData.features.length > 0) {
-          const p = pData.features[0].properties;
-          if (p.housenumber && p.street) {
-            streetOrPlace = `${p.housenumber} ${p.street}`;
-          } else if (p.street) {
-            streetOrPlace = p.street;
-          } else if (p.name) {
-            streetOrPlace = p.name;
-          }
-        }
-      }
-    } catch (e) {
-      console.log('Lỗi Photon:', e.message);
-    }
-
-    // 2. Lấy thông tin Phường/Xã, Quận/Huyện, Tỉnh/Thành phố từ BigDataCloud API tiếng Việt
     try {
       const bdcRes = await fetch(
         `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=vi`
       );
       if (bdcRes.ok) {
         const data = await bdcRes.json();
-        const city = data.city || data.principalSubdivision || '';
-        const locality = data.locality || '';
-        
-        let district = '';
-        if (Array.isArray(data.localityInfo?.informative)) {
-          const dObj = data.localityInfo.informative.find(i => 
-            i.name && (i.name.toLowerCase().includes('quận') || i.name.toLowerCase().includes('huyện') || i.name.toLowerCase().includes('thị xã') || i.name.toLowerCase().includes('district'))
-          );
-          if (dObj) district = dObj.name;
+        const admin = data.localityInfo?.administrative || [];
+        const info = data.localityInfo?.informative || [];
+
+        // 1. Xác định Tỉnh / Thành phố chính xác (Bình Dương, TP. Hồ Chí Minh, Đồng Nai...)
+        let province = '';
+        const provinceObj = [...info, ...admin].find(i => i.isoCode && i.isoCode.startsWith('VN-') && i.isoCode !== 'VN');
+        if (provinceObj) {
+          province = provinceObj.name;
+        } else {
+          province = data.principalSubdivision || data.city || '';
         }
-        if (!district && Array.isArray(data.localityInfo?.administrative)) {
-          const dObj = data.localityInfo.administrative.find(i => 
-            i.name && (i.name.toLowerCase().includes('quận') || i.name.toLowerCase().includes('huyện') || i.name.toLowerCase().includes('thị xã') || i.name.toLowerCase().includes('phường'))
+
+        // 2. Xác định Quận / Huyện / Thành phố trực thuộc tỉnh
+        let district = '';
+        const districtObj = [...info, ...admin].find(i => {
+          if (!i.name) return false;
+          const n = i.name.toLowerCase();
+          return (
+            n.includes('quận') || 
+            n.includes('huyện') || 
+            n.includes('thị xã') || 
+            n.includes('thủ dầu một') || 
+            n.includes('thu dau mot') || 
+            n.includes('dĩ an') || 
+            n.includes('di an') || 
+            n.includes('thuận an') || 
+            n.includes('thuan an') || 
+            n.includes('bến cát') || 
+            n.includes('ben cat') || 
+            n.includes('tân uyên') || 
+            n.includes('tan uyen') ||
+            (i.description && (i.description.includes('quận') || i.description.includes('huyện') || i.description.includes('thị xã') || i.description.includes('thành phố')))
           );
-          if (dObj) district = dObj.name;
+        });
+
+        if (districtObj) {
+          district = districtObj.name;
+          const dLower = district.toLowerCase();
+          if (dLower === 'thu dau mot') district = 'TP. Thủ Dầu Một';
+          else if (dLower === 'di an') district = 'TP. Dĩ An';
+          else if (dLower === 'thuan an') district = 'TP. Thuận An';
+          else if (dLower === 'ben cat') district = 'TX. Bến Cát';
+          else if (dLower === 'tan uyen') district = 'TX. Tân Uyên';
+        }
+
+        // 3. Xác định Phường / Xã
+        let ward = '';
+        const wardObj = admin.find(i => 
+          i.adminLevel === 6 || 
+          (i.description && (i.description.includes('phường') || i.description.includes('xã') || i.description.includes('thị trấn')))
+        );
+        if (wardObj) {
+          ward = wardObj.name;
+          const wLower = ward.toLowerCase();
+          if (!wLower.startsWith('phường') && !wLower.startsWith('xã') && !wLower.startsWith('thị trấn')) {
+            ward = (wardObj.description?.includes('xã') ? 'Xã ' : 'Phường ') + ward;
+          }
+        } else if (data.locality) {
+          ward = data.locality;
+          if (!ward.toLowerCase().startsWith('phường') && !ward.toLowerCase().startsWith('xã')) {
+            ward = 'Phường ' + ward;
+          }
         }
 
         const parts = [];
-        if (streetOrPlace) parts.push(streetOrPlace);
-        if (locality && locality !== city && !parts.includes(locality)) parts.push(locality);
-        if (district && district !== locality && district !== city && !parts.includes(district)) parts.push(district);
-        if (city && !parts.includes(city)) parts.push(city);
+        if (ward) parts.push(ward);
+        if (district && district !== ward && district !== province) parts.push(district);
+        if (province) {
+          const pStr = (province.includes('Tỉnh') || province.includes('Thành phố') || province.includes('TP.')) 
+            ? province 
+            : (province === 'Hồ Chí Minh' ? 'TP. Hồ Chí Minh' : 'Tỉnh ' + province);
+          parts.push(pStr);
+        }
 
         if (parts.length > 0) {
           return parts.join(', ');
         }
       }
     } catch (e) {
-      console.log('Lỗi BigDataCloud:', e.message);
+      console.log('Lỗi Geocode:', e.message);
     }
 
-    // Fallback hiển thị tọa độ GPS thực tế nếu các dịch vụ map quốc tế bận
-    return `Tọa độ GPS thực tế (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
+    return `Vị trí GPS thực tế (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
   };
 
   // LẤY VỊ TRÍ HIỆN TẠI QUA GPS ĐIỆN THOẠI (EXPO-LOCATION NATIVE) & WEB TRÌNH DUYỆT
