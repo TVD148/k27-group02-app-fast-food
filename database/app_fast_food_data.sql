@@ -38,10 +38,10 @@ INSERT INTO `vai_tro` (`ma_vai_tro`, `ten_vai_tro`, `mo_ta`) VALUES
 -- 2. NẠP DỮ LIỆU: nguoi_dung (Mật khẩu mặc định băm bằng bcrypt là '123456')
 -- ============================================================================
 INSERT INTO `nguoi_dung` (`ma_nguoi_dung`, `ho_ten`, `email`, `mat_khau`, `so_dien_thoai`, `dia_chi`, `ma_vai_tro`, `trang_thai`) VALUES
-(1, 'Trần Văn Đình', 'dinh@fastfood.com', '$2a$10$tZ2Z05pC2UepjW1vM/5KqucK42n.J9lJ5eFv.Y4tQx3j38zK4aDGu', '0912345678', 'Bình Dương', 3, 'hoat_dong'), -- Admin/BE
-(2, 'Trịnh Nhật Hoàng', 'hoang@fastfood.com', '$2a$10$tZ2Z05pC2UepjW1vM/5KqucK42n.J9lJ5eFv.Y4tQx3j38zK4aDGu', '0923456789', 'Hồ Chí Minh', 1, 'hoat_dong'), -- Khách hàng/FE
-(3, 'Đỗ Thị Mai Hương', 'huong@fastfood.com', '$2a$10$tZ2Z05pC2UepjW1vM/5KqucK42n.J9lJ5eFv.Y4tQx3j38zK4aDGu', '0934567890', 'Đồng Nai', 2, 'hoat_dong'), -- Nhân viên/DB
-(4, 'Nguyễn Văn Shipper', 'shipper@fastfood.com', '$2a$10$tZ2Z05pC2UepjW1vM/5KqucK42n.J9lJ5eFv.Y4tQx3j38zK4aDGu', '0945678901', 'Bình Dương', 4, 'hoat_dong'); -- Shipper
+(1, 'Trần Văn Đình', 'dinh@fastfood.com', '$2a$10$znT.bbEl7e4EfPicZezD.uHdtiAzH5KNrJYKN97TzThIfZT0WCQJy', '0912345678', 'Bình Dương', 3, 'hoat_dong'), -- Admin/BE
+(2, 'Trịnh Nhật Hoàng', 'hoang@fastfood.com', '$2a$10$znT.bbEl7e4EfPicZezD.uHdtiAzH5KNrJYKN97TzThIfZT0WCQJy', '0923456789', 'Hồ Chí Minh', 1, 'hoat_dong'), -- Khách hàng/FE
+(3, 'Đỗ Thị Mai Hương', 'huong@fastfood.com', '$2a$10$znT.bbEl7e4EfPicZezD.uHdtiAzH5KNrJYKN97TzThIfZT0WCQJy', '0934567890', 'Đồng Nai', 2, 'hoat_dong'), -- Nhân viên/DB
+(4, 'Nguyễn Văn Shipper', 'shipper@fastfood.com', '$2a$10$znT.bbEl7e4EfPicZezD.uHdtiAzH5KNrJYKN97TzThIfZT0WCQJy', '0945678901', 'Bình Dương', 4, 'hoat_dong'); -- Shipper
 
 -- ============================================================================
 -- 3. NẠP DỮ LIỆU: danh_muc

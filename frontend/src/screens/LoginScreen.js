@@ -64,7 +64,7 @@ export default function LoginScreen({ navigation }) {
         let roleName = 'Khách hàng';
         let targetScreen = 'Home';
 
-        if (userRole === 2) {
+        if (userRole === 2 || userRole === 5) {
           roleName = 'Nhân viên Bếp';
           targetScreen = 'StaffKitchen';
         } else if (userRole === 4) {
@@ -105,7 +105,7 @@ export default function LoginScreen({ navigation }) {
       if (response.success) {
         const userRole = response.data?.user?.ma_vai_tro;
         let targetScreen = 'Home';
-        if (userRole === 2) targetScreen = 'StaffKitchen';
+        if (userRole === 2 || userRole === 5) targetScreen = 'StaffKitchen';
         else if (userRole === 4) targetScreen = 'Shipper';
         else if (userRole === 3) targetScreen = 'Admin';
 

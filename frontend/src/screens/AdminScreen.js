@@ -420,7 +420,7 @@ export default function AdminScreen({ navigation }) {
               {users.map(u => {
                 let roleColor = '#78909C';
                 let roleLabel = 'Khách hàng';
-                if (u.ma_vai_tro === 2) { roleColor = '#D84315'; roleLabel = '🧑‍🍳 Bếp / Quán'; }
+                if (u.ma_vai_tro === 2 || u.ma_vai_tro === 5) { roleColor = '#D84315'; roleLabel = '🧑‍🍳 Bếp / Quán'; }
                 else if (u.ma_vai_tro === 4) { roleColor = '#00897B'; roleLabel = '🛵 Shipper'; }
                 else if (u.ma_vai_tro === 3) { roleColor = '#6A1B9A'; roleLabel = '👑 Quản trị viên'; }
 
