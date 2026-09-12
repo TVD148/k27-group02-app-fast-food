@@ -261,9 +261,6 @@ export default function CheckoutScreen({ route, navigation }) {
 
   const paymentOptions = [
     { key: 'tien_mat', label: '💵 Tiền mặt khi nhận hàng (COD)', desc: 'Thanh toán trực tiếp cho shipper khi nhận đồ ăn' },
-    { key: 'vietqr', label: '📱 Chuyển khoản Ngân hàng (VietQR)', desc: 'Sinh mã QR động chuyển khoản chính xác tới MB Bank' },
-    { key: 'momo', label: '🪪 Ví điện tử MoMo', desc: 'Thanh toán qua ví MoMo tiện lợi' },
-    { key: 'vnpay', label: '💳 Cổng thanh toán VNPAY', desc: 'Thanh toán thẻ ATM / QR VNPAY an toàn' },
   ];
 
   return (
@@ -357,22 +354,7 @@ export default function CheckoutScreen({ route, navigation }) {
             })}
           </View>
 
-          {/* 3. SECTION VIETQR CODE ĐỘNG (Hiển thị khi chọn VietQR / Chuyển khoản) */}
-          {(paymentMethod === 'vietqr' || paymentMethod === 'chuyen_khoan') && (
-            <View style={styles.vietQrPreviewCard}>
-              <Text style={styles.vietQrTitle}>📱 Thanh toán qua VietQR tự động</Text>
-              <Text style={styles.vietQrDesc}>
-                Hệ thống sẽ tự động sinh mã VietQR chuyển khoản chính xác tới ngân hàng MB Bank ngay khi bấm Xác Nhận Đặt Hàng.
-              </Text>
-              
-              <View style={styles.bankDetailBox}>
-                <Text style={styles.bankDetailRow}>• Ngân hàng: <Text style={styles.boldText}>MB Bank (Ngân hàng TMCP Quân Đội)</Text></Text>
-                <Text style={styles.bankDetailRow}>• Số tài khoản: <Text style={styles.boldText}>0987654321</Text></Text>
-                <Text style={styles.bankDetailRow}>• Chủ tài khoản: <Text style={styles.boldText}>CONG TY APP FAST FOOD</Text></Text>
-                <Text style={styles.bankDetailRow}>• Số tiền thanh toán: <Text style={styles.totalPriceText}>{grandTotal.toLocaleString('vi-VN')} đ</Text></Text>
-              </View>
-            </View>
-          )}
+
 
           {/* 4. SECTION THÔNG TIN GIAO HÀNG (TỰ ĐỘNG LẤY ĐỊA CHỈ MẶC ĐỊNH) */}
           <View style={styles.sectionCard}>
