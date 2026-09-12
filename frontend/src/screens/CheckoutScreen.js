@@ -21,6 +21,7 @@ export default function CheckoutScreen({ route, navigation }) {
 
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
+  const [defaultAddress, setDefaultAddress] = useState(null);
   const [note, setNote] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('tien_mat');
   const [submitting, setSubmitting] = useState(false);
@@ -41,20 +42,76 @@ export default function CheckoutScreen({ route, navigation }) {
   const grandTotal = Math.max(0, rawSubtotal + shippingFee - discountAmount);
 
   useEffect(() => {
-    loadDefaultUserInfo();
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadDeliveryAddress();
+    });
+    loadDeliveryAddress();
     loadPublicVouchers();
-  }, []);
+    return unsubscribe;
+  }, [navigation]);
 
-  const loadDefaultUserInfo = async () => {
+  const loadDeliveryAddress = async () => {
     try {
+      // 1. Kiểm tra địa chỉ mặc định đã chọn trong default_address
+      const storedDefault = await AsyncStorage.getItem('default_address');
+      if (storedDefault) {
+        const parsed = JSON.parse(storedDefault);
+        setDefaultAddress(parsed);
+        setAddress(parsed.address || '');
+        setPhone(parsed.phone || '0378876126');
+        return;
+      }
+
+      // 2. Lấy từ danh sách sổ địa chỉ saved_addresses
+      const savedList = await AsyncStorage.getItem('saved_addresses');
+      if (savedList) {
+        const list = JSON.parse(savedList);
+        if (Array.isArray(list) && list.length > 0) {
+          const def = list.find(a => a.isDefault) || list[0];
+          setDefaultAddress(def);
+          setAddress(def.address || '');
+          setPhone(def.phone || '0378876126');
+          await AsyncStorage.setItem('default_address', JSON.stringify(def));
+          return;
+        }
+      }
+
+      // 3. Lấy từ thông tin người dùng đăng nhập user_info
       const storedUser = await AsyncStorage.getItem('user_info');
       if (storedUser) {
         const user = JSON.parse(storedUser);
-        if (user.dia_chi) setAddress(user.dia_chi);
-        if (user.so_dien_thoai) setPhone(user.so_dien_thoai);
+        const fallback = {
+          id: 'user_default',
+          label: 'Nhà riêng',
+          icon: '🏠',
+          name: user.ho_ten || 'Trần Văn Đình',
+          phone: user.so_dien_thoai || '0378876126',
+          address: user.dia_chi || '123 Đường Lê Duẩn, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+          isDefault: true
+        };
+        setDefaultAddress(fallback);
+        setAddress(fallback.address);
+        setPhone(fallback.phone);
+        await AsyncStorage.setItem('default_address', JSON.stringify(fallback));
+        return;
       }
+
+      // 4. Mặc định dự phòng chuẩn TP.HCM
+      const sample = {
+        id: '1',
+        label: 'Nhà riêng',
+        icon: '🏠',
+        name: 'Trần Văn Đình',
+        phone: '0378876126',
+        address: '123 Đường Lê Duẩn, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+        isDefault: true
+      };
+      setDefaultAddress(sample);
+      setAddress(sample.address);
+      setPhone(sample.phone);
+      await AsyncStorage.setItem('default_address', JSON.stringify(sample));
     } catch (e) {
-      console.log('Không thể tải thông tin người dùng mặc định');
+      console.log('Không thể tải địa chỉ giao hàng:', e);
     }
   };
 
@@ -110,21 +167,27 @@ export default function CheckoutScreen({ route, navigation }) {
       return;
     }
 
-    if (!address.trim()) {
-      Alert.alert('Lỗi', 'Vui lòng nhập địa chỉ giao hàng!');
+    const finalAddress = (defaultAddress?.address || address || '').trim();
+    const finalPhone = (defaultAddress?.phone || phone || '').trim();
+
+    if (!finalAddress) {
+      Alert.alert('Chưa có địa chỉ giao hàng', 'Vui lòng chọn hoặc thêm địa chỉ nhận hàng trước khi thanh toán!', [
+        { text: 'Chọn địa chỉ ngay ➔', onPress: () => navigation.navigate('Address') },
+        { text: 'Để sau', style: 'cancel' }
+      ]);
       return;
     }
-    if (!phone.trim()) {
-      Alert.alert('Lỗi', 'Vui lòng nhập số điện thoại nhận hàng!');
+    if (!finalPhone) {
+      Alert.alert('Lỗi', 'Vui lòng cung cấp số điện thoại nhận hàng!');
       return;
     }
 
     setSubmitting(true);
     try {
-      // Gọi API tạo đơn hàng (có truyền mã voucher nếu có)
+      // Gọi API tạo đơn hàng (sử dụng địa chỉ mặc định đã chọn)
       const response = await createOrder(
-        address, 
-        phone, 
+        finalAddress, 
+        finalPhone, 
         note, 
         paymentMethod, 
         appliedVoucher ? appliedVoucher.ma_code : null
@@ -296,34 +359,64 @@ export default function CheckoutScreen({ route, navigation }) {
             </View>
           )}
 
-          {/* 4. SECTION THÔNG TIN GIAO HÀNG */}
+          {/* 4. SECTION THÔNG TIN GIAO HÀNG (TỰ ĐỘNG LẤY ĐỊA CHỈ MẶC ĐỊNH) */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>📍 Thông tin nhận hàng</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>📍 Địa chỉ nhận hàng</Text>
+              <TouchableOpacity 
+                style={styles.changeAddressBtn}
+                onPress={() => navigation.navigate('Address')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.changeAddressBtnText}>Thay đổi ➔</Text>
+              </TouchableOpacity>
+            </View>
 
-            <Text style={styles.label}>Địa chỉ nhận hàng *</Text>
+            {defaultAddress ? (
+              <TouchableOpacity 
+                style={styles.defaultAddressCard}
+                activeOpacity={0.85}
+                onPress={() => navigation.navigate('Address')}
+              >
+                <View style={styles.addressCardTop}>
+                  <View style={styles.addressLabelBadge}>
+                    <Text style={styles.addressLabelEmoji}>{defaultAddress.icon || '🏠'}</Text>
+                    <Text style={styles.addressLabelText}>{defaultAddress.label || 'Địa chỉ nhận hàng'}</Text>
+                  </View>
+                  <View style={styles.defaultTag}>
+                    <Text style={styles.defaultTagText}>Mặc định</Text>
+                  </View>
+                </View>
+
+                <View style={styles.addressInfoRow}>
+                  <Text style={styles.recipientNamePhone}>
+                    👤 {defaultAddress.name || 'Người nhận'} • 📞 {defaultAddress.phone || phone || '0378876126'}
+                  </Text>
+                </View>
+
+                <Text style={styles.addressDetailText}>
+                  {defaultAddress.address || address}
+                </Text>
+
+                <View style={styles.autoDefaultBadge}>
+                  <Text style={styles.autoDefaultBadgeText}>✓ Đã tự động chọn địa chỉ mặc định, không cần nhập lại</Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity 
+                style={styles.noAddressBox}
+                onPress={() => navigation.navigate('Address')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.noAddressText}>⚠️ Chưa chọn địa chỉ giao hàng</Text>
+                <Text style={styles.noAddressSub}>Nhấn vào đây để chọn hoặc bật GPS lấy vị trí tức thì ➔</Text>
+              </TouchableOpacity>
+            )}
+
+            <Text style={[styles.label, { marginTop: 14 }]}>Ghi chú cho shipper / nhà bếp (Tùy chọn)</Text>
             <TextInput
               style={styles.input}
-              placeholder="Nhập địa chỉ nhà, tên đường, quận/huyện..."
-              placeholderTextColor="#999"
-              value={address}
-              onChangeText={setAddress}
-              multiline
-            />
-
-            <Text style={styles.label}>Số điện thoại nhận hàng *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Nhập số điện thoại người nhận..."
-              placeholderTextColor="#999"
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-            />
-
-            <Text style={styles.label}>Ghi chú cho nhà bếp / Shipper</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ví dụ: Cho nhiều tương cà, giao giờ hành chính..."
+              placeholder="Ví dụ: Giao lên lầu 2, gọi trước khi đến 5 phút..."
               placeholderTextColor="#999"
               value={note}
               onChangeText={setNote}
@@ -513,6 +606,113 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1A1D1E',
     marginBottom: 8,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  changeAddressBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: '#E0F2F1',
+  },
+  changeAddressBtnText: {
+    color: '#00A896',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  defaultAddressCard: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1.5,
+    borderColor: '#86EFAC',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+  },
+  addressCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  addressLabelBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  addressLabelEmoji: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  addressLabelText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#15803D',
+  },
+  defaultTag: {
+    backgroundColor: '#00A896',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  defaultTagText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  addressInfoRow: {
+    marginBottom: 6,
+  },
+  recipientNamePhone: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1E293B',
+  },
+  addressDetailText: {
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 19,
+    marginBottom: 8,
+  },
+  autoDefaultBadge: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    alignSelf: 'flex-start',
+  },
+  autoDefaultBadgeText: {
+    fontSize: 11,
+    color: '#16A34A',
+    fontWeight: '600',
+  },
+  noAddressBox: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1.5,
+    borderColor: '#FDE68A',
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  noAddressText: {
+    color: '#B45309',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  noAddressSub: {
+    color: '#D97706',
+    fontSize: 12,
   },
   paymentCard: {
     flexDirection: 'row',

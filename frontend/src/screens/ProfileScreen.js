@@ -15,6 +15,7 @@ import BottomTabBar from '../components/BottomTabBar';
 
 export default function ProfileScreen({ navigation }) {
   const [user, setUser] = useState(null);
+  const [currentAddress, setCurrentAddress] = useState(null);
   
   // Các state công tắc Switch thông báo chuẩn UX Checklist
   const [orderNotif, setOrderNotif] = useState(true);
@@ -37,6 +38,11 @@ export default function ProfileScreen({ navigation }) {
         setUser(JSON.parse(stored));
       } else {
         setUser(null);
+      }
+
+      const storedAddr = await AsyncStorage.getItem('default_address');
+      if (storedAddr) {
+        setCurrentAddress(JSON.parse(storedAddr));
       }
     } catch (e) {
       setUser(null);
@@ -77,8 +83,8 @@ export default function ProfileScreen({ navigation }) {
         { 
           icon: '📍', 
           label: 'Sổ địa chỉ nhận hàng', 
-          desc: user?.dia_chi || 'Quản lý các địa chỉ giao đồ ăn', 
-          action: () => Alert.alert('Sổ địa chỉ', user?.dia_chi ? `Địa chỉ hiện tại:\n${user.dia_chi}` : 'Chưa có địa chỉ lưu.') 
+          desc: currentAddress ? `${currentAddress.label}: ${currentAddress.address}` : (user?.dia_chi || 'Quản lý & thêm địa chỉ bằng GPS'), 
+          action: () => navigation.navigate('Address') 
         },
         { 
           icon: '💳', 
@@ -116,6 +122,11 @@ export default function ProfileScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
+        {/* Header Hồ Sơ & Cài Đặt Không Có Nút Quay Về (Dùng BottomTabBar) */}
+        <View style={styles.screenHeader}>
+          <Text style={styles.screenHeaderTitle}>Hồ Sơ & Cài Đặt</Text>
+        </View>
+
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* 1. Header Hồ Sơ & Avatar */}
           <View style={styles.profileHeaderCard}>
@@ -248,11 +259,23 @@ export default function ProfileScreen({ navigation }) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00A896',
   },
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+  },
+  screenHeader: {
+    backgroundColor: '#00A896',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  screenHeaderTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   scrollContent: {
     padding: 16,

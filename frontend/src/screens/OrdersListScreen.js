@@ -111,6 +111,11 @@ export default function OrdersListScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header Lịch Sử Đơn Hàng Không Có Nút Quay Về (Dùng Bottom Navigation) */}
+      <View style={styles.topHeaderBar}>
+        <Text style={styles.topHeaderTitle}>Lịch Sử Đơn Hàng 📦</Text>
+      </View>
+
       {/* Thanh tab lọc trạng thái */}
       <View style={styles.tabContainer}>
         <FlatList
@@ -165,6 +170,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F7F9FA',
+  },
+  topHeaderBar: {
+    backgroundColor: '#00A896',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topHeaderTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   centerContainer: {
     flex: 1,

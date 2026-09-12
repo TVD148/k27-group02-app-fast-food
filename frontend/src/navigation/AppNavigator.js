@@ -14,6 +14,7 @@ import CustomNutritionScreen from '../screens/CustomNutritionScreen';
 import PaymentScreen from '../screens/PaymentScreen';
 import SearchScreen from '../screens/SearchScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import AddressScreen from '../screens/AddressScreen';
 
 const Stack = createStackNavigator();
 
@@ -42,26 +43,53 @@ export function AppNavigator() {
         options={{ headerShown: false }}
       />
 
-      {/* 3. Màn hình Đăng Nhập (Header Vàng) */}
+      {/* 3. Màn hình Đăng Nhập */}
       <Stack.Screen 
         name="Login" 
         component={LoginScreen} 
         options={{ headerShown: false }}
       />
 
-      {/* 4. Màn hình Đăng Ký (Header Đỏ) */}
+      {/* 4. Màn hình Đăng Ký */}
       <Stack.Screen 
         name="Register" 
         component={RegisterScreen} 
         options={{ headerShown: false }}
       />
 
-      {/* 5. Màn hình Trang Chủ & Các Chức Năng Khác */}
+      {/* 5. Màn hình Trang Chủ & Các Tab Điều Hướng (Không hiển thị header nút quay về trùng lặp) */}
       <Stack.Screen 
         name="Home" 
         component={HomeScreen} 
-        options={{ title: 'Trang Chủ Fast Food' }}
+        options={{ headerShown: false }}
       />
+      <Stack.Screen 
+        name="Search" 
+        component={SearchScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="Cart" 
+        component={CartScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="Profile" 
+        component={ProfileScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="OrdersList" 
+        component={OrdersListScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="Address" 
+        component={AddressScreen} 
+        options={{ headerShown: false }}
+      />
+
+      {/* 6. Các màn hình chức năng phụ & luồng chi tiết */}
       <Stack.Screen 
         name="ProductDetail" 
         component={ProductDetailScreen} 
@@ -71,11 +99,6 @@ export function AppNavigator() {
         name="CustomNutrition" 
         component={CustomNutritionScreen} 
         options={{ title: 'Tùy Biến Dinh Dưỡng 🥗' }}
-      />
-      <Stack.Screen 
-        name="Cart" 
-        component={CartScreen} 
-        options={{ title: 'Giỏ Hàng Của Tôi' }}
       />
       <Stack.Screen 
         name="Checkout" 
@@ -91,21 +114,6 @@ export function AppNavigator() {
         name="OrderTracking" 
         component={OrderTrackingScreen} 
         options={{ title: 'Theo Dõi Đơn Hàng' }}
-      />
-      <Stack.Screen 
-        name="Search" 
-        component={SearchScreen} 
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen 
-        name="Profile" 
-        component={ProfileScreen} 
-        options={{ title: 'Hồ Sơ & Cài Đặt 👤' }}
-      />
-      <Stack.Screen 
-        name="OrdersList" 
-        component={OrdersListScreen} 
-        options={{ title: 'Lịch Sử Đơn Hàng' }}
       />
     </Stack.Navigator>
   );

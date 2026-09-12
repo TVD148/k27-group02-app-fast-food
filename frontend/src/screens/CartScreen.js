@@ -171,6 +171,11 @@ export default function CartScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header Giỏ Hàng Không Có Nút Quay Về (Dùng Bottom Navigation) */}
+      <View style={styles.topHeaderBar}>
+        <Text style={styles.topHeaderTitle}>Giỏ Hàng Của Bạn 🛒</Text>
+      </View>
+
       {items.length === 0 ? (
         /* Empty Cart State theo đúng Mockup Design (Paper bag / empty state) */
         <View style={styles.emptyContainer}>
@@ -240,6 +245,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F7F9FA',
+  },
+  topHeaderBar: {
+    backgroundColor: '#00A896',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topHeaderTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   centerContainer: {
     flex: 1,

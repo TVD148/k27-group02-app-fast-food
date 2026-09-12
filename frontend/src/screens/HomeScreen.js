@@ -22,6 +22,7 @@ const { width } = Dimensions.get('window');
 
 export default function HomeScreen({ navigation }) {
   const [userInfo, setUserInfo] = useState(null);
+  const [defaultAddress, setDefaultAddress] = useState(null);
   const [categories, setCategories] = useState([]);
   const [foods, setFoods] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -34,6 +35,7 @@ export default function HomeScreen({ navigation }) {
     const unsubscribe = navigation.addListener('focus', () => {
       loadUserData();
     });
+    loadUserData();
     loadCategoriesData();
     loadFoodsData('', '');
     return unsubscribe;
@@ -48,8 +50,33 @@ export default function HomeScreen({ navigation }) {
       } else {
         setUserInfo(null);
       }
+
+      // Tải địa chỉ mặc định đã chọn
+      const storedAddr = await AsyncStorage.getItem('default_address');
+      if (storedAddr) {
+        setDefaultAddress(JSON.parse(storedAddr));
+      } else {
+        const savedList = await AsyncStorage.getItem('saved_addresses');
+        if (savedList) {
+          const list = JSON.parse(savedList);
+          const def = list.find(a => a.isDefault) || list[0];
+          setDefaultAddress(def);
+        } else {
+          // Khởi tạo địa chỉ mặc định đầu tiên
+          const sample = {
+            id: '1',
+            label: 'Nhà riêng',
+            name: 'Trần Văn Đình',
+            phone: '0378876126',
+            address: '123 Đường Lê Duẩn, Phường Bến Nghé, Quận 1, TP.HCM',
+            isDefault: true
+          };
+          setDefaultAddress(sample);
+          await AsyncStorage.setItem('default_address', JSON.stringify(sample));
+        }
+      }
     } catch (e) {
-      setUserInfo(null);
+      console.log('Lỗi tải dữ liệu người dùng & địa chỉ');
     }
   };
 
@@ -210,15 +237,24 @@ export default function HomeScreen({ navigation }) {
         {/* 1. Teal Curved Header theo đúng Mockup Design */}
         <View style={styles.tealHeader}>
           <View style={styles.topRow}>
-            <View style={styles.locationContainer}>
+            <TouchableOpacity 
+              style={styles.locationContainer} 
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('Address')}
+            >
               <Text style={styles.locationPin}>📍</Text>
-              <View>
-                <Text style={styles.locationTitle}>Giao tới địa chỉ</Text>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={styles.locationTitle}>
+                    Giao tới • {defaultAddress?.label || 'Địa chỉ mặc định'}
+                  </Text>
+                  <Text style={styles.changeAddressTag}>Đổi ▾</Text>
+                </View>
                 <Text style={styles.locationAddress} numberOfLines={1}>
-                  {userInfo ? `${userInfo.ho_ten} (${userInfo.so_dien_thoai || 'Fast Food'})` : 'Khách ghé thăm (Chọn địa chỉ)'}
+                  {defaultAddress ? defaultAddress.address : (userInfo ? `${userInfo.ho_ten} (${userInfo.so_dien_thoai || 'Fast Food'})` : 'Khách ghé thăm (Chọn địa chỉ)')}
                 </Text>
               </View>
-            </View>
+            </TouchableOpacity>
 
             <View style={styles.headerRightActions}>
               <TouchableOpacity 
@@ -390,6 +426,16 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#E0F2F1',
     fontWeight: '500',
+  },
+  changeAddressTag: {
+    fontSize: 10,
+    color: '#FFE082',
+    fontWeight: 'bold',
+    marginLeft: 6,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
   },
   locationAddress: {
     fontSize: 14,
