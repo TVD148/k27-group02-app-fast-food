@@ -128,61 +128,150 @@ export default function AddressScreen({ navigation, route }) {
     );
   };
 
-  // LẤY VỊ TRÍ HIỆN TẠI QUA GPS ĐIỆN THOẠI / TRÌNH DUYỆT
-  const handleGetGPSLocation = () => {
+  // HÀM REVERSE GEOCODING TỪ TỌA ĐỘ GPS THỰC TẾ SANG ĐỊA CHỈ TIẾNG VIỆT CHÍNH XÁC
+  const reverseGeocodeCoords = async (lat, lon) => {
+    let streetOrPlace = '';
+    
+    // 1. Lấy tên địa điểm/tên đường từ Photon (OpenStreetMap data)
+    try {
+      const pRes = await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lon}`);
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        if (pData.features && pData.features.length > 0) {
+          const p = pData.features[0].properties;
+          if (p.housenumber && p.street) {
+            streetOrPlace = `${p.housenumber} ${p.street}`;
+          } else if (p.street) {
+            streetOrPlace = p.street;
+          } else if (p.name) {
+            streetOrPlace = p.name;
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Lỗi Photon:', e.message);
+    }
+
+    // 2. Lấy thông tin Phường/Xã, Quận/Huyện, Tỉnh/Thành phố từ BigDataCloud API tiếng Việt
+    try {
+      const bdcRes = await fetch(
+        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=vi`
+      );
+      if (bdcRes.ok) {
+        const data = await bdcRes.json();
+        const city = data.city || data.principalSubdivision || '';
+        const locality = data.locality || '';
+        
+        let district = '';
+        if (Array.isArray(data.localityInfo?.informative)) {
+          const dObj = data.localityInfo.informative.find(i => 
+            i.name && (i.name.toLowerCase().includes('quận') || i.name.toLowerCase().includes('huyện') || i.name.toLowerCase().includes('thị xã') || i.name.toLowerCase().includes('district'))
+          );
+          if (dObj) district = dObj.name;
+        }
+        if (!district && Array.isArray(data.localityInfo?.administrative)) {
+          const dObj = data.localityInfo.administrative.find(i => 
+            i.name && (i.name.toLowerCase().includes('quận') || i.name.toLowerCase().includes('huyện') || i.name.toLowerCase().includes('thị xã') || i.name.toLowerCase().includes('phường'))
+          );
+          if (dObj) district = dObj.name;
+        }
+
+        const parts = [];
+        if (streetOrPlace) parts.push(streetOrPlace);
+        if (locality && locality !== city && !parts.includes(locality)) parts.push(locality);
+        if (district && district !== locality && district !== city && !parts.includes(district)) parts.push(district);
+        if (city && !parts.includes(city)) parts.push(city);
+
+        if (parts.length > 0) {
+          return parts.join(', ');
+        }
+      }
+    } catch (e) {
+      console.log('Lỗi BigDataCloud:', e.message);
+    }
+
+    // Fallback hiển thị tọa độ GPS thực tế nếu các dịch vụ map quốc tế bận
+    return `Tọa độ GPS thực tế (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
+  };
+
+  // LẤY VỊ TRÍ HIỆN TẠI QUA GPS ĐIỆN THOẠI / TRÌNH DUYỆT (YÊU CẦU BẬT ĐỊNH VỊ)
+  const handleGetGPSLocation = async () => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      Alert.alert(
+        'Không hỗ trợ định vị ⚠️',
+        'Thiết bị hoặc trình duyệt của bạn không hỗ trợ tính năng định vị vị trí GPS.'
+      );
+      return;
+    }
+
+    // Kiểm tra quyền nếu Permissions API có sẵn
+    if (navigator.permissions && navigator.permissions.query) {
+      try {
+        const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+        if (permissionStatus.state === 'denied') {
+          Alert.alert(
+            'Quyền vị trí đang bị chặn 🔒',
+            'Trình duyệt/thiết bị của bạn đang CHẶN quyền truy cập vị trí của ứng dụng.\n\nHướng dẫn bật:\n1. Bấm vào biểu tượng ổ khóa 🔒 hoặc cài đặt trên thanh địa chỉ URL.\n2. Chọn "Cho phép truy cập vị trí" (Allow Location).\n3. Bật dịch vụ định vị (GPS) trong Cài đặt của máy rồi nhấn lại nút này.'
+          );
+          return;
+        }
+      } catch (e) {
+        // Một số trình duyệt không hỗ trợ query permissions, bỏ qua để tiếp tục
+      }
+    }
+
     setLocating(true);
 
-    if (typeof navigator !== 'undefined' && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords;
-          try {
-            // Sử dụng dịch vụ Reverse Geocoding miễn phí của OpenStreetMap
-            const response = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
-              {
-                headers: {
-                  'User-Agent': 'FastFoodApp/1.0'
-                }
-              }
-            );
-            const data = await response.json();
-            
-            let detectedAddress = '';
-            if (data && data.display_name) {
-              detectedAddress = data.display_name;
-            } else {
-              detectedAddress = `Tọa độ GPS (${latitude.toFixed(4)}, ${longitude.toFixed(4)}) - TP. Hồ Chí Minh`;
-            }
-
-            setAddressText(detectedAddress);
-            Alert.alert('Đã định vị thành công 🎯', `Địa chỉ của bạn:\n${detectedAddress}`);
-          } catch (err) {
-            const fallback = `Vị trí hiện tại: Quận 1, TP. Hồ Chí Minh (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
-            setAddressText(fallback);
-            Alert.alert('Định vị GPS 🎯', fallback);
-          } finally {
-            setLocating(false);
-          }
-        },
-        (error) => {
-          setLocating(false);
-          // Fallback giả lập vị trí thực tế khi người dùng chạy trên localhost hoặc chặn quyền GPS
-          const sampleGPS = 'Vị trí hiện tại: 789 Đường Nguyễn Thị Minh Khai, Phường Bến Nghé, Quận 1, TP.HCM';
-          setAddressText(sampleGPS);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        try {
+          const accurateAddress = await reverseGeocodeCoords(latitude, longitude);
+          setAddressText(accurateAddress);
           Alert.alert(
-            'Định vị nhanh 📍',
-            `Đã tự động lấy vị trí hiện tại của thiết bị:\n${sampleGPS}\n\n(Bạn có thể chỉnh sửa thêm số nhà hoặc tầng/phòng nếu cần).`
+            'Đã định vị thành công 🎯',
+            `Đã lấy được địa chỉ GPS chính xác:\n📍 ${accurateAddress}\n\n(Độ chính xác GPS: ~${Math.round(accuracy || 10)}m)\nBạn có thể kiểm tra và bổ sung số nhà/số phòng nếu cần.`,
+            [{ text: 'Đồng ý' }]
           );
-        },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
-      );
-    } else {
-      setLocating(false);
-      const sampleGPS = 'Vị trí hiện tại: 123 Lê Duẩn, Phường Bến Nghé, Quận 1, TP.HCM';
-      setAddressText(sampleGPS);
-      Alert.alert('Định vị GPS 📍', `Đã nhận diện vị trí:\n${sampleGPS}`);
-    }
+        } catch (err) {
+          const coordText = `Vị trí GPS (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`;
+          setAddressText(coordText);
+          Alert.alert('Đã nhận diện tọa độ GPS 🎯', coordText);
+        } finally {
+          setLocating(false);
+        }
+      },
+      (error) => {
+        setLocating(false);
+        let title = 'Yêu cầu bật Dịch vụ Vị trí ⚠️';
+        let message = 'Không thể xác định vị trí hiện tại.';
+
+        switch (error.code) {
+          case 1: // PERMISSION_DENIED
+            title = 'Chưa cấp quyền Vị trí 🔒';
+            message = 'Bạn cần cho phép ứng dụng truy cập vị trí để tự động lấy địa chỉ chính xác.\n\n👉 Cách bật:\n1. Nhấn vào biểu tượng 🔒 hoặc ⚙️ cạnh thanh địa chỉ (URL) trên trình duyệt.\n2. Chuyển quyền "Vị trí" (Location) sang "Cho phép" (Allow).\n3. Bật GPS trên máy và nhấn lại nút Lấy vị trí.';
+            break;
+          case 2: // POSITION_UNAVAILABLE
+            title = 'Chưa bật Dịch vụ Định vị (GPS) 📡';
+            message = 'Dịch vụ định vị GPS trên điện thoại hoặc máy tính của bạn hiện đang TẮT.\n\n👉 Cách bật:\n1. Vuốt thanh cài đặt nhanh của điện thoại xuống và BẬT "Vị trí" (Location / GPS).\n2. Nếu dùng máy tính: Vào Cài đặt Windows -> Privacy & security -> Location -> Bật "Location services".\n3. Sau khi bật, bấm lại nút này để lấy vị trí chính xác.';
+            break;
+          case 3: // TIMEOUT
+            title = 'Hết thời gian tìm kiếm GPS ⏳';
+            message = 'Thiết bị mất quá nhiều thời gian để bắt sóng GPS. Vui lòng kiểm tra lại kết nối mạng và đảm bảo đã BẬT GPS ngoài trời/nơi thoáng, sau đó thử lại.';
+            break;
+          default:
+            message = error.message || 'Không thể kết nối đến dịch vụ định vị GPS.';
+            break;
+        }
+
+        Alert.alert(title, message, [{ text: 'Đã hiểu' }]);
+      },
+      { 
+        enableHighAccuracy: true, 
+        timeout: 15000, 
+        maximumAge: 0 // Bắt buộc lấy tọa độ tươi mới nhất từ vệ tinh/mạng, không dùng cache cũ
+      }
+    );
   };
 
   const openAddModal = () => {
@@ -376,20 +465,30 @@ export default function AddressScreen({ navigation, route }) {
 
               {/* Nút Lấy GPS trong modal */}
               <TouchableOpacity 
-                style={styles.modalGpsBtn}
+                style={[styles.modalGpsBtn, locating && styles.modalGpsBtnLoading]}
                 onPress={handleGetGPSLocation}
                 disabled={locating}
                 activeOpacity={0.8}
               >
                 {locating ? (
-                  <ActivityIndicator color="#00A896" size="small" />
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <ActivityIndicator color="#00A896" size="small" style={{ marginRight: 8 }} />
+                    <Text style={styles.modalGpsText}>Đang lấy vị trí GPS từ thiết bị...</Text>
+                  </View>
                 ) : (
                   <>
                     <Text style={styles.modalGpsIcon}>🎯</Text>
-                    <Text style={styles.modalGpsText}>Bật vị trí trên máy lấy địa chỉ tự động</Text>
+                    <Text style={styles.modalGpsText}>Bật GPS lấy vị trí hiện tại chính xác</Text>
                   </>
                 )}
               </TouchableOpacity>
+
+              {/* Thông báo hướng dẫn bật dịch vụ vị trí */}
+              <View style={styles.gpsTipBox}>
+                <Text style={styles.gpsTipText}>
+                  💡 <Text style={{ fontWeight: 'bold' }}>Lưu ý:</Text> Cần <Text style={{ fontWeight: 'bold' }}>BẬT Vị trí (GPS)</Text> trên điện thoại/máy tính và bấm <Text style={{ fontWeight: 'bold' }}>"Cho phép"</Text> khi trình duyệt hỏi để xác định địa chỉ chính xác.
+                </Text>
+              </View>
 
               {/* Loại địa chỉ */}
               <Text style={styles.formLabel}>Loại địa chỉ:</Text>
@@ -730,9 +829,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#E0F2F1',
     borderRadius: 14,
     paddingVertical: 12,
-    marginBottom: 16,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: '#80CBC4',
+  },
+  modalGpsBtnLoading: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#CBD5E1',
+  },
+  gpsTipBox: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  gpsTipText: {
+    fontSize: 12,
+    color: '#92400E',
+    lineHeight: 17,
   },
   modalGpsIcon: {
     fontSize: 16,
