@@ -138,7 +138,7 @@ export default function AddressScreen({ navigation, route }) {
   };
 
   // HÀM REVERSE GEOCODING TỪ TỌA ĐỘ GPS THỰC TẾ SANG ĐỊA CHỈ TIẾNG VIỆT CHÍNH XÁC
-  const reverseGeocodeCoords = async (lat, lon) => {
+  const reverseGeocodeCoords = async (lat, lon, extraStreet = '') => {
     try {
       const bdcRes = await fetch(
         `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=vi`
@@ -148,16 +148,7 @@ export default function AddressScreen({ navigation, route }) {
         const admin = data.localityInfo?.administrative || [];
         const info = data.localityInfo?.informative || [];
 
-        // 1. Xác định Tỉnh / Thành phố chính xác (Bình Dương, TP. Hồ Chí Minh, Đồng Nai...)
-        let province = '';
-        const provinceObj = [...info, ...admin].find(i => i.isoCode && i.isoCode.startsWith('VN-') && i.isoCode !== 'VN');
-        if (provinceObj) {
-          province = provinceObj.name;
-        } else {
-          province = data.principalSubdivision || data.city || '';
-        }
-
-        // 2. Xác định Quận / Huyện / Thành phố trực thuộc tỉnh
+        // 1. Xác định Quận / Huyện / Thành phố trực thuộc
         let district = '';
         const districtObj = [...info, ...admin].find(i => {
           if (!i.name) return false;
@@ -166,6 +157,7 @@ export default function AddressScreen({ navigation, route }) {
             n.includes('quận') || 
             n.includes('huyện') || 
             n.includes('thị xã') || 
+            n.includes('thủ đức') || 
             n.includes('thủ dầu một') || 
             n.includes('thu dau mot') || 
             n.includes('dĩ an') || 
@@ -190,6 +182,21 @@ export default function AddressScreen({ navigation, route }) {
           else if (dLower === 'tan uyen') district = 'TX. Tân Uyên';
         }
 
+        // 2. Xác định Tỉnh / Thành phố chính xác (Bình Dương, TP. Hồ Chí Minh, Đồng Nai...)
+        let province = '';
+        const dLow = (district || '').toLowerCase();
+        const hcmDistricts = ['thủ đức', 'quận 1', 'quận 2', 'quận 3', 'quận 4', 'quận 5', 'quận 6', 'quận 7', 'quận 8', 'quận 9', 'quận 10', 'quận 11', 'quận 12', 'bình thạnh', 'gò vấp', 'tân bình', 'tân phú', 'phú nhuận', 'bình tân', 'nhà bè', 'hóc môn', 'củ chi', 'cần giờ', 'bình chánh'];
+        const bdDistricts = ['thủ dầu một', 'dĩ an', 'thuận an', 'bến cát', 'tân uyên', 'bàu bàng', 'bắc tân uyên', 'dầu tiếng', 'phú giáo', 'bình dương'];
+
+        if (hcmDistricts.some(d => dLow.includes(d))) {
+          province = 'TP. Hồ Chí Minh';
+        } else if (bdDistricts.some(d => dLow.includes(d))) {
+          province = 'Bình Dương';
+        } else {
+          const provinceObj = [...info, ...admin].find(i => i.isoCode && i.isoCode.startsWith('VN-') && i.isoCode !== 'VN');
+          province = provinceObj ? provinceObj.name : (data.principalSubdivision || data.city || '');
+        }
+
         // 3. Xác định Phường / Xã
         let ward = '';
         const wardObj = admin.find(i => 
@@ -210,13 +217,17 @@ export default function AddressScreen({ navigation, route }) {
         }
 
         const parts = [];
-        if (ward) parts.push(ward);
-        if (district && district !== ward && district !== province) parts.push(district);
+        // Lọc bỏ Plus Code Google (như WJHH+RMG)
+        if (extraStreet && !extraStreet.includes('+') && !/^[A-Z0-9]{4,8}\+[A-Z0-9]{2,4}$/i.test(extraStreet.trim())) {
+          parts.push(extraStreet.trim());
+        }
+        if (ward && !parts.includes(ward)) parts.push(ward);
+        if (district && district !== ward && district !== province && !parts.includes(district)) parts.push(district);
         if (province) {
           const pStr = (province.includes('Tỉnh') || province.includes('Thành phố') || province.includes('TP.')) 
             ? province 
             : (province === 'Hồ Chí Minh' ? 'TP. Hồ Chí Minh' : 'Tỉnh ' + province);
-          parts.push(pStr);
+          if (!parts.includes(pStr)) parts.push(pStr);
         }
 
         if (parts.length > 0) {
@@ -270,21 +281,17 @@ export default function AddressScreen({ navigation, route }) {
 
         const { latitude, longitude, accuracy } = position.coords;
 
-        // 4. Dịch ngược tọa độ sang địa chỉ tiếng Việt từ thiết bị hoặc qua API bản đồ
-        let detectedAddress = '';
+        // 4. Lấy tên đường thật từ thiết bị (LOẠI BỎ TRIỆT ĐỂ PLUS CODE NHƯ WJHH+RMG)
+        let realStreet = '';
         try {
           if (Location.reverseGeocodeAsync) {
             const geoList = await Location.reverseGeocodeAsync({ latitude, longitude });
             if (geoList && geoList.length > 0) {
               const g = geoList[0];
-              const parts = [];
-              const street = [g.streetNumber, g.street || g.name].filter(Boolean).join(' ');
-              if (street) parts.push(street);
-              if (g.district || g.subregion) parts.push(g.district || g.subregion);
-              if (g.city || g.region) parts.push(g.city || g.region);
-              if (g.country) parts.push(g.country);
-              if (parts.length > 0) {
-                detectedAddress = parts.join(', ');
+              const candidate = (g.street || '').trim();
+              // Chỉ lấy nếu không phải là mã Plus Code (chứa dấu +)
+              if (candidate && !candidate.includes('+') && !/^[A-Z0-9]{4,8}\+[A-Z0-9]{2,4}$/i.test(candidate)) {
+                realStreet = [g.streetNumber, candidate].filter(Boolean).join(' ');
               }
             }
           }
@@ -292,10 +299,8 @@ export default function AddressScreen({ navigation, route }) {
           console.log('Chuyển sang geocode dự phòng:', nativeGeoErr.message);
         }
 
-        // Nếu geocode của máy chưa đủ, dùng bộ reverseGeocodeCoords tiếng Việt chính xác
-        if (!detectedAddress || detectedAddress.length < 5) {
-          detectedAddress = await reverseGeocodeCoords(latitude, longitude);
-        }
+        // 5. Kết hợp với bộ bóc tách Phường / Quận / Tỉnh tiếng Việt chuẩn
+        const detectedAddress = await reverseGeocodeCoords(latitude, longitude, realStreet);
 
         setAddressText(detectedAddress);
         Alert.alert(
