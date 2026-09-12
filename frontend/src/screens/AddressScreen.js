@@ -13,6 +13,7 @@ import {
   Platform 
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 
 const INITIAL_ADDRESSES = [
   {
@@ -194,84 +195,147 @@ export default function AddressScreen({ navigation, route }) {
     return `Tọa độ GPS thực tế (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
   };
 
-  // LẤY VỊ TRÍ HIỆN TẠI QUA GPS ĐIỆN THOẠI / TRÌNH DUYỆT (YÊU CẦU BẬT ĐỊNH VỊ)
+  // LẤY VỊ TRÍ HIỆN TẠI QUA GPS ĐIỆN THOẠI (EXPO-LOCATION NATIVE) & WEB TRÌNH DUYỆT
   const handleGetGPSLocation = async () => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      Alert.alert(
-        'Không hỗ trợ định vị ⚠️',
-        'Thiết bị hoặc trình duyệt của bạn không hỗ trợ tính năng định vị vị trí GPS.'
-      );
-      return;
-    }
-
-    // Kiểm tra quyền nếu Permissions API có sẵn
-    if (navigator.permissions && navigator.permissions.query) {
-      try {
-        const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
-        if (permissionStatus.state === 'denied') {
-          Alert.alert(
-            'Quyền vị trí đang bị chặn 🔒',
-            'Trình duyệt/thiết bị của bạn đang CHẶN quyền truy cập vị trí của ứng dụng.\n\nHướng dẫn bật:\n1. Bấm vào biểu tượng ổ khóa 🔒 hoặc cài đặt trên thanh địa chỉ URL.\n2. Chọn "Cho phép truy cập vị trí" (Allow Location).\n3. Bật dịch vụ định vị (GPS) trong Cài đặt của máy rồi nhấn lại nút này.'
-          );
-          return;
-        }
-      } catch (e) {
-        // Một số trình duyệt không hỗ trợ query permissions, bỏ qua để tiếp tục
-      }
-    }
-
     setLocating(true);
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-        try {
-          const accurateAddress = await reverseGeocodeCoords(latitude, longitude);
-          setAddressText(accurateAddress);
+    // ========================================================
+    // CÁCH 1: DÙNG EXPO-LOCATION GỐC (DÀNH CHO ĐIỆN THOẠI MOBILE ANDROID / IOS)
+    // ========================================================
+    try {
+      if (Location && Location.requestForegroundPermissionsAsync) {
+        // 1. Kiểm tra xem điện thoại đã bật dịch vụ vị trí (GPS phần cứng) chưa
+        if (Location.hasServicesEnabledAsync) {
+          const isGpsOn = await Location.hasServicesEnabledAsync();
+          if (!isGpsOn) {
+            Alert.alert(
+              'Chưa bật Dịch vụ Vị trí (GPS) 📡',
+              'Dịch vụ định vị GPS trên điện thoại của bạn hiện đang TẮT.\n\n👉 Vui lòng vuốt thanh cài đặt nhanh của điện thoại xuống và BẬT "Vị trí" (Location / GPS), sau đó nhấn lại nút này để lấy vị trí chính xác!'
+            );
+            setLocating(false);
+            return;
+          }
+        }
+
+        // 2. Yêu cầu cấp quyền truy cập vị trí trên điện thoại (Hệ điều hành Android / iOS)
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
           Alert.alert(
-            'Đã định vị thành công 🎯',
-            `Đã lấy được địa chỉ GPS chính xác:\n📍 ${accurateAddress}\n\n(Độ chính xác GPS: ~${Math.round(accuracy || 10)}m)\nBạn có thể kiểm tra và bổ sung số nhà/số phòng nếu cần.`,
-            [{ text: 'Đồng ý' }]
+            'Chưa cấp quyền Vị trí trên điện thoại 🔒',
+            'Ứng dụng cần bạn cho phép truy cập vị trí để tự động lấy địa chỉ nhận hàng.\n\n👉 Vui lòng vào Cài đặt điện thoại -> Ứng dụng -> Fast Food -> Quyền -> Cho phép "Vị trí" (Location: Allow) rồi thử lại!'
           );
-        } catch (err) {
-          const coordText = `Vị trí GPS (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`;
-          setAddressText(coordText);
-          Alert.alert('Đã nhận diện tọa độ GPS 🎯', coordText);
-        } finally {
           setLocating(false);
+          return;
         }
-      },
-      (error) => {
+
+        // 3. Lấy tọa độ GPS độ chính xác cao nhất từ phần cứng điện thoại
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Highest,
+        });
+
+        const { latitude, longitude, accuracy } = position.coords;
+
+        // 4. Dịch ngược tọa độ sang địa chỉ tiếng Việt từ thiết bị hoặc qua API bản đồ
+        let detectedAddress = '';
+        try {
+          if (Location.reverseGeocodeAsync) {
+            const geoList = await Location.reverseGeocodeAsync({ latitude, longitude });
+            if (geoList && geoList.length > 0) {
+              const g = geoList[0];
+              const parts = [];
+              const street = [g.streetNumber, g.street || g.name].filter(Boolean).join(' ');
+              if (street) parts.push(street);
+              if (g.district || g.subregion) parts.push(g.district || g.subregion);
+              if (g.city || g.region) parts.push(g.city || g.region);
+              if (g.country) parts.push(g.country);
+              if (parts.length > 0) {
+                detectedAddress = parts.join(', ');
+              }
+            }
+          }
+        } catch (nativeGeoErr) {
+          console.log('Chuyển sang geocode dự phòng:', nativeGeoErr.message);
+        }
+
+        // Nếu geocode của máy chưa đủ, dùng bộ reverseGeocodeCoords tiếng Việt chính xác
+        if (!detectedAddress || detectedAddress.length < 5) {
+          detectedAddress = await reverseGeocodeCoords(latitude, longitude);
+        }
+
+        setAddressText(detectedAddress);
+        Alert.alert(
+          'Đã định vị thành công 🎯',
+          `Đã lấy được địa chỉ GPS chính xác trên điện thoại:\n📍 ${detectedAddress}\n\n(Độ chính xác GPS: ~${Math.round(accuracy || 5)}m)\nBạn có thể bổ sung số nhà/số phòng nếu cần.`,
+          [{ text: 'Sử dụng địa chỉ này' }]
+        );
         setLocating(false);
-        let title = 'Yêu cầu bật Dịch vụ Vị trí ⚠️';
-        let message = 'Không thể xác định vị trí hiện tại.';
-
-        switch (error.code) {
-          case 1: // PERMISSION_DENIED
-            title = 'Chưa cấp quyền Vị trí 🔒';
-            message = 'Bạn cần cho phép ứng dụng truy cập vị trí để tự động lấy địa chỉ chính xác.\n\n👉 Cách bật:\n1. Nhấn vào biểu tượng 🔒 hoặc ⚙️ cạnh thanh địa chỉ (URL) trên trình duyệt.\n2. Chuyển quyền "Vị trí" (Location) sang "Cho phép" (Allow).\n3. Bật GPS trên máy và nhấn lại nút Lấy vị trí.';
-            break;
-          case 2: // POSITION_UNAVAILABLE
-            title = 'Chưa bật Dịch vụ Định vị (GPS) 📡';
-            message = 'Dịch vụ định vị GPS trên điện thoại hoặc máy tính của bạn hiện đang TẮT.\n\n👉 Cách bật:\n1. Vuốt thanh cài đặt nhanh của điện thoại xuống và BẬT "Vị trí" (Location / GPS).\n2. Nếu dùng máy tính: Vào Cài đặt Windows -> Privacy & security -> Location -> Bật "Location services".\n3. Sau khi bật, bấm lại nút này để lấy vị trí chính xác.';
-            break;
-          case 3: // TIMEOUT
-            title = 'Hết thời gian tìm kiếm GPS ⏳';
-            message = 'Thiết bị mất quá nhiều thời gian để bắt sóng GPS. Vui lòng kiểm tra lại kết nối mạng và đảm bảo đã BẬT GPS ngoài trời/nơi thoáng, sau đó thử lại.';
-            break;
-          default:
-            message = error.message || 'Không thể kết nối đến dịch vụ định vị GPS.';
-            break;
-        }
-
-        Alert.alert(title, message, [{ text: 'Đã hiểu' }]);
-      },
-      { 
-        enableHighAccuracy: true, 
-        timeout: 15000, 
-        maximumAge: 0 // Bắt buộc lấy tọa độ tươi mới nhất từ vệ tinh/mạng, không dùng cache cũ
+        return;
       }
-    );
+    } catch (expoErr) {
+      console.log('Expo-location thử fallback browser:', expoErr.message);
+    }
+
+    // ========================================================
+    // CÁCH 2: DÙNG NAVIGATOR.GEOLOCATION (DÀNH CHO TRÌNH DUYỆT WEB HOẶC GIẢ LẬP)
+    // ========================================================
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          try {
+            const accurateAddress = await reverseGeocodeCoords(latitude, longitude);
+            setAddressText(accurateAddress);
+            Alert.alert(
+              'Đã định vị thành công 🎯',
+              `Đã lấy được địa chỉ GPS chính xác:\n📍 ${accurateAddress}\n\n(Độ chính xác: ~${Math.round(accuracy || 10)}m)`,
+              [{ text: 'Đồng ý' }]
+            );
+          } catch (err) {
+            const coordText = `Vị trí GPS (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`;
+            setAddressText(coordText);
+            Alert.alert('Đã nhận diện tọa độ GPS 🎯', coordText);
+          } finally {
+            setLocating(false);
+          }
+        },
+        (error) => {
+          setLocating(false);
+          let title = 'Yêu cầu bật Dịch vụ Vị trí ⚠️';
+          let message = 'Không thể xác định vị trí hiện tại.';
+
+          switch (error.code) {
+            case 1: // PERMISSION_DENIED
+              title = 'Chưa cấp quyền Vị trí 🔒';
+              message = 'Bạn cần cho phép ứng dụng truy cập vị trí để tự động lấy địa chỉ chính xác.\n\n👉 Cách bật:\n1. Nhấn vào biểu tượng 🔒 hoặc ⚙️ cạnh thanh địa chỉ (URL) trên trình duyệt.\n2. Chuyển quyền "Vị trí" (Location) sang "Cho phép" (Allow).\n3. Bật GPS trên máy và nhấn lại nút Lấy vị trí.';
+              break;
+            case 2: // POSITION_UNAVAILABLE
+              title = 'Chưa bật Dịch vụ Định vị (GPS) 📡';
+              message = 'Dịch vụ định vị GPS trên điện thoại hoặc máy tính của bạn hiện đang TẮT.\n\n👉 Cách bật:\n1. Vuốt thanh cài đặt nhanh của điện thoại xuống và BẬT "Vị trí" (Location / GPS).\n2. Nếu dùng máy tính: Vào Cài đặt Windows -> Privacy & security -> Location -> Bật "Location services".\n3. Sau khi bật, bấm lại nút này để lấy vị trí chính xác.';
+              break;
+            case 3: // TIMEOUT
+              title = 'Hết thời gian tìm kiếm GPS ⏳';
+              message = 'Thiết bị mất quá nhiều thời gian để bắt sóng GPS. Vui lòng kiểm tra lại kết nối mạng và đảm bảo đã BẬT GPS ngoài trời/nơi thoáng, sau đó thử lại.';
+              break;
+            default:
+              message = error.message || 'Không thể kết nối đến dịch vụ định vị GPS.';
+              break;
+          }
+
+          Alert.alert(title, message, [{ text: 'Đã hiểu' }]);
+        },
+        { 
+          enableHighAccuracy: true, 
+          timeout: 15000, 
+          maximumAge: 0 
+        }
+      );
+    } else {
+      setLocating(false);
+      Alert.alert(
+        'Không thể truy cập GPS ⚠️',
+        'Thiết bị chưa hỗ trợ truy cập GPS tự động. Vui lòng nhập địa chỉ trực tiếp vào ô bên dưới.'
+      );
+    }
   };
 
   const openAddModal = () => {
