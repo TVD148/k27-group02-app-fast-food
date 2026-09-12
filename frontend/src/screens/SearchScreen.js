@@ -23,7 +23,7 @@ const POPULAR_KEYWORDS = [
   'Burger Bò', 'Gà Rán', 'Khoai Tây', 'Pizza', 'Phô Mai', 'Trà Đào'
 ];
 
-export default function SearchScreen({ navigation }) {
+export default function SearchScreen({ navigation, route }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [recentSearches, setRecentSearches] = useState(['Burger Bò', 'Gà Rán Giòn', 'Khoai Tây Chiên']);
   const [searchResults, setSearchResults] = useState([]);
@@ -32,7 +32,11 @@ export default function SearchScreen({ navigation }) {
 
   useEffect(() => {
     loadRecentSearches();
-  }, []);
+    if (route?.params?.query) {
+      setSearchQuery(route.params.query);
+      executeSearch(route.params.query);
+    }
+  }, [route?.params?.query]);
 
   const loadRecentSearches = async () => {
     try {
@@ -150,6 +154,7 @@ export default function SearchScreen({ navigation }) {
               placeholder="Tìm theo tên món ăn, danh mục..."
               placeholderTextColor="#94A3B8"
               value={searchQuery}
+              autoFocus={true}
               onChangeText={(text) => {
                 setSearchQuery(text);
                 if (text === '') handleClearText();

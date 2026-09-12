@@ -247,58 +247,50 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* 1. Teal Curved Header theo đúng Mockup Design */}
-        <View style={styles.tealHeader}>
-          <View style={styles.topRow}>
-            <TouchableOpacity 
-              style={styles.locationContainer} 
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('Address')}
-            >
-              <Text style={styles.locationPin}>📍</Text>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={styles.locationTitle}>
-                    Giao tới • {defaultAddress?.label || 'Địa chỉ mặc định'}
-                  </Text>
-                  <Text style={styles.changeAddressTag}>Đổi ▾</Text>
-                </View>
-                <Text style={styles.locationAddress} numberOfLines={1}>
-                  {defaultAddress ? defaultAddress.address : (userInfo ? `${userInfo.ho_ten} (${userInfo.so_dien_thoai || 'Fast Food'})` : 'Khách ghé thăm (Chọn địa chỉ)')}
+      {/* 1. Teal Curved Header Ghim Cố Định Trên Cùng (Sticky) - Khi lướt trang vẫn luôn hiển thị */}
+      <View style={styles.tealHeader}>
+        <View style={styles.topRow}>
+          <TouchableOpacity 
+            style={styles.locationContainer} 
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('Address')}
+          >
+            <Text style={styles.locationPin}>📍</Text>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={styles.locationTitle}>
+                  Giao tới • {defaultAddress?.label || 'Địa chỉ mặc định'}
                 </Text>
+                <Text style={styles.changeAddressTag}>Đổi ▾</Text>
               </View>
-            </TouchableOpacity>
-
-            <View style={styles.headerRightActions}>
-              <TouchableOpacity 
-                style={styles.headerBadgeBtn}
-                onPress={() => navigation.navigate('OrdersList')}
-              >
-                <Text style={styles.headerBadgeIcon}>📋</Text>
-              </TouchableOpacity>
+              <Text style={styles.locationAddress} numberOfLines={1}>
+                {defaultAddress ? defaultAddress.address : (userInfo ? `${userInfo.ho_ten} (${userInfo.so_dien_thoai || 'Fast Food'})` : 'Khách ghé thăm (Chọn địa chỉ)')}
+              </Text>
             </View>
-          </View>
+          </TouchableOpacity>
 
-          {/* Search Bar pill trắng nổi bật */}
-          <View style={styles.searchBarContainer}>
-            <Text style={styles.searchIcon}>🔍</Text>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search for food & restaurants..."
-              placeholderTextColor="#9E9E9E"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              onSubmitEditing={handleSearch}
-            />
-            {searchQuery !== '' && (
-              <TouchableOpacity onPress={() => { setSearchQuery(''); loadFoodsData(selectedCategory, ''); }}>
-                <Text style={styles.clearSearchText}>✕</Text>
-              </TouchableOpacity>
-            )}
+          <View style={styles.headerRightActions}>
+            <TouchableOpacity 
+              style={styles.headerBadgeBtn}
+              onPress={() => navigation.navigate('OrdersList')}
+            >
+              <Text style={styles.headerBadgeIcon}>📋</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
+        {/* Thanh tìm kiếm pill trắng ghim cố định - Bấm vào chuyển sang phần tìm kiếm luôn */}
+        <TouchableOpacity 
+          style={styles.searchBarContainer}
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate('Search')}
+        >
+          <Text style={styles.searchIcon}>🔍</Text>
+          <Text style={styles.searchPlaceholderText}>Tìm món ăn, trà sữa, gà rán, pizza...</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* 2. Banner khuyến mãi cam nổi bật (Get $5 off / Code FAST30) */}
         <View style={styles.bannerContainer}>
           <View style={styles.bannerLeft}>
@@ -401,7 +393,13 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 24,
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 20,
+    paddingBottom: 18,
+    zIndex: 100,
+    elevation: 6,
+    shadowColor: '#004D40',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
   },
   topRow: {
     flexDirection: 'row',
@@ -485,7 +483,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -495,6 +493,11 @@ const styles = StyleSheet.create({
   searchIcon: {
     fontSize: 16,
     marginRight: 8,
+  },
+  searchPlaceholderText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#94A3B8',
   },
   searchInput: {
     flex: 1,
