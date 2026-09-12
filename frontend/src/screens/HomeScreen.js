@@ -277,23 +277,6 @@ export default function HomeScreen({ navigation }) {
               >
                 <Text style={styles.headerBadgeIcon}>📋</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.headerBadgeBtn}
-                onPress={() => navigation.navigate('Cart')}
-              >
-                <Text style={styles.headerBadgeIcon}>🛒</Text>
-              </TouchableOpacity>
-
-              {userInfo ? (
-                <TouchableOpacity style={styles.logoutHeaderBtn} onPress={handleLogout}>
-                  <Text style={styles.logoutHeaderText}>Thoát</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={styles.loginHeaderBtn} onPress={() => navigation.navigate('Login')}>
-                  <Text style={styles.loginHeaderText}>Đăng nhập</Text>
-                </TouchableOpacity>
-              )}
             </View>
           </View>
 
