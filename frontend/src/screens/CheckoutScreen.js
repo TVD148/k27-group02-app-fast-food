@@ -96,8 +96,45 @@ export default function CheckoutScreen({ route, navigation }) {
   const rawSubtotal = cartData?.tong_tien || (initialGrandTotal ? initialGrandTotal - 5000 : 0);
   // Quy tắc tính tiền ship mới: dưới 1km là 5.000đ, từ 1km trở đi cứ 1km thêm 5k, 100m thêm 500đ
   const shippingFee = calculateShippingFee(distanceKm);
-  const discountAmount = appliedVoucher ? parseFloat(appliedVoucher.so_tien_giam) : 0;
-  const grandTotal = Math.max(0, rawSubtotal + shippingFee - discountAmount);
+
+  // Phân loại voucher: Miễn phí vận chuyển (Freeship) hay Giảm giá món ăn
+  const isFreeshipVoucher = appliedVoucher ? (
+    appliedVoucher.loai_ap_dung === 'phi_ship' ||
+    (appliedVoucher.ma_code && appliedVoucher.ma_code.toUpperCase().includes('SHIP')) ||
+    (appliedVoucher.ten_voucher && appliedVoucher.ten_voucher.toLowerCase().includes('vận chuyển'))
+  ) : false;
+
+  let actualDiscount = 0;
+  if (appliedVoucher) {
+    if (isFreeshipVoucher) {
+      // FREESHIP: Chỉ được giảm tối đa bằng đúng tiền ship, tuyệt đối không trừ qua tiền món ăn!
+      if (appliedVoucher.loai_giam_gia === 'phan_tram') {
+        let disc = (shippingFee * parseFloat(appliedVoucher.gia_tri_giam)) / 100;
+        if (appliedVoucher.giam_toi_da && parseFloat(appliedVoucher.giam_toi_da) > 0) {
+          disc = Math.min(disc, parseFloat(appliedVoucher.giam_toi_da));
+        }
+        actualDiscount = Math.min(Math.round(disc), shippingFee);
+      } else {
+        actualDiscount = Math.min(parseFloat(appliedVoucher.gia_tri_giam), shippingFee);
+      }
+    } else {
+      // GIẢM MÓN: Chỉ được giảm tối đa bằng đúng tiền món ăn!
+      if (appliedVoucher.loai_giam_gia === 'phan_tram') {
+        let disc = (rawSubtotal * parseFloat(appliedVoucher.gia_tri_giam)) / 100;
+        if (appliedVoucher.giam_toi_da && parseFloat(appliedVoucher.giam_toi_da) > 0) {
+          disc = Math.min(disc, parseFloat(appliedVoucher.giam_toi_da));
+        }
+        actualDiscount = Math.min(Math.round(disc), rawSubtotal);
+      } else {
+        actualDiscount = Math.min(parseFloat(appliedVoucher.gia_tri_giam), rawSubtotal);
+      }
+    }
+  }
+
+  // Tiền thanh toán cuối cùng
+  const grandTotal = isFreeshipVoucher
+    ? rawSubtotal + Math.max(0, shippingFee - actualDiscount)
+    : Math.max(0, rawSubtotal - actualDiscount) + shippingFee;
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -210,7 +247,7 @@ export default function CheckoutScreen({ route, navigation }) {
 
     setApplyingVoucher(true);
     try {
-      const response = await applyVoucher(targetCode, rawSubtotal);
+      const response = await applyVoucher(targetCode, rawSubtotal, shippingFee);
       if (response.success) {
         setAppliedVoucher(response.data);
         setVoucherCode(response.data.ma_code);
@@ -383,19 +420,29 @@ export default function CheckoutScreen({ route, navigation }) {
               <View style={styles.suggestVouchersContainer}>
                 <Text style={styles.suggestTitle}>Gợi ý mã ưu đãi hot dành cho bạn:</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.voucherScrollView}>
-                  {availableVouchers.map((v) => (
-                    <TouchableOpacity 
-                      key={v.ma_voucher}
-                      style={styles.voucherChip}
-                      onPress={() => {
-                        setVoucherCode(v.ma_code);
-                        handleApplyVoucher(v.ma_code);
-                      }}
-                    >
-                      <Text style={styles.voucherChipCode}>{v.ma_code}</Text>
-                      <Text style={styles.voucherChipDesc}>{v.ten_voucher}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  {availableVouchers.map((v) => {
+                    const isFs = v.loai_ap_dung === 'phi_ship' || 
+                                 (v.ma_code && v.ma_code.toUpperCase().includes('SHIP')) || 
+                                 (v.ten_voucher && v.ten_voucher.toLowerCase().includes('vận chuyển'));
+                    return (
+                      <TouchableOpacity 
+                        key={v.ma_voucher}
+                        style={styles.voucherChip}
+                        onPress={() => {
+                          setVoucherCode(v.ma_code);
+                          handleApplyVoucher(v.ma_code);
+                        }}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Text style={styles.voucherChipCode}>{v.ma_code}</Text>
+                          <Text style={[styles.voucherTypeBadge, isFs ? styles.voucherTypeFs : styles.voucherTypeFood]}>
+                            {isFs ? '🚚 Freeship' : '🍔 Giảm món'}
+                          </Text>
+                        </View>
+                        <Text style={styles.voucherChipDesc}>{v.ten_voucher}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </ScrollView>
               </View>
             )}
@@ -532,8 +579,13 @@ export default function CheckoutScreen({ route, navigation }) {
 
             {appliedVoucher && (
               <View style={styles.priceRow}>
-                <Text style={styles.discountLabel}>Giảm giá Voucher ({appliedVoucher.ma_code}):</Text>
-                <Text style={styles.discountValue}>-{discountAmount.toLocaleString('vi-VN')} đ</Text>
+                <Text style={styles.discountLabel}>
+                  {isFreeshipVoucher ? '🚚 Giảm phí vận chuyển' : '🍔 Giảm giá món ăn'} ({appliedVoucher.ma_code}):
+                </Text>
+                <Text style={styles.discountValue}>
+                  -{actualDiscount.toLocaleString('vi-VN')} đ
+                  {isFreeshipVoucher && parseFloat(appliedVoucher.gia_tri_giam) > shippingFee ? ` (Tối đa phí ship)` : ''}
+                </Text>
               </View>
             )}
 
@@ -683,6 +735,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#666',
     marginTop: 2,
+  },
+  voucherTypeBadge: {
+    fontSize: 10,
+    fontWeight: '700',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  voucherTypeFs: {
+    backgroundColor: '#E0F2FE',
+    color: '#0369A1',
+  },
+  voucherTypeFood: {
+    backgroundColor: '#FEF3C7',
+    color: '#B45309',
   },
   label: {
     fontSize: 13,

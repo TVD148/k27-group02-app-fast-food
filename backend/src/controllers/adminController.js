@@ -340,6 +340,7 @@ const createVoucher = async (req, res) => {
       ten_voucher, 
       mo_ta = '', 
       loai_giam_gia = 'so_tien', 
+      loai_ap_dung = 'don_hang',
       gia_tri_giam = 0, 
       giam_toi_da = 0, 
       don_hang_toi_thieu = 0, 
@@ -347,28 +348,54 @@ const createVoucher = async (req, res) => {
       ngay_ket_thuc = '2026-12-31 23:59:59'
     } = req.body;
 
-    if (!ma_code || !ten_voucher || !gia_tri_giam) {
-      return res.status(400).json({ success: false, message: 'Mã code, Tên voucher và Giá trị giảm là bắt buộc!' });
+    if (!ma_code || !gia_tri_giam) {
+      return res.status(400).json({ success: false, message: 'Mã code và Giá trị giảm là bắt buộc!' });
+    }
+
+    const cleanCode = ma_code.toUpperCase().trim();
+    const cleanLoaiApDung = loai_ap_dung === 'phi_ship' ? 'phi_ship' : 'don_hang';
+    const cleanLoaiGiamGia = loai_giam_gia === 'phan_tram' ? 'phan_tram' : 'so_tien';
+    const numGiaTri = parseFloat(gia_tri_giam);
+
+    if (isNaN(numGiaTri) || numGiaTri <= 0) {
+      return res.status(400).json({ success: false, message: 'Giá trị giảm phải là số lớn hơn 0!' });
+    }
+
+    if (cleanLoaiGiamGia === 'phan_tram' && (numGiaTri <= 0 || numGiaTri > 100)) {
+      return res.status(400).json({ success: false, message: 'Mức giảm phần trăm phải nằm trong khoảng từ 1% đến 100%!' });
     }
 
     // Kiểm tra trùng mã code
-    const [existing] = await db.query('SELECT ma_voucher FROM ma_giam_gia WHERE ma_code = ?', [ma_code.toUpperCase().trim()]);
+    const [existing] = await db.query('SELECT ma_voucher FROM ma_giam_gia WHERE ma_code = ?', [cleanCode]);
     if (existing.length > 0) {
       return res.status(400).json({ success: false, message: 'Mã voucher này đã tồn tại trên hệ thống!' });
     }
 
+    const finalTenVoucher = (ten_voucher && ten_voucher.trim()) 
+      ? ten_voucher.trim() 
+      : (cleanLoaiApDung === 'phi_ship' 
+          ? `Freeship ${cleanLoaiGiamGia === 'phan_tram' ? numGiaTri + '%' : numGiaTri.toLocaleString('vi-VN') + 'đ'}`
+          : `Giảm giá ${cleanLoaiGiamGia === 'phan_tram' ? numGiaTri + '%' : numGiaTri.toLocaleString('vi-VN') + 'đ'}`);
+
+    const finalMoTa = (mo_ta && mo_ta.trim())
+      ? mo_ta.trim()
+      : (cleanLoaiApDung === 'phi_ship'
+          ? `Giảm ${cleanLoaiGiamGia === 'phan_tram' ? numGiaTri + '%' : numGiaTri.toLocaleString('vi-VN') + ' VNĐ'} phí vận chuyển cho đơn hàng từ ${parseFloat(don_hang_toi_thieu || 0).toLocaleString('vi-VN')} VNĐ`
+          : `Giảm ${cleanLoaiGiamGia === 'phan_tram' ? numGiaTri + '%' : numGiaTri.toLocaleString('vi-VN') + ' VNĐ'} tiền món ăn cho đơn hàng từ ${parseFloat(don_hang_toi_thieu || 0).toLocaleString('vi-VN')} VNĐ`);
+
     const [result] = await db.query(`
       INSERT INTO ma_giam_gia (
-        ma_code, ten_voucher, mo_ta, loai_giam_gia, gia_tri_giam, giam_toi_da, 
+        ma_code, ten_voucher, mo_ta, loai_giam_gia, loai_ap_dung, gia_tri_giam, giam_toi_da, 
         don_hang_toi_thieu, so_luong_phat_hanh, so_luong_da_dung, ngay_bat_dau, ngay_ket_thuc, trang_thai
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NOW(), ?, 'hoat_dong')
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW(), ?, 'hoat_dong')
     `, [
-      ma_code.toUpperCase().trim(),
-      ten_voucher.trim(),
-      mo_ta,
-      loai_giam_gia,
-      parseFloat(gia_tri_giam),
-      parseFloat(giam_toi_da || gia_tri_giam),
+      cleanCode,
+      finalTenVoucher,
+      finalMoTa,
+      cleanLoaiGiamGia,
+      cleanLoaiApDung,
+      numGiaTri,
+      parseFloat(giam_toi_da || (cleanLoaiGiamGia === 'so_tien' ? numGiaTri : 0)),
       parseFloat(don_hang_toi_thieu || 0),
       parseInt(so_luong_phat_hanh || 100),
       ngay_ket_thuc
@@ -376,7 +403,7 @@ const createVoucher = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: `Đã tạo mã giảm giá '${ma_code.toUpperCase().trim()}' thành công!`,
+      message: `Đã tạo mã giảm giá '${cleanCode}' (${cleanLoaiApDung === 'phi_ship' ? 'Giảm phí ship' : 'Giảm món ăn'}) thành công!`,
       data: { ma_voucher: result.insertId }
     });
   } catch (error) {

@@ -152,13 +152,37 @@ const createOrder = async (req, res) => {
         const v = vouchers[0];
         if (tongTienHang >= parseFloat(v.don_hang_toi_thieu || 0) && v.so_luong_da_dung < v.so_luong_phat_hanh) {
           maVoucherId = v.ma_voucher;
-          if (v.loai_giam_gia === 'phan_tram') {
-            soTienGiam = (tongTienHang * parseFloat(v.gia_tri_giam)) / 100;
-            if (v.giam_toi_da) soTienGiam = Math.min(soTienGiam, parseFloat(v.giam_toi_da));
+          const isFreeship = v.loai_ap_dung === 'phi_ship' || 
+                             cleanCode.includes('SHIP') || 
+                             (v.ten_voucher && v.ten_voucher.toLowerCase().includes('vận chuyển'));
+
+          if (isFreeship) {
+            // LOẠI 1: MIỄN / GIẢM PHÍ VẬN CHUYỂN
+            // QUY TẮC: Chỉ được giảm tối đa bằng đúng tiền ship thực tế, KHÔNG ĐƯỢC GIẢM QUA TIỀN MÓN ĂN!
+            if (phiGiaoHang > 0) {
+              if (v.loai_giam_gia === 'phan_tram') {
+                soTienGiam = (phiGiaoHang * parseFloat(v.gia_tri_giam)) / 100;
+                if (v.giam_toi_da) soTienGiam = Math.min(soTienGiam, parseFloat(v.giam_toi_da));
+              } else {
+                soTienGiam = parseFloat(v.gia_tri_giam);
+              }
+              // Giảm tối đa bằng đúng phí ship, không bao giờ trừ quá phí ship
+              soTienGiam = Math.min(Math.round(soTienGiam), phiGiaoHang);
+            } else {
+              soTienGiam = 0;
+            }
           } else {
-            soTienGiam = Math.min(parseFloat(v.gia_tri_giam), tongTienHang);
+            // LOẠI 2: GIẢM GIÁ TIỀN MÓN ĂN / ĐƠN HÀNG
+            // QUY TẮC: Chỉ được giảm tối đa bằng đúng tiền món ăn
+            if (v.loai_giam_gia === 'phan_tram') {
+              soTienGiam = (tongTienHang * parseFloat(v.gia_tri_giam)) / 100;
+              if (v.giam_toi_da) soTienGiam = Math.min(soTienGiam, parseFloat(v.giam_toi_da));
+            } else {
+              soTienGiam = parseFloat(v.gia_tri_giam);
+            }
+            // Giảm tối đa bằng đúng tiền hàng
+            soTienGiam = Math.min(Math.round(soTienGiam), tongTienHang);
           }
-          soTienGiam = Math.round(soTienGiam);
 
           // Cập nhật tăng số lượt đã dùng của voucher
           await db.query('UPDATE ma_giam_gia SET so_luong_da_dung = so_luong_da_dung + 1 WHERE ma_voucher = ?', [maVoucherId]);

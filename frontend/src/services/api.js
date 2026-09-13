@@ -412,11 +412,12 @@ export const fetchVouchers = async () => {
 };
 
 // 5. Áp dụng mã giảm giá và tính toán số tiền giảm
-export const applyVoucher = async (ma_code, tong_tien_hang) => {
+export const applyVoucher = async (ma_code, tong_tien_hang, phi_giao_hang = 0) => {
   try {
     const response = await api.post('/vouchers/apply', {
       ma_code,
-      tong_tien_hang
+      tong_tien_hang,
+      phi_giao_hang
     });
     return response.data;
   } catch (error) {

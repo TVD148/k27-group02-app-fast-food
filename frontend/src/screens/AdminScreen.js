@@ -171,7 +171,18 @@ export default function AdminScreen({ navigation }) {
   // Form add food
   const [foodForm, setFoodForm] = useState({ ten_mon: '', mo_ta: '', gia_ban: '', ma_danh_muc: '1' });
   // Form add voucher
-  const [voucherForm, setVoucherForm] = useState({ ma_code: '', ten_voucher: '', gia_tri_giam: '', don_hang_toi_thieu: '' });
+  const [voucherForm, setVoucherForm] = useState({ 
+    ma_code: '', 
+    ten_voucher: '', 
+    mo_ta: '',
+    loai_ap_dung: 'don_hang', // 'don_hang' | 'phi_ship'
+    loai_giam_gia: 'so_tien', // 'so_tien' | 'phan_tram'
+    gia_tri_giam: '', 
+    giam_toi_da: '', 
+    don_hang_toi_thieu: '',
+    so_luong_phat_hanh: '100',
+    so_ngay_hieu_luc: '30'
+  });
   // Form add user
   const [userForm, setUserForm] = useState({ ho_ten: '', so_dien_thoai: '', email: '', mat_khau: '123456', ma_vai_tro: '2' });
 
@@ -525,22 +536,53 @@ export default function AdminScreen({ navigation }) {
   // Thêm voucher mới
   const handleAddVoucher = async () => {
     if (!voucherForm.ma_code || !voucherForm.gia_tri_giam) {
-      Alert.alert('Thiếu thông tin', 'Vui lòng nhập mã code và giá trị giảm!');
+      Alert.alert('Thiếu thông tin', 'Vui lòng nhập mã voucher và mức giảm!');
       return;
     }
+    const val = parseFloat(voucherForm.gia_tri_giam);
+    if (isNaN(val) || val <= 0) {
+      Alert.alert('Giá trị không hợp lệ', 'Mức giảm phải là số lớn hơn 0!');
+      return;
+    }
+    if (voucherForm.loai_giam_gia === 'phan_tram' && (val <= 0 || val > 100)) {
+      Alert.alert('Phần trăm không hợp lệ', 'Mức giảm phần trăm phải từ 1% đến 100%!');
+      return;
+    }
+
     setSubmitting(true);
     try {
+      const days = parseInt(voucherForm.so_ngay_hieu_luc || '30');
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + (isNaN(days) ? 30 : days));
+      const endDateStr = endDate.toISOString().slice(0, 19).replace('T', ' ');
+
       const res = await createAdminVoucher({
-        ma_code: voucherForm.ma_code.toUpperCase(),
-        ten_voucher: voucherForm.ten_voucher || `Voucher ${voucherForm.ma_code}`,
-        gia_tri_giam: parseFloat(voucherForm.gia_tri_giam),
+        ma_code: voucherForm.ma_code.toUpperCase().trim(),
+        ten_voucher: voucherForm.ten_voucher.trim(),
+        mo_ta: voucherForm.mo_ta.trim(),
+        loai_ap_dung: voucherForm.loai_ap_dung,
+        loai_giam_gia: voucherForm.loai_giam_gia,
+        gia_tri_giam: val,
+        giam_toi_da: voucherForm.giam_toi_da ? parseFloat(voucherForm.giam_toi_da) : (voucherForm.loai_giam_gia === 'so_tien' ? val : 0),
         don_hang_toi_thieu: parseFloat(voucherForm.don_hang_toi_thieu || 0),
-        loai_giam_gia: 'so_tien'
+        so_luong_phat_hanh: parseInt(voucherForm.so_luong_phat_hanh || 100),
+        ngay_ket_thuc: endDateStr
       });
       if (res.success) {
-        Alert.alert('Thành công', 'Đã tạo mã voucher mới!');
+        Alert.alert('Thành công 🎉', res.message || 'Đã tạo mã voucher mới!');
         setModalType(null);
-        setVoucherForm({ ma_code: '', ten_voucher: '', gia_tri_giam: '', don_hang_toi_thieu: '' });
+        setVoucherForm({ 
+          ma_code: '', 
+          ten_voucher: '', 
+          mo_ta: '',
+          loai_ap_dung: 'don_hang',
+          loai_giam_gia: 'so_tien',
+          gia_tri_giam: '', 
+          giam_toi_da: '', 
+          don_hang_toi_thieu: '',
+          so_luong_phat_hanh: '100',
+          so_ngay_hieu_luc: '30'
+        });
         loadAllAdminData();
       }
     } catch (err) {
@@ -548,6 +590,43 @@ export default function AdminScreen({ navigation }) {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleToggleVoucher = async (voucherId) => {
+    try {
+      const res = await toggleAdminVoucher(voucherId);
+      if (res.success) {
+        Alert.alert('Thành công', res.message);
+        loadAllAdminData();
+      }
+    } catch (err) {
+      Alert.alert('Lỗi', err.message || 'Không thể đổi trạng thái voucher!');
+    }
+  };
+
+  const handleDeleteVoucher = (voucherId, code) => {
+    Alert.alert(
+      'Xác nhận xóa voucher',
+      `Bạn có chắc chắn muốn xóa mã voucher '${code}' khỏi hệ thống không?`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa vĩnh viễn',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const res = await deleteAdminVoucher(voucherId);
+              if (res.success) {
+                Alert.alert('Đã xóa', 'Voucher đã được xóa thành công!');
+                loadAllAdminData();
+              }
+            } catch (err) {
+              Alert.alert('Lỗi', err.message || 'Không thể xóa voucher!');
+            }
+          }
+        }
+      ]
+    );
   };
 
   // Thêm nhân sự mới
@@ -1036,17 +1115,54 @@ export default function AdminScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {vouchers.map(v => (
-          <View key={v.ma_voucher} style={styles.voucherRowItem}>
-            <View>
-              <Text style={styles.voucherCodeText}>{v.ma_code}</Text>
-              <Text style={styles.voucherDescText}>Giảm {parseFloat(v.gia_tri_giam).toLocaleString('vi-VN')} đ (Đơn từ {parseFloat(v.don_hang_toi_thieu).toLocaleString('vi-VN')} đ)</Text>
+        {vouchers.map(v => {
+          const isFs = v.loai_ap_dung === 'phi_ship' || 
+                       (v.ma_code && v.ma_code.toUpperCase().includes('SHIP')) || 
+                       (v.ten_voucher && v.ten_voucher.toLowerCase().includes('vận chuyển'));
+          const isPercent = v.loai_giam_gia === 'phan_tram';
+          const discountDesc = isPercent
+            ? `Giảm ${parseFloat(v.gia_tri_giam)}%${v.giam_toi_da ? ` (Tối đa ${parseFloat(v.giam_toi_da).toLocaleString('vi-VN')} đ)` : ''}`
+            : `Giảm ${parseFloat(v.gia_tri_giam).toLocaleString('vi-VN')} đ`;
+          const minOrderText = `Đơn từ ${parseFloat(v.don_hang_toi_thieu || 0).toLocaleString('vi-VN')} đ`;
+          const usageText = `Đã dùng: ${v.so_luong_da_dung || 0}/${v.so_luong_phat_hanh || 100}`;
+
+          return (
+            <View key={v.ma_voucher} style={styles.voucherRowCard}>
+              <View style={styles.voucherRowLeft}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                  <Text style={styles.voucherCodeText}>{v.ma_code}</Text>
+                  <View style={[styles.voucherTypeBadgeAdmin, isFs ? styles.voucherTypeBadgeFs : styles.voucherTypeBadgeFood]}>
+                    <Text style={[styles.voucherTypeBadgeAdminText, isFs ? styles.voucherTypeFsText : styles.voucherTypeFoodText]}>
+                      {isFs ? '🚚 Giảm phí ship' : '🍔 Giảm tiền món'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.voucherNameTextAdmin}>{v.ten_voucher}</Text>
+                <Text style={styles.voucherDescTextAdmin}>
+                  {discountDesc} • {minOrderText} • {usageText}
+                </Text>
+              </View>
+
+              <View style={styles.voucherRowActions}>
+                <TouchableOpacity 
+                  style={[styles.voucherStatusPillBtn, v.trang_thai === 'hoat_dong' ? styles.statusPillActive : styles.statusPillInactive]}
+                  onPress={() => handleToggleVoucher(v.ma_voucher)}
+                >
+                  <Text style={[styles.voucherStatusPillText, v.trang_thai === 'hoat_dong' ? styles.statusTextActive : styles.statusTextInactive]}>
+                    {v.trang_thai === 'hoat_dong' ? 'Bật' : 'Tắt'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.voucherDeleteBtn}
+                  onPress={() => handleDeleteVoucher(v.ma_voucher, v.ma_code)}
+                >
+                  <Text style={styles.voucherDeleteIcon}>🗑️</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.voucherStatusPill}>
-              <Text style={styles.voucherStatusText}>{v.trang_thai === 'hoat_dong' ? 'Kích hoạt' : 'Tắt'}</Text>
-            </View>
-          </View>
-        ))}
+          );
+        })}
       </View>
 
       {/* Khối Quản Lý Tài Khoản Toàn Bộ Người Dùng & Điều Chỉnh Quyền */}
@@ -1314,35 +1430,147 @@ export default function AdminScreen({ navigation }) {
       {/* ========================================================================= */}
       <Modal visible={modalType === 'addVoucher'} animationType="slide" transparent={true}>
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalHeading}>🎟️ Tạo Voucher Khuyến Mãi</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Mã voucher (VD: BANMOI30)..."
-              autoCapitalize="characters"
-              value={voucherForm.ma_code}
-              onChangeText={t => setVoucherForm({ ...voucherForm, ma_code: t })}
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Mức giảm tiền (VD: 30000)..."
-              keyboardType="numeric"
-              value={voucherForm.gia_tri_giam}
-              onChangeText={t => setVoucherForm({ ...voucherForm, gia_tri_giam: t })}
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Đơn hàng tối thiểu (VD: 100000)..."
-              keyboardType="numeric"
-              value={voucherForm.don_hang_toi_thieu}
-              onChangeText={t => setVoucherForm({ ...voucherForm, don_hang_toi_thieu: t })}
-            />
+          <View style={[styles.modalCard, { maxHeight: '90%' }]}>
+            <Text style={styles.modalHeading}>🎟️ Tạo Voucher Khuyến Mãi Mới</Text>
+            
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 440 }}>
+              {/* 1. Chọn mục tiêu ưu đãi */}
+              <Text style={styles.formFieldLabel}>Mục tiêu áp dụng:</Text>
+              <View style={styles.segmentedRow}>
+                <TouchableOpacity 
+                  style={[styles.segmentedBtn, voucherForm.loai_ap_dung === 'don_hang' && styles.segmentedBtnActive]}
+                  onPress={() => setVoucherForm({ ...voucherForm, loai_ap_dung: 'don_hang' })}
+                >
+                  <Text style={[styles.segmentedBtnText, voucherForm.loai_ap_dung === 'don_hang' && styles.segmentedBtnTextActive]}>
+                    🍔 Tiền món ăn
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.segmentedBtn, voucherForm.loai_ap_dung === 'phi_ship' && styles.segmentedBtnActive]}
+                  onPress={() => setVoucherForm({ ...voucherForm, loai_ap_dung: 'phi_ship' })}
+                >
+                  <Text style={[styles.segmentedBtnText, voucherForm.loai_ap_dung === 'phi_ship' && styles.segmentedBtnTextActive]}>
+                    🚚 Phí ship (Freeship)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* 2. Chọn hình thức giảm giá */}
+              <Text style={styles.formFieldLabel}>Hình thức giảm giá:</Text>
+              <View style={styles.segmentedRow}>
+                <TouchableOpacity 
+                  style={[styles.segmentedBtn, voucherForm.loai_giam_gia === 'so_tien' && styles.segmentedBtnActive]}
+                  onPress={() => setVoucherForm({ ...voucherForm, loai_giam_gia: 'so_tien' })}
+                >
+                  <Text style={[styles.segmentedBtnText, voucherForm.loai_giam_gia === 'so_tien' && styles.segmentedBtnTextActive]}>
+                    💵 Số tiền (VNĐ)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.segmentedBtn, voucherForm.loai_giam_gia === 'phan_tram' && styles.segmentedBtnActive]}
+                  onPress={() => setVoucherForm({ ...voucherForm, loai_giam_gia: 'phan_tram' })}
+                >
+                  <Text style={[styles.segmentedBtnText, voucherForm.loai_giam_gia === 'phan_tram' && styles.segmentedBtnTextActive]}>
+                    📊 Phần trăm (%)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* 3. Mã code & Tên voucher */}
+              <Text style={styles.formFieldLabel}>Mã Voucher (Code):</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="VD: FREESHIP15, FAST30..."
+                autoCapitalize="characters"
+                value={voucherForm.ma_code}
+                onChangeText={t => setVoucherForm({ ...voucherForm, ma_code: t.toUpperCase() })}
+              />
+
+              <Text style={styles.formFieldLabel}>Tên Voucher hiển thị:</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="VD: Miễn Phí Vận Chuyển 15K..."
+                value={voucherForm.ten_voucher}
+                onChangeText={t => setVoucherForm({ ...voucherForm, ten_voucher: t })}
+              />
+
+              {/* 4. Mức giảm & Giảm tối đa */}
+              <Text style={styles.formFieldLabel}>
+                {voucherForm.loai_giam_gia === 'phan_tram' ? 'Mức giảm (%) (từ 1% - 100%):' : 'Mức giảm tiền (VNĐ):'}
+              </Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder={voucherForm.loai_giam_gia === 'phan_tram' ? 'VD: 30' : 'VD: 15000'}
+                keyboardType="numeric"
+                value={voucherForm.gia_tri_giam}
+                onChangeText={t => setVoucherForm({ ...voucherForm, gia_tri_giam: t })}
+              />
+
+              {voucherForm.loai_giam_gia === 'phan_tram' && (
+                <>
+                  <Text style={styles.formFieldLabel}>Giảm tối đa (VNĐ, để trống nếu không giới hạn):</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="VD: 40000..."
+                    keyboardType="numeric"
+                    value={voucherForm.giam_toi_da}
+                    onChangeText={t => setVoucherForm({ ...voucherForm, giam_toi_da: t })}
+                  />
+                </>
+              )}
+
+              {/* 5. Đơn hàng tối thiểu & Số lượng */}
+              <Text style={styles.formFieldLabel}>Đơn hàng tối thiểu (VNĐ):</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="VD: 50000 (0 nếu không yêu cầu)..."
+                keyboardType="numeric"
+                value={voucherForm.don_hang_toi_thieu}
+                onChangeText={t => setVoucherForm({ ...voucherForm, don_hang_toi_thieu: t })}
+              />
+
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.formFieldLabel}>Số lượng phát hành:</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="VD: 100"
+                    keyboardType="numeric"
+                    value={voucherForm.so_luong_phat_hanh}
+                    onChangeText={t => setVoucherForm({ ...voucherForm, so_luong_phat_hanh: t })}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.formFieldLabel}>Hiệu lực (số ngày):</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="VD: 30"
+                    keyboardType="numeric"
+                    value={voucherForm.so_ngay_hieu_luc}
+                    onChangeText={t => setVoucherForm({ ...voucherForm, so_ngay_hieu_luc: t })}
+                  />
+                </View>
+              </View>
+
+              <Text style={styles.formFieldLabel}>Mô tả chi tiết voucher:</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="VD: Giảm 15k phí ship cho đơn từ 50k..."
+                value={voucherForm.mo_ta}
+                onChangeText={t => setVoucherForm({ ...voucherForm, mo_ta: t })}
+              />
+            </ScrollView>
+
             <View style={styles.modalBtnGroup}>
               <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setModalType(null)}>
                 <Text style={styles.modalCancelText}>Hủy</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSubmitBtn} onPress={handleAddVoucher} disabled={submitting}>
-                <Text style={styles.modalSubmitText}>Tạo Voucher</Text>
+                <Text style={styles.modalSubmitText}>
+                  {submitting ? 'Đang tạo...' : 'Tạo Voucher'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2044,33 +2272,125 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 12,
   },
-  voucherRowItem: {
+  voucherRowCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F8FAFC',
+    borderBottomColor: '#F1F5F9',
+  },
+  voucherRowLeft: {
+    flex: 1,
+    marginRight: 10,
   },
   voucherCodeText: {
     fontSize: 14,
     fontWeight: '800',
     color: '#6A1B9A',
   },
-  voucherDescText: {
-    fontSize: 11,
-    color: '#64748B',
-  },
-  voucherStatusPill: {
-    backgroundColor: '#DCFCE7',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  voucherTypeBadgeAdmin: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 6,
   },
-  voucherStatusText: {
-    fontSize: 11,
-    color: '#15803D',
+  voucherTypeBadgeFs: {
+    backgroundColor: '#E0F2FE',
+  },
+  voucherTypeBadgeFood: {
+    backgroundColor: '#FEF3C7',
+  },
+  voucherTypeBadgeAdminText: {
+    fontSize: 10,
     fontWeight: '700',
+  },
+  voucherTypeFsText: {
+    color: '#0369A1',
+  },
+  voucherTypeFoodText: {
+    color: '#B45309',
+  },
+  voucherNameTextAdmin: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  voucherDescTextAdmin: {
+    fontSize: 11,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  voucherRowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  voucherStatusPillBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  statusPillActive: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#86EFAC',
+  },
+  statusPillInactive: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#CBD5E1',
+  },
+  voucherStatusPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  statusTextActive: {
+    color: '#15803D',
+  },
+  statusTextInactive: {
+    color: '#64748B',
+  },
+  voucherDeleteBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#FEE2E2',
+  },
+  voucherDeleteIcon: {
+    fontSize: 14,
+  },
+  formFieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 4,
+    marginTop: 6,
+  },
+  segmentedRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  segmentedBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  segmentedBtnActive: {
+    backgroundColor: '#EDE7F6',
+    borderColor: '#6A1B9A',
+  },
+  segmentedBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  segmentedBtnTextActive: {
+    color: '#6A1B9A',
+    fontWeight: '800',
   },
   userRowItem: {
     paddingVertical: 8,
