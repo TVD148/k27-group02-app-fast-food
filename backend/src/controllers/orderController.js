@@ -621,6 +621,24 @@ const acceptDelivery = async (req, res) => {
     const shipperLat = vi_do || (coords && coords.lat) || null;
     const shipperLng = kinh_do || (coords && coords.lng) || null;
 
+    // Yêu cầu bắt buộc phải có GPS thực tế của Shipper
+    if (!shipperLat || !shipperLng) {
+      return res.status(400).json({
+        success: false,
+        message: 'Bạn phải bật GPS để xác định vị trí trước khi nhận đơn hàng!'
+      });
+    }
+
+    // Bắt buộc Shipper phải ở trong phạm vi 3km so với quán mới được nhận đơn
+    const distToStore = calculateHaversineDistance(store.vi_do, store.kinh_do, shipperLat, shipperLng);
+    const maxRadius = parseFloat(store.ban_kinh_phuc_vu_km || 3.0);
+    if (distToStore !== null && distToStore > maxRadius) {
+      return res.status(400).json({
+        success: false,
+        message: `Bạn đang ở cách quán ${distToStore} km (vượt quá bán kính ${maxRadius} km của quán). Bạn chỉ được nhận đơn khi trong phạm vi 3km từ quán!`
+      });
+    }
+
     // Khoảng cách và phí giao hàng giữ nguyên theo khoảng cách từ QUÁN đến KHÁCH HÀNG (không tính từ vị trí shipper nữa)
     const fixedDistanceKm = parseFloat(order.khoang_cach_km || 0);
     const fixedShippingFee = parseFloat(order.phi_giao_hang || 5000);
@@ -629,15 +647,24 @@ const acceptDelivery = async (req, res) => {
     const [users] = await db.query('SELECT ho_ten FROM nguoi_dung WHERE ma_nguoi_dung = ?', [userId]);
     const shipperName = users.length > 0 ? users[0].ho_ten : 'Tài xế';
 
-    // Cập nhật ma_shipper, trạng thái đang giao, và tọa độ hiện tại của shipper để khách theo dõi trên bản đồ
-    await db.query(`
+    // Cập nhật ma_shipper theo cơ chế ATOMIC UPDATE (Ai nhanh tay nhận trước sẽ được)
+    const [updateRes] = await db.query(`
       UPDATE don_hang 
       SET ma_shipper = ?, 
           trang_thai_don_hang = "dang_giao",
           vi_do_shipper = ?,
           kinh_do_shipper = ?
-      WHERE ma_don_hang = ?
-    `, [userId, shipperLat, shipperLng, orderId]);
+      WHERE ma_don_hang = ? 
+        AND (ma_shipper IS NULL OR ma_shipper = ?)
+        AND trang_thai_don_hang IN ('san_sang_giao', 'dang_che_bien')
+    `, [userId, shipperLat, shipperLng, orderId, userId]);
+
+    if (updateRes.affectedRows === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rất tiếc! Đơn hàng này vừa được tài xế khác nhanh tay nhận trước!'
+      });
+    }
 
     // Ghi log
     await db.query(`
@@ -668,21 +695,53 @@ const acceptDelivery = async (req, res) => {
   }
 };
 
-// 6. THỐNG KÊ GIAO HÀNG CHO SHIPPER (GET /api/orders/shipper/stats)
+// 6. THỐNG KÊ GIAO HÀNG & THU NHẬP THEO NGÀY CHO SHIPPER (GET /api/orders/shipper/stats)
 const getShipperStats = async (req, res) => {
   try {
     const userId = req.user.id;
-    // Tổng số đơn đã giao thành công
-    const [delivered] = await db.query(
-      'SELECT COUNT(*) as total_delivered, COALESCE(SUM(tong_thanh_toan), 0) as total_cod FROM don_hang WHERE ma_shipper = ? AND trang_thai_don_hang = "da_giao"',
-      [userId]
-    );
-    // Số đơn đang giao
+
+    // 1. Tổng quan tích lũy toàn thời gian
+    const [overall] = await db.query(`
+      SELECT 
+        COUNT(*) as total_delivered, 
+        COALESCE(SUM(phi_giao_hang), 0) as total_shipping_earnings,
+        COALESCE(SUM(CASE WHEN phuong_thuc_thanh_toan = 'tien_mat' THEN tong_thanh_toan ELSE 0 END), 0) as total_cod 
+      FROM don_hang 
+      WHERE ma_shipper = ? AND trang_thai_don_hang = "da_giao"
+    `, [userId]);
+
+    // 2. Thu nhập hôm nay
+    const [today] = await db.query(`
+      SELECT 
+        COUNT(*) as today_delivered, 
+        COALESCE(SUM(phi_giao_hang), 0) as today_shipping_earnings,
+        COALESCE(SUM(CASE WHEN phuong_thuc_thanh_toan = 'tien_mat' THEN tong_thanh_toan ELSE 0 END), 0) as today_cod 
+      FROM don_hang 
+      WHERE ma_shipper = ? AND trang_thai_don_hang = "da_giao" 
+        AND DATE(COALESCE(ngay_cap_nhat, ngay_dat)) = CURDATE()
+    `, [userId]);
+
+    // 3. Phân chia thu nhập chi tiết theo từng ngày (Daily breakdown)
+    const [dailyEarnings] = await db.query(`
+      SELECT 
+        DATE_FORMAT(COALESCE(ngay_cap_nhat, ngay_dat), '%Y-%m-%d') as ngay,
+        COUNT(*) as so_don,
+        COALESCE(SUM(phi_giao_hang), 0) as thu_nhap_ship,
+        COALESCE(SUM(CASE WHEN phuong_thuc_thanh_toan = 'tien_mat' THEN tong_thanh_toan ELSE 0 END), 0) as cod_thu_ho
+      FROM don_hang 
+      WHERE ma_shipper = ? AND trang_thai_don_hang = "da_giao"
+      GROUP BY DATE_FORMAT(COALESCE(ngay_cap_nhat, ngay_dat), '%Y-%m-%d')
+      ORDER BY ngay DESC
+      LIMIT 30
+    `, [userId]);
+
+    // 4. Số đơn đang giao
     const [delivering] = await db.query(
       'SELECT COUNT(*) as total_delivering FROM don_hang WHERE ma_shipper = ? AND trang_thai_don_hang = "dang_giao"',
       [userId]
     );
-    // Số đơn có sẵn chờ nhận
+
+    // 5. Số đơn có sẵn chờ nhận
     const [available] = await db.query(
       'SELECT COUNT(*) as total_available FROM don_hang WHERE trang_thai_don_hang = "san_sang_giao" AND ma_shipper IS NULL'
     );
@@ -690,10 +749,20 @@ const getShipperStats = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: {
-        total_delivered: delivered[0].total_delivered || 0,
-        total_cod: parseFloat(delivered[0].total_cod || 0),
-        total_delivering: delivering[0].total_delivering || 0,
-        total_available: available[0].total_available || 0
+        total_delivered: parseInt(overall[0]?.total_delivered || 0),
+        total_earnings: parseFloat(overall[0]?.total_shipping_earnings || 0),
+        total_cod: parseFloat(overall[0]?.total_cod || 0),
+        today_delivered: parseInt(today[0]?.today_delivered || 0),
+        today_earnings: parseFloat(today[0]?.today_shipping_earnings || 0),
+        today_cod: parseFloat(today[0]?.today_cod || 0),
+        daily_earnings: dailyEarnings.map(d => ({
+          ngay: d.ngay,
+          so_don: parseInt(d.so_don || 0),
+          thu_nhap_ship: parseFloat(d.thu_nhap_ship || 0),
+          cod_thu_ho: parseFloat(d.cod_thu_ho || 0)
+        })),
+        total_delivering: parseInt(delivering[0]?.total_delivering || 0),
+        total_available: parseInt(available[0]?.total_available || 0)
       }
     });
   } catch (error) {
