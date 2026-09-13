@@ -139,16 +139,14 @@ export default function AdminScreen({ navigation }) {
   const [profileForm, setProfileForm] = useState({
     ho_ten: '',
     so_dien_thoai: '',
-    email: '',
-    mat_khau: ''
+    email: ''
   });
 
   const handleOpenEditProfile = () => {
     setProfileForm({
       ho_ten: currentUser?.ho_ten || '',
       so_dien_thoai: currentUser?.so_dien_thoai || '',
-      email: currentUser?.email || '',
-      mat_khau: ''
+      email: currentUser?.email || ''
     });
     setShowEditProfileModal(true);
   };
@@ -162,18 +160,13 @@ export default function AdminScreen({ navigation }) {
       Alert.alert('Lỗi', 'Vui lòng nhập số điện thoại');
       return;
     }
-    if (profileForm.mat_khau && profileForm.mat_khau.length < 6) {
-      Alert.alert('Lỗi', 'Mật khẩu mới phải có ít nhất 6 ký tự');
-      return;
-    }
 
     setSavingProfile(true);
     try {
       const res = await updateUserProfile(
         profileForm.ho_ten.trim(),
         profileForm.so_dien_thoai.trim(),
-        profileForm.email.trim(),
-        profileForm.mat_khau ? profileForm.mat_khau.trim() : undefined
+        profileForm.email.trim()
       );
       if (res && res.success) {
         Alert.alert('Thành công', 'Thông tin quản trị viên đã được cập nhật thành công!');
@@ -206,6 +199,7 @@ export default function AdminScreen({ navigation }) {
           text: 'Đăng Xuất',
           style: 'destructive',
           onPress: async () => {
+            setShowEditProfileModal(false);
             try {
               await logoutUser();
             } catch (e) {
@@ -1390,36 +1384,28 @@ export default function AdminScreen({ navigation }) {
       {/* KHỐI HỒ SƠ QUẢN TRỊ VIÊN & ĐĂNG XUẤT TRỰC TIẾP */}
       <View style={styles.adminProfileCard}>
         <View style={styles.adminProfileHeaderRow}>
-          <View style={styles.adminAvatarWrap}>
+          <TouchableOpacity 
+            style={styles.adminAvatarWrap}
+            onPress={handleOpenEditProfile}
+            activeOpacity={0.8}
+          >
             <Text style={styles.adminAvatarEmoji}>👑</Text>
-          </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
+            <View style={styles.avatarEditPencilBadge}>
+              <Text style={styles.avatarEditPencilIcon}>✏️</Text>
+            </View>
+          </TouchableOpacity>
+          <View style={{ flex: 1, marginLeft: 14 }}>
             <Text style={styles.adminProfileName}>{currentUser?.ho_ten || 'Quản Trị Viên Hệ Thống'}</Text>
             <View style={styles.adminRoleBadge}>
               <Text style={styles.adminRoleBadgeText}>👑 QUẢN TRỊ VIÊN CẤP CAO (ADMIN)</Text>
             </View>
+            <Text style={styles.avatarHintTap}>Chạm avatar để sửa thông tin & đăng xuất</Text>
           </View>
         </View>
 
         <View style={styles.adminInfoRowsContainer}>
           <Text style={styles.adminInfoRowText}>📞 SĐT đăng nhập: <Text style={{ fontWeight: '700', color: '#1F2937' }}>{currentUser?.so_dien_thoai || 'Chưa cập nhật'}</Text></Text>
           <Text style={styles.adminInfoRowText}>📧 Email liên hệ: <Text style={{ fontWeight: '700', color: '#1F2937' }}>{currentUser?.email || 'Chưa cập nhật'}</Text></Text>
-        </View>
-
-        <View style={styles.adminActionButtonsRow}>
-          <TouchableOpacity 
-            style={styles.adminEditProfileBtn}
-            onPress={handleOpenEditProfile}
-          >
-            <Text style={styles.adminEditProfileBtnText}>✏️ Sửa Thông Tin</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.adminDirectLogoutBtn}
-            onPress={handleLogout}
-          >
-            <Text style={styles.adminDirectLogoutBtnText}>🚪 Đăng Xuất</Text>
-          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -1881,13 +1867,13 @@ export default function AdminScreen({ navigation }) {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalHeading}>✏️ Thay Đổi Thông Tin Admin</Text>
+              <Text style={styles.modalHeading}>👤 Tài Khoản & Thông Tin Admin</Text>
               <TouchableOpacity onPress={() => setShowEditProfileModal(false)}>
                 <Text style={styles.modalCloseIcon}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
               <Text style={styles.formFieldLabel}>Họ và tên *</Text>
               <TextInput
                 style={styles.modalInput}
@@ -1915,37 +1901,37 @@ export default function AdminScreen({ navigation }) {
                 onChangeText={(t) => setProfileForm({ ...profileForm, email: t })}
               />
 
-              <Text style={styles.formFieldLabel}>Mật khẩu mới (Để trống nếu không đổi)</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)..."
-                secureTextEntry
-                value={profileForm.mat_khau}
-                onChangeText={(t) => setProfileForm({ ...profileForm, mat_khau: t })}
-              />
+              <View style={styles.modalBtnGroup}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setShowEditProfileModal(false)}
+                  disabled={savingProfile}
+                >
+                  <Text style={styles.modalCancelText}>Hủy</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.modalSubmitBtn}
+                  onPress={handleSaveProfile}
+                  disabled={savingProfile}
+                >
+                  {savingProfile ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.modalSubmitText}>💾 Lưu Thay Đổi</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* NÚT ĐĂNG XUẤT NẰM TRONG POPUP AVATAR */}
+              <View style={styles.modalLogoutDivider} />
+              <TouchableOpacity
+                style={styles.modalLogoutBtn}
+                onPress={handleLogout}
+              >
+                <Text style={styles.modalLogoutBtnText}>🚪 Đăng Xuất Admin</Text>
+              </TouchableOpacity>
             </ScrollView>
-
-            <View style={styles.modalBtnGroup}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setShowEditProfileModal(false)}
-                disabled={savingProfile}
-              >
-                <Text style={styles.modalCancelText}>Hủy</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.modalSubmitBtn}
-                onPress={handleSaveProfile}
-                disabled={savingProfile}
-              >
-                {savingProfile ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={styles.modalSubmitText}>💾 Lưu Thay Đổi</Text>
-                )}
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
       </Modal>
@@ -3334,6 +3320,48 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   adminDirectLogoutBtnText: {
+    color: '#DC2626',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  avatarEditPencilBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: '#6A1B9A',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  avatarEditPencilIcon: {
+    fontSize: 11,
+  },
+  avatarHintTap: {
+    fontSize: 12,
+    color: '#7C3AED',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  modalLogoutDivider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginTop: 18,
+    marginBottom: 12,
+  },
+  modalLogoutBtn: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalLogoutBtnText: {
     color: '#DC2626',
     fontSize: 14,
     fontWeight: '800',

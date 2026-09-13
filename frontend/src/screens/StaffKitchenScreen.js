@@ -34,16 +34,14 @@ export default function StaffKitchenScreen({ navigation }) {
   const [profileForm, setProfileForm] = useState({
     ho_ten: '',
     so_dien_thoai: '',
-    email: '',
-    mat_khau: ''
+    email: ''
   });
 
   const handleOpenEditProfile = () => {
     setProfileForm({
       ho_ten: currentUser?.ho_ten || '',
       so_dien_thoai: currentUser?.so_dien_thoai || '',
-      email: currentUser?.email || '',
-      mat_khau: ''
+      email: currentUser?.email || ''
     });
     setShowEditProfileModal(true);
   };
@@ -57,18 +55,13 @@ export default function StaffKitchenScreen({ navigation }) {
       Alert.alert('Lỗi', 'Vui lòng nhập số điện thoại');
       return;
     }
-    if (profileForm.mat_khau && profileForm.mat_khau.length < 6) {
-      Alert.alert('Lỗi', 'Mật khẩu mới phải có ít nhất 6 ký tự');
-      return;
-    }
 
     setSavingProfile(true);
     try {
       const res = await updateUserProfile(
         profileForm.ho_ten.trim(),
         profileForm.so_dien_thoai.trim(),
-        profileForm.email.trim(),
-        profileForm.mat_khau ? profileForm.mat_khau.trim() : undefined
+        profileForm.email.trim()
       );
       if (res && res.success) {
         Alert.alert('Thành công', 'Thông tin nhân viên đã được cập nhật thành công!');
@@ -101,6 +94,7 @@ export default function StaffKitchenScreen({ navigation }) {
           text: 'Đăng Xuất',
           style: 'destructive',
           onPress: async () => {
+            setShowEditProfileModal(false);
             try {
               await logoutUser();
             } catch (e) {
@@ -356,9 +350,18 @@ export default function StaffKitchenScreen({ navigation }) {
     <ScrollView contentContainerStyle={styles.profileScroll}>
       {/* Thẻ định danh đầu bếp */}
       <View style={styles.kitchenProfileCard}>
-        <View style={styles.kitchenAvatarCircle}>
+        <TouchableOpacity 
+          style={styles.kitchenAvatarCircle}
+          onPress={handleOpenEditProfile}
+          activeOpacity={0.8}
+        >
           <Text style={styles.kitchenAvatarEmoji}>👨‍🍳</Text>
-        </View>
+          <View style={styles.avatarEditPencilBadge}>
+            <Text style={styles.avatarEditPencilIcon}>✏️</Text>
+          </View>
+        </TouchableOpacity>
+        <Text style={styles.avatarHintTap}>Chạm avatar để sửa thông tin & đăng xuất</Text>
+
         <Text style={styles.kitchenStaffName}>{currentUser?.ho_ten || 'Đầu Bếp Trưởng'}</Text>
         <View style={styles.staffRoleBadge}>
           <Text style={styles.staffRoleBadgeText}>
@@ -372,22 +375,6 @@ export default function StaffKitchenScreen({ navigation }) {
           <View style={styles.onlineDot} />
           <Text style={styles.kitchenStatusText}>Bếp Đang Trực Tuyến & Nhận Đơn</Text>
         </View>
-
-        {/* Nút Thay Đổi Thông Tin Cá Nhân */}
-        <TouchableOpacity
-          style={styles.editProfileTouchBtn}
-          onPress={handleOpenEditProfile}
-        >
-          <Text style={styles.editProfileTouchBtnText}>✏️ Thay Đổi Thông Tin Cá Nhân</Text>
-        </TouchableOpacity>
-
-        {/* Nút Đăng Xuất Trực Tiếp */}
-        <TouchableOpacity
-          style={styles.logoutDirectBtn}
-          onPress={handleLogout}
-        >
-          <Text style={styles.logoutDirectBtnText}>🚪 Đăng Xuất Ca Làm Việc</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Quản lý tình trạng nguyên liệu & món ăn nhanh */}
@@ -642,13 +629,13 @@ export default function StaffKitchenScreen({ navigation }) {
         <View style={styles.modalOverlay}>
           <View style={styles.editProfileCard}>
             <View style={styles.editProfileHeader}>
-              <Text style={styles.editProfileTitle}>✏️ Cập Nhật Thông Tin Nhân Viên</Text>
+              <Text style={styles.editProfileTitle}>👤 Tài Khoản & Thông Tin Nhân Viên</Text>
               <TouchableOpacity onPress={() => setShowEditProfileModal(false)}>
                 <Text style={styles.editProfileCloseText}>✕ Đóng</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
               <Text style={styles.inputFieldLabel}>Họ và tên *</Text>
               <TextInput
                 style={styles.profileTextInput}
@@ -676,37 +663,37 @@ export default function StaffKitchenScreen({ navigation }) {
                 onChangeText={(t) => setProfileForm({ ...profileForm, email: t })}
               />
 
-              <Text style={styles.inputFieldLabel}>Mật khẩu mới (Để trống nếu không đổi)</Text>
-              <TextInput
-                style={styles.profileTextInput}
-                placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)..."
-                secureTextEntry
-                value={profileForm.mat_khau}
-                onChangeText={(t) => setProfileForm({ ...profileForm, mat_khau: t })}
-              />
+              <View style={styles.editProfileActions}>
+                <TouchableOpacity
+                  style={styles.editProfileCancelBtn}
+                  onPress={() => setShowEditProfileModal(false)}
+                  disabled={savingProfile}
+                >
+                  <Text style={styles.editProfileCancelText}>Hủy</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.editProfileSubmitBtn}
+                  onPress={handleSaveProfile}
+                  disabled={savingProfile}
+                >
+                  {savingProfile ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.editProfileSubmitText}>💾 Lưu Thay Đổi</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* NÚT ĐĂNG XUẤT NẰM TRONG POPUP AVATAR */}
+              <View style={styles.modalLogoutDivider} />
+              <TouchableOpacity
+                style={styles.modalLogoutBtn}
+                onPress={handleLogout}
+              >
+                <Text style={styles.modalLogoutBtnText}>🚪 Đăng Xuất Ca Làm Việc</Text>
+              </TouchableOpacity>
             </ScrollView>
-
-            <View style={styles.editProfileActions}>
-              <TouchableOpacity
-                style={styles.editProfileCancelBtn}
-                onPress={() => setShowEditProfileModal(false)}
-                disabled={savingProfile}
-              >
-                <Text style={styles.editProfileCancelText}>Hủy</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.editProfileSubmitBtn}
-                onPress={handleSaveProfile}
-                disabled={savingProfile}
-              >
-                {savingProfile ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={styles.editProfileSubmitText}>💾 Lưu Thay Đổi</Text>
-                )}
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
       </Modal>
@@ -1524,5 +1511,49 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '800',
     fontSize: 14,
+  },
+  avatarEditPencilBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: '#DC2626',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  avatarEditPencilIcon: {
+    fontSize: 12,
+  },
+  avatarHintTap: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontWeight: '600',
+    marginTop: 6,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  modalLogoutDivider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginTop: 18,
+    marginBottom: 12,
+  },
+  modalLogoutBtn: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalLogoutBtnText: {
+    color: '#DC2626',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

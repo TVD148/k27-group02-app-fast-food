@@ -879,13 +879,12 @@ export default function ShipperScreen({ navigation }) {
     );
   };
 
-  // Xử lý thay đổi thông tin cá nhân trực tiếp trên form Shipper
+  // Xử lý thay đổi thông tin cá nhân khi bấm vào avatar
   const handleOpenEditProfile = () => {
     setProfileForm({
       ho_ten: currentUser?.ho_ten || '',
       so_dien_thoai: currentUser?.so_dien_thoai || '',
-      email: currentUser?.email || '',
-      mat_khau: ''
+      email: currentUser?.email || ''
     });
     setShowEditProfileModal(true);
   };
@@ -904,8 +903,7 @@ export default function ShipperScreen({ navigation }) {
       const res = await updateUserProfile(
         profileForm.ho_ten.trim(),
         profileForm.so_dien_thoai.trim(),
-        profileForm.email.trim(),
-        profileForm.mat_khau.trim() || undefined
+        profileForm.email.trim()
       );
       if (res.success) {
         Alert.alert('Thành công 🎉', 'Đã cập nhật thông tin cá nhân của bạn!');
@@ -919,7 +917,7 @@ export default function ShipperScreen({ navigation }) {
     }
   };
 
-  // Đăng xuất trực tiếp từ form Shipper
+  // Đăng xuất từ popup avatar
   const handleLogout = () => {
     Alert.alert(
       'Xác nhận đăng xuất 🚪',
@@ -930,7 +928,13 @@ export default function ShipperScreen({ navigation }) {
           text: 'Đăng xuất',
           style: 'destructive',
           onPress: async () => {
-            await logoutUser();
+            setShowEditProfileModal(false);
+            try {
+              await logoutUser();
+            } catch (e) {
+              console.log('Lỗi đăng xuất:', e.message);
+            }
+            await AsyncStorage.multiRemove(['user_token', 'user_info', 'user_role']);
             navigation.replace('Login');
           }
         }
@@ -947,9 +951,19 @@ export default function ShipperScreen({ navigation }) {
     return (
       <ScrollView contentContainerStyle={styles.profileScroll}>
         <View style={styles.shipperProfileHeaderCard}>
-          <View style={styles.shipperAvatarBox}>
+          {/* Nhấn vào Avatar để mở popup chỉnh sửa thông tin & đăng xuất */}
+          <TouchableOpacity 
+            style={styles.shipperAvatarBox}
+            onPress={handleOpenEditProfile}
+            activeOpacity={0.8}
+          >
             <Text style={styles.shipperAvatarEmoji}>🛵</Text>
-          </View>
+            <View style={styles.avatarEditPencilBadge}>
+              <Text style={styles.avatarEditPencilIcon}>✏️</Text>
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.avatarHintTap}>Chạm avatar để sửa thông tin & đăng xuất</Text>
+
           <Text style={styles.shipperName}>{currentUser?.ho_ten || 'Tài Xế FastFood'}</Text>
           <Text style={styles.shipperPhone}>{currentUser?.so_dien_thoai || 'Chưa cập nhật SĐT'}</Text>
           <Text style={styles.shipperRoleBadge}>🛵 Tài Xế Giao Hàng (Shipper)</Text>
@@ -990,24 +1004,6 @@ export default function ShipperScreen({ navigation }) {
           activeOpacity={0.8}
         >
           <Text style={styles.viewDeliveredHistoryBtnText}>📜 Xem Lịch Sử Đơn Đã Giao</Text>
-        </TouchableOpacity>
-
-        {/* Nút Thay đổi thông tin trực tiếp trên form Shipper */}
-        <TouchableOpacity 
-          style={styles.editProfileTouchBtn}
-          onPress={handleOpenEditProfile}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.editProfileTouchBtnText}>✏️ Thay Đổi Thông Tin Cá Nhân</Text>
-        </TouchableOpacity>
-
-        {/* Nút Đăng xuất trực tiếp trên form Shipper */}
-        <TouchableOpacity 
-          style={styles.logoutDirectBtn}
-          onPress={handleLogout}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.logoutDirectBtnText}>🚪 Đăng Xuất Khỏi Hệ Thống</Text>
         </TouchableOpacity>
       </ScrollView>
     );
@@ -1438,13 +1434,13 @@ export default function ShipperScreen({ navigation }) {
         <View style={styles.modalOverlay}>
           <View style={styles.editProfileCard}>
             <View style={styles.editProfileHeader}>
-              <Text style={styles.editProfileTitle}>✏️ Thay Đổi Thông Tin Shipper</Text>
+              <Text style={styles.editProfileTitle}>👤 Tài Khoản & Thông Tin Shipper</Text>
               <TouchableOpacity onPress={() => setShowEditProfileModal(false)}>
                 <Text style={styles.editProfileCloseText}>✕ Đóng</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
               <Text style={styles.inputFieldLabel}>Họ và tên *</Text>
               <TextInput
                 style={styles.profileTextInput}
@@ -1472,37 +1468,37 @@ export default function ShipperScreen({ navigation }) {
                 onChangeText={(t) => setProfileForm({ ...profileForm, email: t })}
               />
 
-              <Text style={styles.inputFieldLabel}>Mật khẩu mới (Để trống nếu không đổi)</Text>
-              <TextInput
-                style={styles.profileTextInput}
-                placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)..."
-                secureTextEntry
-                value={profileForm.mat_khau}
-                onChangeText={(t) => setProfileForm({ ...profileForm, mat_khau: t })}
-              />
+              <View style={styles.editProfileActions}>
+                <TouchableOpacity
+                  style={styles.editProfileCancelBtn}
+                  onPress={() => setShowEditProfileModal(false)}
+                  disabled={savingProfile}
+                >
+                  <Text style={styles.editProfileCancelText}>Hủy</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.editProfileSubmitBtn}
+                  onPress={handleSaveProfile}
+                  disabled={savingProfile}
+                >
+                  {savingProfile ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.editProfileSubmitText}>💾 Lưu Thay Đổi</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* NÚT ĐĂNG XUẤT NẰM TRONG POPUP AVATAR */}
+              <View style={styles.modalLogoutDivider} />
+              <TouchableOpacity
+                style={styles.modalLogoutBtn}
+                onPress={handleLogout}
+              >
+                <Text style={styles.modalLogoutBtnText}>🚪 Đăng Xuất Khỏi Tài Khoản</Text>
+              </TouchableOpacity>
             </ScrollView>
-
-            <View style={styles.editProfileActions}>
-              <TouchableOpacity
-                style={styles.editProfileCancelBtn}
-                onPress={() => setShowEditProfileModal(false)}
-                disabled={savingProfile}
-              >
-                <Text style={styles.editProfileCancelText}>Hủy</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.editProfileSubmitBtn}
-                onPress={handleSaveProfile}
-                disabled={savingProfile}
-              >
-                {savingProfile ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={styles.editProfileSubmitText}>💾 Lưu Thay Đổi</Text>
-                )}
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
       </Modal>
@@ -3238,5 +3234,48 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '800',
     fontSize: 14,
+  },
+  avatarEditPencilBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: '#00897B',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  avatarEditPencilIcon: {
+    fontSize: 12,
+  },
+  avatarHintTap: {
+    fontSize: 12,
+    color: '#004D40',
+    fontWeight: '600',
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  modalLogoutDivider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginTop: 18,
+    marginBottom: 12,
+  },
+  modalLogoutBtn: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalLogoutBtnText: {
+    color: '#DC2626',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });
