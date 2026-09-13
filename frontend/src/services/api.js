@@ -329,11 +329,14 @@ export const createOrder = async (dia_chi_giao_hang, so_dien_thoai_nhan, ghi_chu
   }
 };
 
-// Lấy danh sách đơn hàng
-export const fetchOrders = async (status = '') => {
+// Lấy danh sách đơn hàng (hỗ trợ lọc theo trạng thái và ngày đặt)
+export const fetchOrders = async (status = '', date = '') => {
   try {
     let url = '/orders';
-    if (status) url += `?status=${status}`;
+    const queryParts = [];
+    if (status) queryParts.push(`status=${encodeURIComponent(status)}`);
+    if (date) queryParts.push(`date=${encodeURIComponent(date)}`);
+    if (queryParts.length > 0) url += `?${queryParts.join('&')}`;
     const response = await api.get(url);
     return response.data;
   } catch (error) {

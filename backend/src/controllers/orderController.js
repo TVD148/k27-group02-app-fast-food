@@ -296,7 +296,7 @@ const getOrders = async (req, res) => {
   try {
     const userId = req.user.id;
     const userRole = req.user.ma_vai_tro;
-    const { status } = req.query;
+    const { status, date } = req.query;
 
     let query = `
       SELECT 
@@ -315,8 +315,8 @@ const getOrders = async (req, res) => {
       query += ' AND d.ma_nguoi_dung = ?';
       params.push(userId);
     } else if (userRole === 4) {
-      // Nếu là Shipper (ma_vai_tro = 4), lấy các đơn được phân công hoặc đơn sẵn sàng chờ nhận giao
-      query += ' AND (d.ma_shipper = ? OR d.trang_thai_don_hang IN ("san_sang_giao", "dang_che_bien", "dang_giao", "da_giao"))';
+      // Nếu là Shipper (ma_vai_tro = 4), lấy các đơn của chính mình hoặc đơn chờ nhận (kể cả đang chế biến và sẵn sàng giao)
+      query += ' AND (d.ma_shipper = ? OR (d.ma_shipper IS NULL AND d.trang_thai_don_hang IN ("san_sang_giao", "dang_che_bien")))';
       params.push(userId);
     }
     // Nhân viên (role 2) và Admin (role 3) xem toàn bộ danh sách đơn hàng để chế biến/quản lý
@@ -327,13 +327,27 @@ const getOrders = async (req, res) => {
       params.push(status);
     }
 
+    // Lọc theo ngày đặt hàng nếu có (Định dạng YYYY-MM-DD)
+    if (date) {
+      query += ' AND DATE(d.ngay_dat) = ?';
+      params.push(date);
+    }
+
     query += ' ORDER BY d.ma_don_hang DESC';
 
     const [orders] = await db.query(query, params);
 
-    // Lấy kèm tổng số món ăn trong từng đơn và chuẩn hóa các trường dữ liệu
+    // Lấy kèm danh sách món ăn chi tiết trong từng đơn và chuẩn hóa các trường dữ liệu
     const ordersWithDetails = await Promise.all(orders.map(async (order) => {
-      const [items] = await db.query('SELECT COUNT(*) AS tong_so_mon FROM chi_tiet_don_hang WHERE ma_don_hang = ?', [order.ma_don_hang]);
+      const [items] = await db.query(`
+        SELECT ct.*, m.ten_mon, m.hinh_anh, m.gia_ban
+        FROM chi_tiet_don_hang ct
+        JOIN mon_an m ON ct.ma_mon_an = m.ma_mon_an
+        WHERE ct.ma_don_hang = ?
+      `, [order.ma_don_hang]);
+
+      const totalItemsCount = items.reduce((sum, it) => sum + (parseInt(it.so_luong) || 1), 0);
+
       return {
         ...order,
         dia_chi_giao: order.dia_chi_giao_hang,
@@ -350,7 +364,17 @@ const getOrders = async (req, res) => {
         kinh_do_giao: order.kinh_do_giao ? parseFloat(order.kinh_do_giao) : null,
         vi_do_shipper: order.vi_do_shipper ? parseFloat(order.vi_do_shipper) : null,
         kinh_do_shipper: order.kinh_do_shipper ? parseFloat(order.kinh_do_shipper) : null,
-        tong_so_mon: items[0].tong_so_mon || 0
+        tong_so_mon: totalItemsCount,
+        danh_sach_mon: items.map(it => ({
+          ma_chi_tiet: it.ma_chi_tiet,
+          ma_mon_an: it.ma_mon_an,
+          ten_mon: it.ten_mon,
+          hinh_anh: it.hinh_anh,
+          so_luong: it.so_luong,
+          don_gia: parseFloat(it.don_gia || it.gia_ban || 0),
+          thanh_tien: parseFloat(it.thanh_tien || (it.don_gia * it.so_luong) || 0),
+          ghi_chu: it.ghi_chu_mon
+        }))
       };
     }));
 

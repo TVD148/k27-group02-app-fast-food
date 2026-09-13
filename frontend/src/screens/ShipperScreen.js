@@ -422,11 +422,15 @@ export default function ShipperScreen({ navigation }) {
   };
 
   // Phân loại đơn:
-  // Available: 'san_sang_giao' (Đã xong bếp, chưa ai nhận)
-  // Delivering: 'dang_giao' (Đơn do shipper này đảm nhận)
-  const availableOrders = orders.filter(o => o.trang_thai_don_hang === 'san_sang_giao');
+  // Available: Bếp đang chế biến ('dang_che_bien') hoặc đã nấu xong ('san_sang_giao') mà chưa có shipper nhận
+  // Delivering: Đơn do shipper này đảm nhận
+  const availableOrders = orders.filter(o => 
+    (!o.ma_shipper || o.ma_shipper === null) && 
+    (o.trang_thai_don_hang === 'san_sang_giao' || o.trang_thai_don_hang === 'dang_che_bien')
+  );
   const myDeliveringOrders = orders.filter(o => 
-    (o.trang_thai_don_hang === 'dang_giao' || (o.trang_thai_don_hang === 'san_sang_giao' && o.ma_shipper === currentUser?.id))
+    o.ma_shipper === currentUser?.id && 
+    ['dang_giao', 'dang_che_bien', 'san_sang_giao'].includes(o.trang_thai_don_hang)
   );
 
   // Render Tab 1: Đơn Chờ Nhận (Available Orders)
@@ -526,14 +530,15 @@ export default function ShipperScreen({ navigation }) {
                 <View style={styles.orderPill}>
                   <Text style={styles.orderPillText}>Đơn #{order.ma_don_hang}</Text>
                 </View>
-                <View style={styles.readyBadge}>
-                  <Text style={styles.readyBadgeText}>✅ Bếp đã nấu xong</Text>
-                </View>
-              </View>
-
-              {/* Huy hiệu cạnh tranh */}
-              <View style={styles.competitiveBadge}>
-                <Text style={styles.competitiveBadgeText}>⚡ Ai nhanh tay bấm nhận trước sẽ được đi giao đơn này!</Text>
+                {order.trang_thai_don_hang === 'dang_che_bien' ? (
+                  <View style={[styles.readyBadge, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }]}>
+                    <Text style={[styles.readyBadgeText, { color: '#C2410C' }]}>👨‍🍳 Bếp đang làm món</Text>
+                  </View>
+                ) : (
+                  <View style={styles.readyBadge}>
+                    <Text style={styles.readyBadgeText}>✅ Bếp đã nấu xong</Text>
+                  </View>
+                )}
               </View>
 
               {/* Thông số khoảng cách & thù lao nổi bật theo yêu cầu */}
