@@ -770,7 +770,7 @@ export default function AdminScreen({ navigation }) {
             <View>
               <Text style={styles.userItemName}>{u.ho_ten} ({u.so_dien_thoai})</Text>
               <Text style={styles.userItemRole}>
-                {u.ma_vai_tro === 3 ? '👑 Quản trị viên' : (u.ma_vai_tro === 2 || u.ma_vai_tro === 5) ? '🧑‍🍳 Nhân viên bếp' : u.ma_vai_tro === 4 ? '🛵 Shipper' : 'Khách hàng'}
+                {u.ma_vai_tro === 3 ? '👑 Quản trị viên' : u.ma_vai_tro === 2 ? '🧑‍🍳 Nhân viên quán & bếp' : u.ma_vai_tro === 4 ? '🛵 Shipper' : 'Khách hàng'}
               </Text>
             </View>
           </View>

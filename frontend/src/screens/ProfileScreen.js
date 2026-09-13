@@ -210,17 +210,17 @@ export default function ProfileScreen({ navigation }) {
                   <View style={[
                     styles.memberBadge, 
                     user.ma_vai_tro === 3 && { backgroundColor: '#EDE7F6' },
-                    (user.ma_vai_tro === 2 || user.ma_vai_tro === 5) && { backgroundColor: '#FBE9E7' },
+                    user.ma_vai_tro === 2 && { backgroundColor: '#FBE9E7' },
                     user.ma_vai_tro === 4 && { backgroundColor: '#E0F2F1' },
                   ]}>
                     <Text style={[
                       styles.memberBadgeText,
                       user.ma_vai_tro === 3 && { color: '#6A1B9A' },
-                      (user.ma_vai_tro === 2 || user.ma_vai_tro === 5) && { color: '#D84315' },
+                      user.ma_vai_tro === 2 && { color: '#D84315' },
                       user.ma_vai_tro === 4 && { color: '#00897B' },
                     ]}>
                       {user.ma_vai_tro === 3 ? '👑 Quản Trị Viên (Admin)' :
-                       (user.ma_vai_tro === 2 || user.ma_vai_tro === 5) ? '🧑‍🍳 Nhân Viên Bếp / Quán' :
+                       user.ma_vai_tro === 2 ? '🧑‍🍳 Nhân Viên Quán & Bếp' :
                        user.ma_vai_tro === 4 ? '🛵 Tài Xế Shipper' : ''}
                     </Text>
                   </View>
@@ -240,8 +240,8 @@ export default function ProfileScreen({ navigation }) {
             )}
           </TouchableOpacity>
 
-          {/* 2. CHỨC NĂNG NGHIỆP VỤ CHUYÊN TRÁCH THEO VAI TRÒ (Chỉ hiển thị cho Nhân viên bếp, Shipper, hoặc Admin) */}
-          {user && (user.ma_vai_tro === 2 || user.ma_vai_tro === 3 || user.ma_vai_tro === 4 || user.ma_vai_tro === 5) && (
+          {/* 2. CHỨC NĂNG NGHIỆP VỤ CHUYÊN TRÁCH THEO VAI TRÒ (Chỉ hiển thị cho Nhân viên, Shipper, hoặc Admin) */}
+          {user && (user.ma_vai_tro === 2 || user.ma_vai_tro === 3 || user.ma_vai_tro === 4) && (
             <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>Chức năng nghiệp vụ chuyên trách</Text>
               <View style={styles.menuCard}>
@@ -261,7 +261,7 @@ export default function ProfileScreen({ navigation }) {
                   </TouchableOpacity>
                 )}
 
-                {(user?.ma_vai_tro === 2 || user?.ma_vai_tro === 5 || user?.ma_vai_tro === 3) && (
+                {(user?.ma_vai_tro === 2 || user?.ma_vai_tro === 3) && (
                   <TouchableOpacity 
                     style={[styles.menuItemRow, user?.ma_vai_tro === 3 ? styles.menuItemBorder : null]}
                     onPress={() => navigation.navigate('StaffKitchen')}

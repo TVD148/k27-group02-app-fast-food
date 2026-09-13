@@ -55,9 +55,9 @@ const isAdmin = (req, res, next) => {
   next();
 };
 
-// Middleware kiểm tra quyền Nhân viên hoặc Quản trị viên (ma_vai_tro = 2, 3 hoặc 5)
+// Middleware kiểm tra quyền Nhân viên hoặc Quản trị viên (ma_vai_tro = 2 hoặc 3)
 const isStaffOrAdmin = (req, res, next) => {
-  if (!req.user || (req.user.ma_vai_tro !== 2 && req.user.ma_vai_tro !== 3 && req.user.ma_vai_tro !== 5)) {
+  if (!req.user || (req.user.ma_vai_tro !== 2 && req.user.ma_vai_tro !== 3)) {
     return res.status(403).json({
       success: false,
       message: 'Truy cập bị từ chối! Quyền Nhân viên hoặc Quản trị viên là bắt buộc.'

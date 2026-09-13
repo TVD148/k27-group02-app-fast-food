@@ -25,13 +25,14 @@ ALTER TABLE `gio_hang` AUTO_INCREMENT = 1;
 -- ============================================================================
 -- 1. BỔ SUNG VAI TRÒ MỚI (PHÂN QUYỀN VAI TRÒ DỰ ÁN)
 -- ============================================================================
--- Bổ sung vai trò Nhân viên bếp (Không tạo lại hay xóa bảng vai_tro cũ)
-INSERT IGNORE INTO `vai_tro` (`ma_vai_tro`, `ten_vai_tro`, `mo_ta`) VALUES
-(5, 'nhan_vien_bep', 'Nhân viên bếp chịu trách nhiệm chế biến và cập nhật trạng thái đơn');
+-- Cập nhật vai trò Nhân viên cửa hàng và nhà bếp (gộp 4 vai trò chuẩn)
+UPDATE `vai_tro` SET `ten_vai_tro` = 'nhan_vien', `mo_ta` = 'Nhân viên cửa hàng và nhà bếp' WHERE `ma_vai_tro` = 2;
+DELETE FROM `vai_tro` WHERE `ma_vai_tro` = 5;
 
 -- Bổ sung tài khoản Nhân viên bếp mẫu (Mật khẩu: 123456)
 INSERT IGNORE INTO `nguoi_dung` (`ma_nguoi_dung`, `ho_ten`, `email`, `mat_khau`, `so_dien_thoai`, `dia_chi`, `ma_vai_tro`, `trang_thai`) VALUES
-(5, 'Lê Văn Bếp', 'bep@fastfood.com', '$2a$10$znT.bbEl7e4EfPicZezD.uHdtiAzH5KNrJYKN97TzThIfZT0WCQJy', '0955667788', 'Nhà bếp Cửa hàng 1', 5, 'hoat_dong');
+(5, 'Lê Văn Bếp', 'bep@fastfood.com', '$2a$10$znT.bbEl7e4EfPicZezD.uHdtiAzH5KNrJYKN97TzThIfZT0WCQJy', '0955667788', 'Nhà bếp Cửa hàng 1', 2, 'hoat_dong')
+ON DUPLICATE KEY UPDATE `ma_vai_tro` = 2;
 
 -- ============================================================================
 -- 2. CẬP NHẬT SỐ LƯỢNG TỒN KHO CHO CÁC MÓN ĂN (INVENTORY MANAGEMENT)
