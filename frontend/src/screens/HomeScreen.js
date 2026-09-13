@@ -55,17 +55,11 @@ export default function HomeScreen({ navigation }) {
       const storedAddr = await AsyncStorage.getItem('default_address');
       if (storedAddr) {
         const parsed = JSON.parse(storedAddr);
-        if (parsed.address && parsed.address.includes('Lê Duẩn')) {
-          const sample = {
-            id: '1',
-            label: 'Nhà riêng',
-            name: 'Trần Văn Đình',
-            phone: '0378876126',
-            address: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
-            isDefault: true
-          };
-          setDefaultAddress(sample);
-          await AsyncStorage.setItem('default_address', JSON.stringify(sample));
+        // Dọn dẹp dữ liệu mock cũ nếu còn sót lại từ bản thử nghiệm
+        const isMockSample = parsed.address && (parsed.address.includes('Lê Duẩn') || (parsed.name === 'Trần Văn Đình' && (!storedUser || JSON.parse(storedUser).so_dien_thoai !== '0378876126')));
+        if (isMockSample) {
+          await AsyncStorage.removeItem('default_address');
+          setDefaultAddress(null);
         } else {
           setDefaultAddress(parsed);
         }
@@ -73,20 +67,14 @@ export default function HomeScreen({ navigation }) {
         const savedList = await AsyncStorage.getItem('saved_addresses');
         if (savedList) {
           const list = JSON.parse(savedList);
-          const def = list.find(a => a.isDefault) || list[0];
-          setDefaultAddress(def);
+          if (Array.isArray(list) && list.length > 0) {
+            const def = list.find(a => a.isDefault) || list[0];
+            setDefaultAddress(def);
+          } else {
+            setDefaultAddress(null);
+          }
         } else {
-          // Khởi tạo địa chỉ mặc định đầu tiên
-          const sample = {
-            id: '1',
-            label: 'Nhà riêng',
-            name: 'Trần Văn Đình',
-            phone: '0378876126',
-            address: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
-            isDefault: true
-          };
-          setDefaultAddress(sample);
-          await AsyncStorage.setItem('default_address', JSON.stringify(sample));
+          setDefaultAddress(null);
         }
       }
     } catch (e) {
@@ -259,12 +247,12 @@ export default function HomeScreen({ navigation }) {
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Text style={styles.locationTitle}>
-                  Giao tới • {defaultAddress?.label || 'Địa chỉ mặc định'}
+                  Giao tới • {defaultAddress?.label || 'Địa chỉ nhận hàng'}
                 </Text>
-                <Text style={styles.changeAddressTag}>Đổi ▾</Text>
+                <Text style={styles.changeAddressTag}>{defaultAddress ? 'Đổi ▾' : 'Chọn ▾'}</Text>
               </View>
               <Text style={styles.locationAddress} numberOfLines={1}>
-                {defaultAddress ? defaultAddress.address : (userInfo ? `${userInfo.ho_ten} (${userInfo.so_dien_thoai || 'Fast Food'})` : 'Khách ghé thăm (Chọn địa chỉ)')}
+                {defaultAddress ? defaultAddress.address : 'Nhấn để thêm hoặc chọn địa chỉ nhận hàng'}
               </Text>
             </View>
           </TouchableOpacity>

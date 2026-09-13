@@ -52,56 +52,53 @@ export default function CheckoutScreen({ route, navigation }) {
 
   const loadDeliveryAddress = async () => {
     try {
+      const storedUser = await AsyncStorage.getItem('user_info');
+      const user = storedUser ? JSON.parse(storedUser) : null;
+      if (user && user.so_dien_thoai) {
+        setPhone(user.so_dien_thoai);
+      }
+
       // 1. Kiểm tra địa chỉ mặc định đã chọn trong default_address
       const storedDefault = await AsyncStorage.getItem('default_address');
       if (storedDefault) {
         const parsed = JSON.parse(storedDefault);
-        if (parsed.address && parsed.address.includes('Lê Duẩn')) {
-          const sample = {
-            id: '1',
-            label: 'Nhà riêng',
-            name: 'Trần Văn Đình',
-            phone: '0378876126',
-            address: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
-            isDefault: true
-          };
-          setDefaultAddress(sample);
-          setAddress(sample.address);
-          setPhone(sample.phone);
-          await AsyncStorage.setItem('default_address', JSON.stringify(sample));
+        const isMockSample = parsed.address && (parsed.address.includes('Lê Duẩn') || (parsed.name === 'Trần Văn Đình' && user?.so_dien_thoai !== '0378876126'));
+        if (isMockSample) {
+          await AsyncStorage.removeItem('default_address');
+        } else {
+          setDefaultAddress(parsed);
+          setAddress(parsed.address || '');
+          setPhone(parsed.phone || user?.so_dien_thoai || '');
           return;
         }
-        setDefaultAddress(parsed);
-        setAddress(parsed.address || '');
-        setPhone(parsed.phone || '0378876126');
-        return;
       }
 
       // 2. Lấy từ danh sách sổ địa chỉ saved_addresses
       const savedList = await AsyncStorage.getItem('saved_addresses');
       if (savedList) {
-        const list = JSON.parse(savedList);
+        let list = JSON.parse(savedList);
         if (Array.isArray(list) && list.length > 0) {
-          const def = list.find(a => a.isDefault) || list[0];
-          setDefaultAddress(def);
-          setAddress(def.address || '');
-          setPhone(def.phone || '0378876126');
-          await AsyncStorage.setItem('default_address', JSON.stringify(def));
-          return;
+          list = list.filter(item => !(item.name === 'Trần Văn Đình' && user?.so_dien_thoai !== '0378876126'));
+          if (list.length > 0) {
+            const def = list.find(a => a.isDefault) || list[0];
+            setDefaultAddress(def);
+            setAddress(def.address || '');
+            setPhone(def.phone || user?.so_dien_thoai || '');
+            await AsyncStorage.setItem('default_address', JSON.stringify(def));
+            return;
+          }
         }
       }
 
-      // 3. Lấy từ thông tin người dùng đăng nhập user_info
-      const storedUser = await AsyncStorage.getItem('user_info');
-      if (storedUser) {
-        const user = JSON.parse(storedUser);
+      // 3. Lấy từ thông tin người dùng đăng nhập nếu có
+      if (user && user.dia_chi) {
         const fallback = {
           id: 'user_default',
           label: 'Nhà riêng',
           icon: '🏠',
-          name: user.ho_ten || 'Trần Văn Đình',
-          phone: user.so_dien_thoai || '0378876126',
-          address: user.dia_chi || '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
+          name: user.ho_ten || 'Khách hàng',
+          phone: user.so_dien_thoai || '',
+          address: user.dia_chi,
           isDefault: true
         };
         setDefaultAddress(fallback);
@@ -111,20 +108,9 @@ export default function CheckoutScreen({ route, navigation }) {
         return;
       }
 
-      // 4. Mặc định dự phòng chuẩn khu vực
-      const sample = {
-        id: '1',
-        label: 'Nhà riêng',
-        icon: '🏠',
-        name: 'Trần Văn Đình',
-        phone: '0378876126',
-        address: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
-        isDefault: true
-      };
-      setDefaultAddress(sample);
-      setAddress(sample.address);
-      setPhone(sample.phone);
-      await AsyncStorage.setItem('default_address', JSON.stringify(sample));
+      // 4. Nếu người dùng chưa chọn địa chỉ: để trống
+      setDefaultAddress(null);
+      setAddress('');
     } catch (e) {
       console.log('Không thể tải địa chỉ giao hàng:', e);
     }
@@ -387,7 +373,7 @@ export default function CheckoutScreen({ route, navigation }) {
 
                 <View style={styles.addressInfoRow}>
                   <Text style={styles.recipientNamePhone}>
-                    👤 {defaultAddress.name || 'Người nhận'} • 📞 {defaultAddress.phone || phone || '0378876126'}
+                    👤 {defaultAddress.name || 'Người nhận'} • 📞 {defaultAddress.phone || phone || 'Chưa có SĐT'}
                   </Text>
                 </View>
 

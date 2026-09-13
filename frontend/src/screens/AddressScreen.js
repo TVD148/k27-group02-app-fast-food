@@ -13,35 +13,9 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MapLocationPicker from '../components/MapLocationPicker';
 
-const INITIAL_ADDRESSES = [
-  {
-    id: '1',
-    label: 'Nhà riêng',
-    icon: '🏠',
-    name: 'Trần Văn Đình',
-    phone: '0378876126',
-    address: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
-    detail: 'Cổng chính',
-    latitude: 10.9805,
-    longitude: 106.6745,
-    isDefault: true,
-  },
-  {
-    id: '2',
-    label: 'Trường học',
-    icon: '🏫',
-    name: 'Trần Văn Đình',
-    phone: '0378876126',
-    address: 'Trường Đại học Bình Dương (BDU), 504 Đại lộ Bình Dương, TP. Thủ Dầu Một, Bình Dương',
-    detail: 'Khoa CNTT',
-    latitude: 10.9808,
-    longitude: 106.6750,
-    isDefault: false,
-  }
-];
-
 export default function AddressScreen({ navigation, route }) {
   const [addresses, setAddresses] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Modal Map Location Picker (Chuẩn Shopee / Grab)
@@ -55,25 +29,38 @@ export default function AddressScreen({ navigation, route }) {
   const loadSavedAddresses = async () => {
     setLoading(true);
     try {
+      const storedUser = await AsyncStorage.getItem('user_info');
+      const user = storedUser ? JSON.parse(storedUser) : null;
+      setCurrentUser(user);
+
       const stored = await AsyncStorage.getItem('saved_addresses');
       if (stored) {
-        const parsed = JSON.parse(stored);
-        // Tự động nâng cấp nếu bộ nhớ còn giữ địa chỉ mock cũ (Lê Duẩn Quận 1)
-        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].address && parsed[0].address.includes('Lê Duẩn')) {
-          setAddresses(INITIAL_ADDRESSES);
-          await AsyncStorage.setItem('saved_addresses', JSON.stringify(INITIAL_ADDRESSES));
-          await AsyncStorage.setItem('default_address', JSON.stringify(INITIAL_ADDRESSES[0]));
-        } else {
+        let parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          // Lọc bỏ địa chỉ mock mẫu thử nghiệm của Trần Văn Đình nếu người dùng hiện tại chưa phải tài khoản đó
+          parsed = parsed.filter(item => {
+            const isMockOld = item.address && (item.address.includes('Lê Duẩn') || (item.name === 'Trần Văn Đình' && user?.so_dien_thoai !== '0378876126'));
+            return !isMockOld;
+          });
+
           setAddresses(parsed);
+          await AsyncStorage.setItem('saved_addresses', JSON.stringify(parsed));
+          if (parsed.length > 0) {
+            const def = parsed.find(a => a.isDefault) || parsed[0];
+            await AsyncStorage.setItem('default_address', JSON.stringify(def));
+          } else {
+            await AsyncStorage.removeItem('default_address');
+          }
+        } else {
+          setAddresses([]);
         }
       } else {
-        // Khởi tạo địa chỉ ban đầu chuẩn khu vực Bình Dương
-        setAddresses(INITIAL_ADDRESSES);
-        await AsyncStorage.setItem('saved_addresses', JSON.stringify(INITIAL_ADDRESSES));
-        await AsyncStorage.setItem('default_address', JSON.stringify(INITIAL_ADDRESSES[0]));
+        // Lần đầu mở app: Chưa có địa chỉ nào -> Danh sách rỗng chuẩn UX
+        setAddresses([]);
+        await AsyncStorage.removeItem('default_address');
       }
     } catch (e) {
-      setAddresses(INITIAL_ADDRESSES);
+      setAddresses([]);
     } finally {
       setLoading(false);
     }
@@ -307,8 +294,8 @@ export default function AddressScreen({ navigation, route }) {
         >
           <MapLocationPicker
             initialAddress={editingAddress ? editingAddress.address : ''}
-            initialName={editingAddress ? editingAddress.name : 'Trần Văn Đình'}
-            initialPhone={editingAddress ? editingAddress.phone : '0378876126'}
+            initialName={editingAddress ? editingAddress.name : (currentUser?.ho_ten || '')}
+            initialPhone={editingAddress ? editingAddress.phone : (currentUser?.so_dien_thoai || '')}
             initialLabel={editingAddress ? editingAddress.label : 'Nhà riêng'}
             onClose={() => {
               setModalVisible(false);

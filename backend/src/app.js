@@ -34,7 +34,7 @@ app.use('/api/payments', paymentRoutes);
 app.get('/', (req, res) => {
   res.status(200).json({
     success: true,
-    message: 'Chào mừng bạn đến với API của ứng dụng Đặt thức ăn nhanh (Fast Food App) - Sprint 3 (Dinh dưỡng & Thanh toán trực tuyến)!'
+    message: 'FastFood API Server is running!'
   });
 });
 

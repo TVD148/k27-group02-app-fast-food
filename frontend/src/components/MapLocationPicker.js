@@ -19,8 +19,8 @@ const { width, height } = Dimensions.get('window');
 export default function MapLocationPicker({
   initialCoords = { lat: 10.9901, lng: 106.6644 }, // Mặc định khu vực Đại học Bình Dương
   initialAddress = '',
-  initialName = 'Trần Văn Đình',
-  initialPhone = '0378876126',
+  initialName = '',
+  initialPhone = '',
   initialLabel = 'Nhà riêng',
   onConfirmLocation,
   onClose
@@ -312,7 +312,7 @@ export default function MapLocationPicker({
       label: labelType,
       icon: iconMap[labelType] || '📍',
       name: recipientName.trim() || 'Người nhận',
-      phone: recipientPhone.trim() || '0378876126',
+      phone: recipientPhone.trim() || '',
       address: fullAddress,
       coords: coords,
       isDefault: true
