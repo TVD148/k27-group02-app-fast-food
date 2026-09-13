@@ -1857,9 +1857,18 @@ export default function AdminScreen({ navigation }) {
       <Modal visible={modalType === 'addFood'} animationType="slide" transparent={true}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalCard, { maxHeight: '92%', paddingBottom: 16 }]}>
-            <Text style={styles.modalHeading}>
-              {editingFoodId ? '✏️ Chỉnh Sửa Món Ăn' : '🍔 Thêm Món Ăn Mới'}
-            </Text>
+            <View style={styles.modalHeaderWithClose}>
+              <Text style={styles.modalHeadingWithClose}>
+                {editingFoodId ? '✏️ Chỉnh Sửa Món Ăn' : '🍔 Thêm Món Ăn Mới'}
+              </Text>
+              <TouchableOpacity
+                style={styles.modalCloseIconBtn}
+                onPress={() => setModalType(null)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.modalCloseIconText}>✕</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* Sub-tabs chuyển đổi giữa 3 mục */}
             <View style={styles.foodModalSubTabsRow}>
@@ -2211,7 +2220,16 @@ export default function AdminScreen({ navigation }) {
       <Modal visible={showCategoryModal} animationType="slide" transparent={true}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalCard, { maxHeight: '90%' }]}>
-            <Text style={styles.modalHeading}>📁 Quản Lý Danh Mục Món Ăn</Text>
+            <View style={styles.modalHeaderWithClose}>
+              <Text style={styles.modalHeadingWithClose}>📁 Quản Lý Danh Mục Món Ăn</Text>
+              <TouchableOpacity
+                style={styles.modalCloseIconBtn}
+                onPress={() => setShowCategoryModal(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.modalCloseIconText}>✕</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* Form tạo mới hoặc chỉnh sửa danh mục */}
             <View style={styles.categoryFormBox}>
@@ -2306,7 +2324,16 @@ export default function AdminScreen({ navigation }) {
       <Modal visible={showOptionGroupModal} animationType="slide" transparent={true}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalCard, { maxHeight: '92%' }]}>
-            <Text style={styles.modalHeading}>⚙️ Quản Lý Kích Cỡ & Tùy Chọn Vị</Text>
+            <View style={styles.modalHeaderWithClose}>
+              <Text style={styles.modalHeadingWithClose}>⚙️ Quản Lý Kích Cỡ & Tùy Chọn Vị</Text>
+              <TouchableOpacity
+                style={styles.modalCloseIconBtn}
+                onPress={() => setShowOptionGroupModal(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.modalCloseIconText}>✕</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* Form tạo mới hoặc cập nhật nhóm */}
             <View style={styles.categoryFormBox}>
@@ -4303,6 +4330,36 @@ const styles = StyleSheet.create({
   // =========================================================================
   // STYLES QUẢN TRỊ THỰC ĐƠN, DANH MỤC, KÍCH CỠ & DINH DƯỠNG
   // =========================================================================
+  modalHeaderWithClose: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  modalHeadingWithClose: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+    flex: 1,
+  },
+  modalCloseIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  modalCloseIconText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#64748B',
+  },
+
   adminToolRow: {
     flexDirection: 'row',
     gap: 10,
