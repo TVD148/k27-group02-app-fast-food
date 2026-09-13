@@ -110,54 +110,42 @@ export default function CheckoutScreen({ route, navigation }) {
         setPhone(user.so_dien_thoai);
       }
 
-      // 1. Kiểm tra địa chỉ mặc định đã chọn trong default_address
+      // 1. Kiểm tra tài khoản đã đăng nhập
       const userKey = user ? (user.ma_nguoi_dung || user.id || user.so_dien_thoai) : null;
-      const storedDefault = (userKey ? await AsyncStorage.getItem(`default_address_${userKey}`) : null) || await AsyncStorage.getItem('default_address');
-      if (storedDefault) {
-        const parsed = JSON.parse(storedDefault);
-        setDefaultAddress(parsed);
-        setAddress(parsed.address || '');
-        setPhone(parsed.phone || user?.so_dien_thoai || '');
+      if (!userKey) {
+        setDefaultAddress(null);
+        setAddress('');
         return;
       }
 
-      // 2. Lấy từ danh sách sổ địa chỉ saved_addresses
-      const savedList = (userKey ? await AsyncStorage.getItem(`saved_addresses_${userKey}`) : null) || await AsyncStorage.getItem('saved_addresses');
-      if (savedList) {
-        let list = JSON.parse(savedList);
+      // 2. Lấy danh sách địa chỉ đã lưu trong sổ địa chỉ của riêng tài khoản này
+      const savedListStr = await AsyncStorage.getItem(`saved_addresses_${userKey}`);
+      if (savedListStr) {
+        const list = JSON.parse(savedListStr);
         if (Array.isArray(list) && list.length > 0) {
-          const def = list.find(a => a.isDefault) || list[0];
-          setDefaultAddress(def);
-          setAddress(def.address || '');
-          setPhone(def.phone || user?.so_dien_thoai || '');
-          await AsyncStorage.setItem('default_address', JSON.stringify(def));
+          const storedDefaultStr = await AsyncStorage.getItem(`default_address_${userKey}`);
+          let chosen = null;
+          if (storedDefaultStr) {
+            const parsedDefault = JSON.parse(storedDefaultStr);
+            chosen = list.find(a => a.id === parsedDefault.id || a.address === parsedDefault.address);
+          }
+          if (!chosen) {
+            chosen = list.find(a => a.isDefault) || list[0];
+          }
+          setDefaultAddress(chosen);
+          setAddress(chosen.address || '');
+          setPhone(chosen.phone || user?.so_dien_thoai || '');
           return;
         }
       }
 
-      // 3. Lấy từ thông tin người dùng đăng nhập nếu có
-      if (user && user.dia_chi) {
-        const fallback = {
-          id: 'user_default',
-          label: 'Nhà riêng',
-          icon: '🏠',
-          name: user.ho_ten || 'Khách hàng',
-          phone: user.so_dien_thoai || '',
-          address: user.dia_chi,
-          isDefault: true
-        };
-        setDefaultAddress(fallback);
-        setAddress(fallback.address);
-        setPhone(fallback.phone);
-        await AsyncStorage.setItem('default_address', JSON.stringify(fallback));
-        return;
-      }
-
-      // 4. Nếu người dùng chưa chọn địa chỉ: để trống
+      // 3. Nếu tài khoản chưa từng lưu địa chỉ nào trong sổ địa chỉ: để trống hoàn toàn
       setDefaultAddress(null);
       setAddress('');
     } catch (e) {
       console.log('Không thể tải địa chỉ giao hàng:', e);
+      setDefaultAddress(null);
+      setAddress('');
     }
   };
 

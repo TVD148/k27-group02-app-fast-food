@@ -8,9 +8,14 @@ import {
   Switch, 
   Alert, 
   SafeAreaView, 
-  Platform 
+  Platform,
+  Modal,
+  TextInput,
+  ActivityIndicator,
+  KeyboardAvoidingView
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { updateUserProfile } from '../services/api';
 import BottomTabBar from '../components/BottomTabBar';
 
 export default function ProfileScreen({ navigation }) {
@@ -21,6 +26,13 @@ export default function ProfileScreen({ navigation }) {
   const [orderNotif, setOrderNotif] = useState(true);
   const [promoNotif, setPromoNotif] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
+
+  // States chỉnh sửa thông tin cá nhân
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [updatingProfile, setUpdatingProfile] = useState(false);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -51,6 +63,61 @@ export default function ProfileScreen({ navigation }) {
     } catch (e) {
       setUser(null);
       setCurrentAddress(null);
+    }
+  };
+
+  const handleOpenEditProfile = () => {
+    if (!user) {
+      Alert.alert(
+        'Yêu cầu đăng nhập 🔒',
+        'Vui lòng đăng nhập tài khoản để chỉnh sửa thông tin cá nhân!',
+        [
+          { text: 'Đăng nhập ngay', onPress: () => navigation.navigate('Login') },
+          { text: 'Để sau', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
+    setEditName(user.ho_ten || '');
+    setEditPhone(user.so_dien_thoai || '');
+    setEditEmail(user.email || '');
+    setEditModalVisible(true);
+  };
+
+  const handleSaveProfile = async () => {
+    const cleanName = (editName || '').trim();
+    const cleanPhone = (editPhone || '').trim();
+    const cleanEmail = (editEmail || '').trim();
+
+    if (!cleanName) {
+      Alert.alert('Thiếu thông tin ⚠️', 'Vui lòng nhập họ và tên!');
+      return;
+    }
+
+    if (!cleanPhone) {
+      Alert.alert('Thiếu thông tin ⚠️', 'Vui lòng nhập số điện thoại!');
+      return;
+    }
+
+    const phoneRegex = /^0[0-9]{9}$/;
+    if (!phoneRegex.test(cleanPhone)) {
+      Alert.alert('Số điện thoại không hợp lệ ⚠️', 'Vui lòng nhập đúng 10 chữ số (ví dụ: 0912345678)!');
+      return;
+    }
+
+    setUpdatingProfile(true);
+    try {
+      const response = await updateUserProfile(cleanName, cleanPhone, cleanEmail);
+      if (response && response.success) {
+        setUser(response.data);
+        setEditModalVisible(false);
+        Alert.alert('Thành công 🎉', 'Đã cập nhật thông tin cá nhân thành công!');
+      }
+    } catch (error) {
+      Alert.alert('Lỗi cập nhật ⚠️', error.message || 'Không thể lưu thay đổi!');
+    } finally {
+      setUpdatingProfile(false);
     }
   };
 
@@ -135,19 +202,33 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* 1. Header Hồ Sơ & Avatar */}
-          <View style={styles.profileHeaderCard}>
+          {/* 1. Header Hồ Sơ & Avatar (Chạm vào để sửa tên, SĐT, Email) */}
+          <TouchableOpacity 
+            style={styles.profileHeaderCard}
+            activeOpacity={user ? 0.85 : 1}
+            onPress={user ? handleOpenEditProfile : undefined}
+          >
             <View style={styles.avatarWrapper}>
               <View style={styles.avatarCircle}>
                 <Text style={styles.avatarEmoji}>{user ? '🧑‍🍳' : '👤'}</Text>
               </View>
+              {user && (
+                <View style={styles.avatarEditIconBadge}>
+                  <Text style={{ fontSize: 11 }}>✏️</Text>
+                </View>
+              )}
               <View style={styles.statusDot} />
             </View>
 
             {user ? (
               <View style={styles.userInfoBox}>
-                <Text style={styles.userName}>{user.ho_ten || 'Khách hàng FastFood'}</Text>
-                <Text style={styles.userSubText}>{user.email || user.so_dien_thoai || 'Thành viên thân thiết'}</Text>
+                <View style={styles.userNameHeaderRow}>
+                  <Text style={styles.userName}>{user.ho_ten || 'Khách hàng FastFood'}</Text>
+                  <View style={styles.editProfileTag}>
+                    <Text style={styles.editProfileTagText}>✏️ Đổi thông tin</Text>
+                  </View>
+                </View>
+                <Text style={styles.userSubText}>📞 {user.so_dien_thoai} {user.email ? `• ✉️ ${user.email}` : ''}</Text>
                 <View style={[
                   styles.memberBadge, 
                   user.ma_vai_tro === 3 && { backgroundColor: '#EDE7F6' },
@@ -178,7 +259,7 @@ export default function ProfileScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
             )}
-          </View>
+          </TouchableOpacity>
 
           {/* 2. CHỨC NĂNG NGHIỆP VỤ CHUYÊN TRÁCH THEO VAI TRÒ (Chỉ hiển thị cho Nhân viên bếp, Shipper, hoặc Admin) */}
           {user && (user.ma_vai_tro === 2 || user.ma_vai_tro === 3 || user.ma_vai_tro === 4 || user.ma_vai_tro === 5) && (
@@ -328,6 +409,111 @@ export default function ProfileScreen({ navigation }) {
 
         {/* 5. Khung Bottom Navigation */}
         <BottomTabBar activeTab="Profile" navigation={navigation} />
+
+        {/* Modal Chỉnh Sửa Thông Tin Cá Nhân (Tên, SĐT, Email) */}
+        <Modal
+          visible={editModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => {
+            if (!updatingProfile) setEditModalVisible(false);
+          }}
+        >
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.modalBackdrop}
+          >
+            <View style={styles.editModalCard}>
+              <View style={styles.editModalHeader}>
+                <View>
+                  <Text style={styles.editModalTitle}>Thông Tin Cá Nhân 👤</Text>
+                  <Text style={styles.editModalSubtitle}>Cập nhật tên, số điện thoại hoặc email</Text>
+                </View>
+                <TouchableOpacity 
+                  onPress={() => setEditModalVisible(false)}
+                  disabled={updatingProfile}
+                  style={styles.modalCloseBtn}
+                >
+                  <Text style={styles.modalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+                {/* Họ và tên */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.fieldLabel}>
+                    Họ và tên <Text style={styles.requiredMark}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={editName}
+                    onChangeText={setEditName}
+                    placeholder="Nhập họ và tên của bạn..."
+                    placeholderTextColor="#94A3B8"
+                  />
+                </View>
+
+                {/* Số điện thoại */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.fieldLabel}>
+                    Số điện thoại <Text style={styles.requiredMark}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={editPhone}
+                    onChangeText={setEditPhone}
+                    placeholder="Ví dụ: 0912345678 (10 số)"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="phone-pad"
+                    maxLength={11}
+                  />
+                </View>
+
+                {/* Email */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.fieldLabel}>Email</Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={editEmail}
+                    onChangeText={setEditEmail}
+                    placeholder="Nhập email nhận hóa đơn..."
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                <View style={styles.infoHintBox}>
+                  <Text style={styles.infoHintText}>
+                    💡 Lưu ý: Tên và Số điện thoại sẽ được tự động điền sẵn khi bạn thêm địa chỉ nhận hàng mới.
+                  </Text>
+                </View>
+              </ScrollView>
+
+              {/* Action Buttons */}
+              <View style={styles.modalActionRow}>
+                <TouchableOpacity 
+                  style={styles.cancelBtn} 
+                  onPress={() => setEditModalVisible(false)}
+                  disabled={updatingProfile}
+                >
+                  <Text style={styles.cancelBtnText}>Hủy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.saveBtn, updatingProfile && { opacity: 0.7 }]} 
+                  onPress={handleSaveProfile}
+                  disabled={updatingProfile}
+                >
+                  {updatingProfile ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.saveBtnText}>Lưu Thay Đổi</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -549,5 +735,168 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: 12,
     color: '#94A3B8',
+  },
+  avatarEditIconBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#00A896',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  userNameHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  editProfileTag: {
+    backgroundColor: '#E6FFFA',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#B2F5EA',
+  },
+  editProfileTagText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#00A896',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  editModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    width: '100%',
+    maxWidth: 420,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  editModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  editModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  editModalSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#64748B',
+  },
+  formGroup: {
+    marginBottom: 14,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 6,
+  },
+  requiredMark: {
+    color: '#EF4444',
+  },
+  fieldInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  infoHintBox: {
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+  },
+  infoHintText: {
+    fontSize: 12,
+    color: '#0F766E',
+    lineHeight: 16,
+  },
+  modalActionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  saveBtn: {
+    flex: 1.5,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#00A896',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#00A896',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  saveBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

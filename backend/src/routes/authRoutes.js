@@ -12,4 +12,7 @@ router.post('/login', authController.login);
 // Route lấy thông tin cá nhân (yêu cầu gửi kèm Token JWT hợp lệ)
 router.get('/profile', verifyToken, authController.getProfile);
 
+// Route cập nhật thông tin cá nhân (Họ tên, SĐT, Email)
+router.put('/profile', verifyToken, authController.updateProfile);
+
 module.exports = router;

@@ -107,6 +107,24 @@ export const getUserProfile = async () => {
   }
 };
 
+// Cập nhật thông tin cá nhân (Họ tên, SĐT, Email)
+export const updateUserProfile = async (ho_ten, so_dien_thoai, email) => {
+  try {
+    const response = await api.put('/auth/profile', {
+      ho_ten,
+      so_dien_thoai,
+      email
+    });
+    if (response.data && response.data.success && response.data.data) {
+      await AsyncStorage.setItem('user_info', JSON.stringify(response.data.data));
+    }
+    return response.data;
+  } catch (error) {
+    const errorMsg = error.response?.data?.message || error.message || 'Lỗi cập nhật hồ sơ!';
+    throw new Error(errorMsg);
+  }
+};
+
 // Đăng xuất (Xóa thông tin lưu trữ trên máy)
 export const logoutUser = async () => {
   await AsyncStorage.removeItem('user_token');

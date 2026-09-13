@@ -51,6 +51,11 @@ export default function MapLocationPicker({
     }
   }, []);
 
+  useEffect(() => {
+    if (initialName) setRecipientName(initialName);
+    if (initialPhone) setRecipientPhone(initialPhone);
+  }, [initialName, initialPhone]);
+
   // 1. TÌM KIẾM ĐỊA ĐIỂM GỢI Ý THÔNG MINH (PLACES AUTOCOMPLETE NHƯ SHOPEE)
   const handleSearchChange = (text) => {
     setSearchQuery(text);
@@ -287,12 +292,31 @@ export default function MapLocationPicker({
     } finally {
       setLocating(false);
     }
-  };
-
-  // 4. XÁC NHẬN VÀ LƯU ĐỊA CHỈ
+  // 4. XÁC NHẬN VÀ LƯU ĐỊA CHỈ (BẮT BUỘC NHẬP TÊN, SĐT, ĐỊA CHỈ)
   const handleConfirm = () => {
-    if (!address.trim()) {
-      Alert.alert('Lỗi', 'Vui lòng chọn một địa chỉ trên bản đồ hoặc từ danh sách gợi ý!');
+    const cleanName = (recipientName || '').trim();
+    const cleanPhone = (recipientPhone || '').trim();
+    const cleanAddress = (address || '').trim();
+
+    if (!cleanName) {
+      Alert.alert('Thiếu thông tin ⚠️', 'Vui lòng nhập họ và tên người nhận hàng!');
+      return;
+    }
+
+    if (!cleanPhone) {
+      Alert.alert('Thiếu thông tin ⚠️', 'Vui lòng nhập số điện thoại người nhận hàng!');
+      return;
+    }
+
+    // Kiểm tra định dạng số điện thoại Việt Nam (10 chữ số, bắt đầu bằng 0)
+    const phoneRegex = /^0[0-9]{9}$/;
+    if (!phoneRegex.test(cleanPhone)) {
+      Alert.alert('Số điện thoại không hợp lệ ⚠️', 'Vui lòng nhập đúng số điện thoại gồm 10 chữ số (ví dụ: 0912345678)!');
+      return;
+    }
+
+    if (!cleanAddress) {
+      Alert.alert('Thiếu thông tin ⚠️', 'Vui lòng chọn hoặc ghim vị trí địa chỉ nhận hàng trên bản đồ!');
       return;
     }
 
@@ -304,15 +328,15 @@ export default function MapLocationPicker({
 
     // Kết hợp số nhà/ngõ hẻm chi tiết nếu có
     const fullAddress = detailNote.trim() 
-      ? `${detailNote.trim()}, ${address.trim()}`
-      : address.trim();
+      ? `${detailNote.trim()}, ${cleanAddress}`
+      : cleanAddress;
 
     const locationData = {
       id: Date.now().toString(),
       label: labelType,
       icon: iconMap[labelType] || '📍',
-      name: recipientName.trim() || 'Người nhận',
-      phone: recipientPhone.trim() || '',
+      name: cleanName,
+      phone: cleanPhone,
       address: fullAddress,
       coords: coords,
       isDefault: true
@@ -424,7 +448,9 @@ export default function MapLocationPicker({
               <Text style={{ fontSize: 16 }}>📍</Text>
             </View>
             <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={styles.addressLabelHeader}>Địa chỉ đã chọn:</Text>
+              <Text style={styles.addressLabelHeader}>
+                Địa chỉ đã chọn <Text style={{ color: '#EF4444', fontWeight: 'bold' }}>*</Text>:
+              </Text>
               <Text style={styles.addressDisplayValue} numberOfLines={2}>
                 {address || 'Đang lấy thông tin địa chỉ từ bản đồ...'}
               </Text>
@@ -460,7 +486,9 @@ export default function MapLocationPicker({
           {/* Thông tin liên hệ */}
           <View style={styles.contactRow}>
             <View style={{ flex: 1, marginRight: 8 }}>
-              <Text style={styles.inputLabel}>Tên người nhận:</Text>
+              <Text style={styles.inputLabel}>
+                Tên người nhận <Text style={{ color: '#EF4444', fontWeight: 'bold' }}>*</Text>:
+              </Text>
               <TextInput
                 style={styles.contactInput}
                 value={recipientName}
@@ -470,12 +498,14 @@ export default function MapLocationPicker({
               />
             </View>
             <View style={{ flex: 1, marginLeft: 8 }}>
-              <Text style={styles.inputLabel}>Số điện thoại:</Text>
+              <Text style={styles.inputLabel}>
+                Số điện thoại <Text style={{ color: '#EF4444', fontWeight: 'bold' }}>*</Text>:
+              </Text>
               <TextInput
                 style={styles.contactInput}
                 value={recipientPhone}
                 onChangeText={setRecipientPhone}
-                placeholder="Số điện thoại..."
+                placeholder="Số điện thoại (10 số)..."
                 placeholderTextColor="#94A3B8"
                 keyboardType="phone-pad"
               />

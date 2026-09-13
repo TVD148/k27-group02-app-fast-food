@@ -193,8 +193,88 @@ const getProfile = async (req, res) => {
   }
 };
 
+// 4. CẬP NHẬT PROFILE NGƯỜI DÙNG (PUT /api/auth/profile)
+const updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { ho_ten, so_dien_thoai, email } = req.body;
+
+    if (!ho_ten || !ho_ten.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Họ tên không được để trống!'
+      });
+    }
+
+    if (!so_dien_thoai || !so_dien_thoai.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Số điện thoại không được để trống!'
+      });
+    }
+
+    // Kiểm tra định dạng số điện thoại (10 số, bắt đầu bằng 0)
+    const phoneRegex = /^0[0-9]{9}$/;
+    if (!phoneRegex.test(so_dien_thoai.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Số điện thoại không hợp lệ! Vui lòng nhập đúng 10 chữ số (ví dụ: 0912345678).'
+      });
+    }
+
+    // Kiểm tra trùng lặp SĐT với người khác
+    const [dupPhone] = await db.query(
+      'SELECT ma_nguoi_dung FROM nguoi_dung WHERE so_dien_thoai = ? AND ma_nguoi_dung != ?',
+      [so_dien_thoai.trim(), userId]
+    );
+    if (dupPhone.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Số điện thoại này đã được tài khoản khác đăng ký!'
+      });
+    }
+
+    // Kiểm tra trùng lặp Email với người khác
+    if (email && email.trim()) {
+      const [dupEmail] = await db.query(
+        'SELECT ma_nguoi_dung FROM nguoi_dung WHERE email = ? AND ma_nguoi_dung != ?',
+        [email.trim(), userId]
+      );
+      if (dupEmail.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email này đã được tài khoản khác sử dụng!'
+        });
+      }
+    }
+
+    await db.query(
+      'UPDATE nguoi_dung SET ho_ten = ?, so_dien_thoai = ?, email = ? WHERE ma_nguoi_dung = ?',
+      [ho_ten.trim(), so_dien_thoai.trim(), (email ? email.trim() : null), userId]
+    );
+
+    const [updatedUsers] = await db.query(
+      'SELECT ma_nguoi_dung, ho_ten, email, so_dien_thoai, dia_chi, hinh_anh, ma_vai_tro, trang_thai FROM nguoi_dung WHERE ma_nguoi_dung = ?',
+      [userId]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Cập nhật thông tin cá nhân thành công!',
+      data: updatedUsers[0]
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi hệ thống khi cập nhật thông tin cá nhân.',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
-  getProfile
+  getProfile,
+  updateProfile
 };
