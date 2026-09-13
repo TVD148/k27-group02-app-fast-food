@@ -14,7 +14,26 @@ import {
   SafeAreaView 
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createOrder, applyVoucher, fetchVouchers, generateVietQR, confirmPayment } from '../services/api';
+import { createOrder, applyVoucher, fetchVouchers, generateVietQR, confirmPayment, fetchStoreLandmark } from '../services/api';
+
+function calculateHaversine(lat1, lon1, lat2, lon2) {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+  const p1 = parseFloat(lat1);
+  const l1 = parseFloat(lon1);
+  const p2 = parseFloat(lat2);
+  const l2 = parseFloat(lon2);
+  if (isNaN(p1) || isNaN(l1) || isNaN(p2) || isNaN(l2)) return null;
+
+  const R = 6371; // km
+  const dLat = (p2 - p1) * Math.PI / 180;
+  const dLon = (l2 - l1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(p1 * Math.PI / 180) * Math.cos(p2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return parseFloat((R * c).toFixed(2));
+}
 
 export default function CheckoutScreen({ route, navigation }) {
   const { cartData, grandTotal: initialGrandTotal } = route.params || {};
@@ -36,19 +55,52 @@ export default function CheckoutScreen({ route, navigation }) {
   const [vietQrData, setVietQrData] = useState(null);
   const [generatingQr, setGeneratingQr] = useState(false);
 
+  // Mốc quán & Tính khoảng cách
+  const [storeLandmark, setStoreLandmark] = useState({
+    dia_chi_quan: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
+    vi_do: 10.9805,
+    kinh_do: 106.6745,
+    ban_kinh_phuc_vu_km: 3.0,
+    gia_ship_moi_km: 5000
+  });
+
+  const customerCoords = defaultAddress?.coords;
+  const distanceKm = (customerCoords && storeLandmark)
+    ? calculateHaversine(storeLandmark.vi_do, storeLandmark.kinh_do, customerCoords.lat, customerCoords.lng)
+    : null;
+
+  const maxRadius = storeLandmark?.ban_kinh_phuc_vu_km || 3.0;
+  const isOutOfRange = distanceKm !== null && distanceKm > maxRadius;
+
   const rawSubtotal = cartData?.tong_tien || (initialGrandTotal ? initialGrandTotal - 15000 : 0);
-  const shippingFee = 15000;
+  // Tính tiền ship: 5.000đ mỗi 1km khoảng cách (hoặc 15.000đ mặc định)
+  const shippingFee = distanceKm !== null 
+    ? Math.max(5000, Math.round(distanceKm * (storeLandmark?.gia_ship_moi_km || 5000)))
+    : 15000;
   const discountAmount = appliedVoucher ? parseFloat(appliedVoucher.so_tien_giam) : 0;
   const grandTotal = Math.max(0, rawSubtotal + shippingFee - discountAmount);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       loadDeliveryAddress();
+      loadLandmark();
     });
     loadDeliveryAddress();
     loadPublicVouchers();
+    loadLandmark();
     return unsubscribe;
   }, [navigation]);
+
+  const loadLandmark = async () => {
+    try {
+      const res = await fetchStoreLandmark();
+      if (res.success && res.data) {
+        setStoreLandmark(res.data);
+      }
+    } catch (e) {
+      console.log('Dùng mốc quán mặc định:', e);
+    }
+  };
 
   const loadDeliveryAddress = async () => {
     try {
@@ -183,15 +235,28 @@ export default function CheckoutScreen({ route, navigation }) {
       return;
     }
 
+    if (isOutOfRange) {
+      Alert.alert(
+        'Vượt quá phạm vi 3km 🚫',
+        `Quán chỉ nhận giao hàng trong bán kính ${maxRadius}km từ quán (${storeLandmark?.dia_chi_quan || '504 Đại lộ Bình Dương'}). Vị trí hiện tại của bạn cách quán ${distanceKm} km. Vui lòng chọn địa chỉ khác trong phạm vi 3km!`,
+        [
+          { text: 'Chọn lại địa chỉ ➔', onPress: () => navigation.navigate('Address') },
+          { text: 'Đóng', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
     setSubmitting(true);
     try {
-      // Gọi API tạo đơn hàng (sử dụng địa chỉ mặc định đã chọn)
+      // Gọi API tạo đơn hàng kèm tọa độ để hệ thống xác thực khoảng cách & tính phí ship
       const response = await createOrder(
         finalAddress, 
         finalPhone, 
         note, 
         paymentMethod, 
-        appliedVoucher ? appliedVoucher.ma_code : null
+        appliedVoucher ? appliedVoucher.ma_code : null,
+        customerCoords
       );
 
       if (response.success) {
@@ -381,9 +446,20 @@ export default function CheckoutScreen({ route, navigation }) {
                   {defaultAddress.address || address}
                 </Text>
 
-                <View style={styles.autoDefaultBadge}>
-                  <Text style={styles.autoDefaultBadgeText}>✓ Đã tự động chọn địa chỉ mặc định, không cần nhập lại</Text>
-                </View>
+                {/* Khoảng cách tới mốc quán & Bán kính 3km */}
+                {distanceKm !== null ? (
+                  <View style={[styles.distanceBadge, isOutOfRange && styles.distanceBadgeOutOfRange]}>
+                    <Text style={[styles.distanceBadgeText, isOutOfRange && styles.distanceBadgeTextOutOfRange]}>
+                      {isOutOfRange 
+                        ? `🚫 Cách quán ${distanceKm} km (Vượt quá bán kính phục vụ ${maxRadius}km)` 
+                        : `📍 Cách quán ${distanceKm} km • Tiền ship: ${shippingFee.toLocaleString('vi-VN')} đ (5.000đ/km)`}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.autoDefaultBadge}>
+                    <Text style={styles.autoDefaultBadgeText}>✓ Đã tự động chọn địa chỉ mặc định, không cần nhập lại</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             ) : (
               <TouchableOpacity 
@@ -426,7 +502,9 @@ export default function CheckoutScreen({ route, navigation }) {
             </View>
 
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Phí giao hàng:</Text>
+              <Text style={styles.priceLabel}>
+                Phí giao hàng {distanceKm !== null ? `(${distanceKm} km x 5.000đ)` : ''}:
+              </Text>
               <Text style={styles.priceValue}>{shippingFee.toLocaleString('vi-VN')} đ</Text>
             </View>
 
@@ -444,18 +522,29 @@ export default function CheckoutScreen({ route, navigation }) {
           </View>
         </ScrollView>
 
+        {/* CẢNH BÁO NGOÀI PHẠM VI 3KM NẾU CÓ */}
+        {isOutOfRange && (
+          <View style={styles.outOfRangeBanner}>
+            <Text style={styles.outOfRangeBannerText}>
+              ⚠️ Địa chỉ cách quán {distanceKm}km (vượt quá 3km). Quán chỉ nhận giao hàng trong bán kính 3km!
+            </Text>
+          </View>
+        )}
+
         {/* BOTTOM BAR: Nút Xác nhận đặt hàng / Hoàn tất thanh toán */}
         <View style={styles.bottomBar}>
           <TouchableOpacity 
-            style={[styles.submitBtn, (submitting || generatingQr) && styles.btnDisabled]} 
+            style={[styles.submitBtn, (submitting || generatingQr || isOutOfRange) && styles.btnDisabled]} 
             onPress={handlePlaceOrder}
-            disabled={submitting || generatingQr}
+            disabled={submitting || generatingQr || isOutOfRange}
           >
             {submitting || generatingQr ? (
               <ActivityIndicator color="#FFF" />
             ) : (
               <Text style={styles.submitBtnText}>
-                Hoàn tất Thanh toán ({grandTotal.toLocaleString('vi-VN')} đ) 🚀
+                {isOutOfRange
+                  ? `Ngoài bán kính giao hàng (${distanceKm} km) 🚫`
+                  : `Hoàn tất Thanh toán (${grandTotal.toLocaleString('vi-VN')} đ) 🚀`}
               </Text>
             )}
           </TouchableOpacity>
@@ -676,6 +765,45 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#16A34A',
     fontWeight: '600',
+  },
+  distanceBadge: {
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1,
+    borderColor: '#7DD3FC',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: 4,
+    alignSelf: 'flex-start',
+  },
+  distanceBadgeOutOfRange: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FCA5A5',
+  },
+  distanceBadgeText: {
+    fontSize: 12,
+    color: '#0284C7',
+    fontWeight: '700',
+  },
+  distanceBadgeTextOutOfRange: {
+    color: '#DC2626',
+  },
+  outOfRangeBanner: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#F87171',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 12,
+  },
+  outOfRangeBannerText: {
+    color: '#B91C1C',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 18,
+    textAlign: 'center',
   },
   noAddressBox: {
     backgroundColor: '#FFFBEB',

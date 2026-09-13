@@ -1,5 +1,52 @@
 const db = require('../config/db');
 
+// Tính khoảng cách giữa 2 tọa độ GPS (Đơn vị: Kilomet)
+function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+  const p1 = parseFloat(lat1);
+  const l1 = parseFloat(lon1);
+  const p2 = parseFloat(lat2);
+  const l2 = parseFloat(lon2);
+  if (isNaN(p1) || isNaN(l1) || isNaN(p2) || isNaN(l2)) return 0;
+
+  const R = 6371; // Bán kính trái đất (km)
+  const dLat = (p2 - p1) * Math.PI / 180;
+  const dLon = (l2 - l1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(p1 * Math.PI / 180) * Math.cos(p2 * Math.PI / 180) * 
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return parseFloat((R * c).toFixed(2));
+}
+
+// Lấy thông tin địa chỉ mốc của quán từ database
+const getStoreLandmarkConfig = async () => {
+  try {
+    const [rows] = await db.query('SELECT * FROM cau_hinh_quan WHERE id = 1');
+    if (rows.length > 0) {
+      return {
+        ten_quan: rows[0].ten_quan,
+        dia_chi_quan: rows[0].dia_chi_quan,
+        vi_do: parseFloat(rows[0].vi_do),
+        kinh_do: parseFloat(rows[0].kinh_do),
+        ban_kinh_phuc_vu_km: parseFloat(rows[0].ban_kinh_phuc_vu_km || 3),
+        gia_ship_moi_km: parseFloat(rows[0].gia_ship_moi_km || 5000)
+      };
+    }
+  } catch (e) {
+    console.log('Lỗi đọc mốc quán từ DB, dùng mốc dự phòng:', e.message);
+  }
+  return {
+    ten_quan: 'Cửa hàng FastFood BDU',
+    dia_chi_quan: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
+    vi_do: 10.9805,
+    kinh_do: 106.6745,
+    ban_kinh_phuc_vu_km: 3.0,
+    gia_ship_moi_km: 5000
+  };
+};
+
 // 1. TẠO ĐƠN HÀNG MỚI (POST /api/orders) - ĐẶT HÀNG TỪ GIỎ HÀNG
 const createOrder = async (req, res) => {
   try {
@@ -9,7 +56,10 @@ const createOrder = async (req, res) => {
       so_dien_thoai_nhan, 
       ghi_chu = '', 
       phuong_thuc_thanh_toan = 'tien_mat',
-      ma_code = null
+      ma_code = null,
+      vi_do = null,
+      kinh_do = null,
+      coords = null
     } = req.body;
 
     // Validate bắt buộc
@@ -62,9 +112,29 @@ const createOrder = async (req, res) => {
       }
     }
 
-    // 3. Tính toán tổng tiền
+    // 3. Kiểm tra vị trí khách hàng so với Mốc Quán (Giới hạn bán kính 3km)
+    const store = await getStoreLandmarkConfig();
+    const custLat = vi_do || (coords && coords.lat) || null;
+    const custLng = kinh_do || (coords && coords.lng) || null;
+
+    let distanceKm = null;
+    let phiGiaoHang = 15000; // Mặc định nếu không có GPS
+
+    if (custLat && custLng) {
+      distanceKm = calculateHaversineDistance(store.vi_do, store.kinh_do, custLat, custLng);
+      // Kiểm tra bán kính phục vụ
+      if (distanceKm > store.ban_kinh_phuc_vu_km) {
+        return res.status(400).json({
+          success: false,
+          message: `Rất tiếc! Quán chỉ nhận giao hàng trong bán kính ${store.ban_kinh_phuc_vu_km}km. Địa chỉ của bạn cách quán ${distanceKm}km (vượt quá ${store.ban_kinh_phuc_vu_km}km)!`
+        });
+      }
+      // Phí giao hàng tạm tính theo khoảng cách mốc: 5000đ/1km (tối thiểu 5000đ)
+      phiGiaoHang = Math.max(5000, Math.round(distanceKm * store.gia_ship_moi_km));
+    }
+
+    // 4. Tính toán tổng tiền
     const tongTienHang = cartItems.reduce((sum, item) => sum + parseFloat(item.gia_tam_tinh), 0);
-    const phiGiaoHang = 15000; // Phí ship cố định 15k
     let soTienGiam = 0;
     let maVoucherId = null;
 
@@ -99,18 +169,20 @@ const createOrder = async (req, res) => {
     const [users] = await db.query('SELECT ho_ten FROM nguoi_dung WHERE ma_nguoi_dung = ?', [userId]);
     const userName = users.length > 0 ? users[0].ho_ten : 'Khách hàng';
 
-    // 4. Thực hiện Transaction chèn Đơn hàng & Chi tiết đơn hàng
-    // 4a. Tạo đơn hàng mới
+    // 5. Thực hiện Transaction chèn Đơn hàng & Chi tiết đơn hàng
+    // 5a. Tạo đơn hàng mới kèm tọa độ giao và khoảng cách
     const [orderResult] = await db.query(`
       INSERT INTO don_hang (
         ma_nguoi_dung, ma_voucher, tong_tien_hang, phi_giao_hang, so_tien_giam, tong_thanh_toan,
         dia_chi_giao_hang, so_dien_thoai_nhan, ghi_chu,
-        phuong_thuc_thanh_toan, trang_thai_thanh_toan, trang_thai_don_hang
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'cho_xac_nhan')
+        phuong_thuc_thanh_toan, trang_thai_thanh_toan, trang_thai_don_hang,
+        vi_do_giao, kinh_do_giao, khoang_cach_km
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'cho_xac_nhan', ?, ?, ?)
     `, [
       userId, maVoucherId, tongTienHang, phiGiaoHang, soTienGiam, tongThanhToan,
       dia_chi_giao_hang, so_dien_thoai_nhan, ghi_chu,
-      phuong_thuc_thanh_toan, trangThaiThanhToan
+      phuong_thuc_thanh_toan, trangThaiThanhToan,
+      custLat, custLng, distanceKm
     ]);
 
     const orderId = orderResult.insertId;
@@ -213,8 +285,8 @@ const getOrders = async (req, res) => {
       query += ' AND d.ma_nguoi_dung = ?';
       params.push(userId);
     } else if (userRole === 4) {
-      // Nếu là Shipper (ma_vai_tro = 4), lấy các đơn được phân công hoặc đơn sẵn sàng chờ giao
-      query += ' AND (d.ma_shipper = ? OR d.trang_thai_don_hang = "san_sang_giao")';
+      // Nếu là Shipper (ma_vai_tro = 4), lấy các đơn được phân công hoặc đơn sẵn sàng chờ nhận giao
+      query += ' AND (d.ma_shipper = ? OR d.trang_thai_don_hang IN ("san_sang_giao", "dang_che_bien", "dang_giao", "da_giao"))';
       params.push(userId);
     }
     // Nhân viên (role 2) và Admin (role 3) xem toàn bộ danh sách đơn hàng để chế biến/quản lý
@@ -229,14 +301,25 @@ const getOrders = async (req, res) => {
 
     const [orders] = await db.query(query, params);
 
-    // Lấy kèm tổng số món ăn trong từng đơn
+    // Lấy kèm tổng số món ăn trong từng đơn và chuẩn hóa các trường dữ liệu
     const ordersWithDetails = await Promise.all(orders.map(async (order) => {
       const [items] = await db.query('SELECT COUNT(*) AS tong_so_mon FROM chi_tiet_don_hang WHERE ma_don_hang = ?', [order.ma_don_hang]);
       return {
         ...order,
+        dia_chi_giao: order.dia_chi_giao_hang,
+        dia_chi_giao_hang: order.dia_chi_giao_hang,
+        so_dien_thoai: order.so_dien_thoai_nhan,
+        so_dien_thoai_nhan: order.so_dien_thoai_nhan,
+        tong_tien: parseFloat(order.tong_thanh_toan),
+        tong_thanh_toan: parseFloat(order.tong_thanh_toan),
         tong_tien_hang: parseFloat(order.tong_tien_hang),
         phi_giao_hang: parseFloat(order.phi_giao_hang),
-        tong_thanh_toan: parseFloat(order.tong_thanh_toan),
+        so_tien_giam: parseFloat(order.so_tien_giam || 0),
+        khoang_cach_km: parseFloat(order.khoang_cach_km || 0),
+        vi_do_giao: order.vi_do_giao ? parseFloat(order.vi_do_giao) : null,
+        kinh_do_giao: order.kinh_do_giao ? parseFloat(order.kinh_do_giao) : null,
+        vi_do_shipper: order.vi_do_shipper ? parseFloat(order.vi_do_shipper) : null,
+        kinh_do_shipper: order.kinh_do_shipper ? parseFloat(order.kinh_do_shipper) : null,
         tong_so_mon: items[0].tong_so_mon || 0
       };
     }));
@@ -317,6 +400,18 @@ const getOrderDetail = async (req, res) => {
       message: 'Lấy chi tiết đơn hàng thành công!',
       data: {
         ...order,
+        dia_chi_giao: order.dia_chi_giao_hang,
+        dia_chi_giao_hang: order.dia_chi_giao_hang,
+        so_dien_thoai: order.so_dien_thoai_nhan,
+        so_dien_thoai_nhan: order.so_dien_thoai_nhan,
+        tong_tien: parseFloat(order.tong_thanh_toan),
+        tong_thanh_toan: parseFloat(order.tong_thanh_toan),
+        tong_tien_hang: parseFloat(order.tong_tien_hang),
+        phi_giao_hang: parseFloat(order.phi_giao_hang),
+        so_tien_giam: parseFloat(order.so_tien_giam || 0),
+        khoang_cach_km: parseFloat(order.khoang_cach_km || 0),
+        vi_do_giao: order.vi_do_giao ? parseFloat(order.vi_do_giao) : null,
+        kinh_do_giao: order.kinh_do_giao ? parseFloat(order.kinh_do_giao) : null,
         tong_tien_hang: parseFloat(order.tong_tien_hang),
         phi_giao_hang: parseFloat(order.phi_giao_hang),
         tong_thanh_toan: parseFloat(order.tong_thanh_toan),
@@ -463,6 +558,7 @@ const acceptDelivery = async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.ma_vai_tro;
     const orderId = req.params.id;
+    const { vi_do = null, kinh_do = null, coords = null } = req.body;
 
     if (userRole !== 4 && userRole !== 3) {
       return res.status(403).json({
@@ -491,26 +587,78 @@ const acceptDelivery = async (req, res) => {
       });
     }
 
+    const store = await getStoreLandmarkConfig();
+    const shipperLat = vi_do || (coords && coords.lat) || null;
+    const shipperLng = kinh_do || (coords && coords.lng) || null;
+
+    let distShipperToCustomer = parseFloat(order.khoang_cach_km || 0);
+    let newShippingFee = parseFloat(order.phi_giao_hang || 15000);
+    let newTotal = parseFloat(order.tong_thanh_toan);
+
+    // 1. Kiểm tra phạm vi 3km của Shipper so với Quán
+    if (shipperLat && shipperLng) {
+      const distShipperToStore = calculateHaversineDistance(store.vi_do, store.kinh_do, shipperLat, shipperLng);
+      if (distShipperToStore > store.ban_kinh_phuc_vu_km) {
+        return res.status(400).json({
+          success: false,
+          message: `Bạn đang ở cách quán ${distShipperToStore}km (vượt quá phạm vi ${store.ban_kinh_phuc_vu_km}km để nhận đơn). Vui lòng di chuyển đến gần quán trong bán kính 3km!`
+        });
+      }
+
+      // 2. Tiền ship được tính từ khoảng cách ban đầu khi shipper nhận đơn đến địa điểm khách nhận đơn (5.000đ/1km)
+      const custLat = order.vi_do_giao ? parseFloat(order.vi_do_giao) : null;
+      const custLng = order.kinh_do_giao ? parseFloat(order.kinh_do_giao) : null;
+
+      if (custLat && custLng) {
+        distShipperToCustomer = calculateHaversineDistance(shipperLat, shipperLng, custLat, custLng);
+      } else {
+        // Nếu đơn hàng cũ chưa có tọa độ khách, lấy khoảng cách từ shipper đến quán + 1km
+        distShipperToCustomer = Math.max(1.0, distShipperToStore);
+      }
+
+      newShippingFee = Math.max(5000, Math.round(distShipperToCustomer * store.gia_ship_moi_km));
+      newTotal = Math.max(0, parseFloat(order.tong_tien_hang) + newShippingFee - parseFloat(order.so_tien_giam || 0));
+    }
+
     const [users] = await db.query('SELECT ho_ten FROM nguoi_dung WHERE ma_nguoi_dung = ?', [userId]);
     const shipperName = users.length > 0 ? users[0].ho_ten : 'Tài xế';
 
-    // Cập nhật ma_shipper và chuyển sang dang_giao (đang đi giao)
-    await db.query(
-      'UPDATE don_hang SET ma_shipper = ?, trang_thai_don_hang = "dang_giao" WHERE ma_don_hang = ?',
-      [userId, orderId]
-    );
+    // Cập nhật ma_shipper, tọa độ ban đầu của shipper, khoảng cách và phí ship mới tính
+    await db.query(`
+      UPDATE don_hang 
+      SET ma_shipper = ?, 
+          trang_thai_don_hang = "dang_giao",
+          vi_do_shipper = ?,
+          kinh_do_shipper = ?,
+          khoang_cach_km = ?,
+          phi_giao_hang = ?,
+          tong_thanh_toan = ?
+      WHERE ma_don_hang = ?
+    `, [userId, shipperLat, shipperLng, distShipperToCustomer, newShippingFee, newTotal, orderId]);
 
     // Ghi log
     await db.query(`
       INSERT INTO lich_su_trang_thai_don (
         ma_don_hang, trang_thai_cu, trang_thai_moi, ghi_chu, nguoi_thuc_hien
       ) VALUES (?, ?, ?, ?, ?)
-    `, [orderId, order.trang_thai_don_hang, 'dang_giao', 'Shipper đã tới quán nhận đồ ăn và bắt đầu đi giao cho khách', `${shipperName} (Shipper)`]);
+    `, [
+      orderId, 
+      order.trang_thai_don_hang, 
+      'dang_giao', 
+      `Shipper đã nhận đơn (Khoảng cách: ${distShipperToCustomer} km, Tiền ship: ${newShippingFee.toLocaleString('vi-VN')} đ)`, 
+      `${shipperName} (Shipper)`
+    ]);
 
     return res.status(200).json({
       success: true,
       message: `Tài xế ${shipperName} đã nhận đơn #${orderId} thành công!`,
-      data: { ma_don_hang: parseInt(orderId), trang_thai: 'dang_giao' }
+      data: { 
+        ma_don_hang: parseInt(orderId), 
+        trang_thai: 'dang_giao',
+        khoang_cach_km: distShipperToCustomer,
+        phi_giao_hang: newShippingFee,
+        tong_thanh_toan: newTotal
+      }
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Lỗi nhận đơn giao.', error: error.message });

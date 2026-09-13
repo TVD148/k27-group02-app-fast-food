@@ -29,7 +29,9 @@ import {
   deleteAdminVoucher,
   toggleAdminVoucher,
   fetchAdminUsers,
-  createAdminUser
+  createAdminUser,
+  fetchStoreLandmark,
+  updateAdminStoreLandmark
 } from '../services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -126,6 +128,17 @@ export default function AdminScreen({ navigation }) {
   const [vouchers, setVouchers] = useState([]);
   const [users, setUsers] = useState([]);
 
+  // Mốc quán & Bán kính phục vụ (Cột mốc 3km)
+  const [storeLandmark, setStoreLandmark] = useState({
+    ten_quan: 'Cửa hàng FastFood BDU',
+    dia_chi_quan: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
+    vi_do: '10.980500',
+    kinh_do: '106.674500',
+    ban_kinh_phuc_vu_km: '3.0',
+    gia_ship_moi_km: '5000'
+  });
+  const [savingLandmark, setSavingLandmark] = useState(false);
+
   // States Tab Menu: Search có nút Clear + Filter Chips + Toggles
   const [menuSearchText, setMenuSearchText] = useState('');
   const [menuFilterCategory, setMenuFilterCategory] = useState('all'); // 'all' | 'out_of_stock' | 'burgers' | 'chicken' | 'drinks'
@@ -156,12 +169,13 @@ export default function AdminScreen({ navigation }) {
   const loadAllAdminData = async () => {
     setLoading(true);
     try {
-      const [statsRes, foodsRes, ordersRes, vouchersRes, usersRes] = await Promise.all([
+      const [statsRes, foodsRes, ordersRes, vouchersRes, usersRes, landmarkRes] = await Promise.all([
         fetchDashboardStats(),
         fetchMenuItems(),
         fetchOrders(),
         fetchAdminVouchers(),
-        fetchAdminUsers()
+        fetchAdminUsers(),
+        fetchStoreLandmark().catch(() => null)
       ]);
 
       if (statsRes.success) setStats(statsRes.data);
@@ -169,11 +183,39 @@ export default function AdminScreen({ navigation }) {
       if (ordersRes.success) setOrders(ordersRes.data || []);
       if (vouchersRes.success) setVouchers(vouchersRes.data || []);
       if (usersRes.success) setUsers(usersRes.data || []);
+      if (landmarkRes && landmarkRes.success && landmarkRes.data) {
+        setStoreLandmark({
+          ten_quan: landmarkRes.data.ten_quan || 'Cửa hàng FastFood BDU',
+          dia_chi_quan: landmarkRes.data.dia_chi_quan || '',
+          vi_do: String(landmarkRes.data.vi_do || '10.9805'),
+          kinh_do: String(landmarkRes.data.kinh_do || '106.6745'),
+          ban_kinh_phuc_vu_km: String(landmarkRes.data.ban_kinh_phuc_vu_km || '3.0'),
+          gia_ship_moi_km: String(landmarkRes.data.gia_ship_moi_km || '5000')
+        });
+      }
     } catch (err) {
       console.log('Lỗi tải dữ liệu Admin:', err.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const handleSaveStoreLandmark = async () => {
+    if (!storeLandmark.dia_chi_quan.trim()) {
+      Alert.alert('Lỗi', 'Vui lòng nhập địa chỉ mốc của quán!');
+      return;
+    }
+    setSavingLandmark(true);
+    try {
+      const res = await updateAdminStoreLandmark(storeLandmark);
+      if (res.success) {
+        Alert.alert('Thành công 🎉', 'Đã lưu mốc quán, tọa độ GPS và phạm vi giao hàng 3km!');
+      }
+    } catch (err) {
+      Alert.alert('Lỗi', err.message || 'Không thể lưu mốc quán!');
+    } finally {
+      setSavingLandmark(false);
     }
   };
 
@@ -571,11 +613,16 @@ export default function AdminScreen({ navigation }) {
                   </Text>
                 </View>
 
-                <Text style={styles.adminOrderCustomer}>👤 Khách: {order.ten_khach_hang || 'Khách vãng lai'}</Text>
-                <Text style={styles.adminOrderAddress}>📍 {order.dia_chi_giao || 'Tại quán'}</Text>
+                <Text style={styles.adminOrderCustomer}>👤 Khách: {order.ten_khach_hang || 'Khách vãng lai'} {order.so_dien_thoai ? `• 📞 ${order.so_dien_thoai}` : ''}</Text>
+                <Text style={styles.adminOrderAddress}>📍 {order.dia_chi_giao || order.dia_chi_giao_hang || 'Tại quán'}</Text>
                 <Text style={styles.adminOrderTotal}>
-                  Tổng tiền: {parseFloat(order.tong_tien).toLocaleString('vi-VN')} đ • ({order.trang_thai_thanh_toan === 'da_thanh_toan' ? 'Đã thu tiền' : 'COD Chưa thu'})
+                  Tổng tiền: {parseFloat(order.tong_tien || order.tong_thanh_toan || 0).toLocaleString('vi-VN')} đ • ({order.trang_thai_thanh_toan === 'da_thanh_toan' ? 'Đã thu tiền' : 'COD Chưa thu'})
                 </Text>
+                {order.khoang_cach_km ? (
+                  <Text style={styles.adminOrderDist}>
+                    📏 Khoảng cách: {order.khoang_cach_km} km • Tiền ship: {parseFloat(order.phi_giao_hang || 0).toLocaleString('vi-VN')} đ
+                  </Text>
+                ) : null}
 
                 <View style={styles.adminOrderStatusRow}>
                   <Text style={styles.statusBadgeText}>
@@ -591,10 +638,96 @@ export default function AdminScreen({ navigation }) {
   };
 
   // =========================================================================
-  // TAB 4: CÀI ĐẶT & HỆ THỐNG (SETTINGS) - VOUCHERS & NHÂN SỰ
+  // TAB 4: CÀI ĐẶT & HỆ THỐNG (SETTINGS) - VOUCHERS, NHÂN SỰ & MỐC QUÁN
   // =========================================================================
   const renderSettingsTab = () => (
     <View style={styles.tabContentBlock}>
+      {/* Khối Cấu Hình Mốc Quán & Bán Kính Giao Hàng (Lấy địa chỉ quán làm mốc) */}
+      <View style={styles.settingsGroupCard}>
+        <View style={styles.groupHeaderRow}>
+          <Text style={styles.groupHeaderTitle}>🏬 Địa Chỉ Mốc Quán (Cột Mốc)</Text>
+          <View style={styles.landmarkTag}>
+            <Text style={styles.landmarkTagText}>Bán kính: {storeLandmark.ban_kinh_phuc_vu_km}km</Text>
+          </View>
+        </View>
+
+        <Text style={styles.landmarkDesc}>
+          Cột mốc quán được dùng để giới hạn khách đặt hàng trong 3km, giới hạn shipper nhận đơn trong 3km, và tính phí ship 5.000đ/1km.
+        </Text>
+
+        <Text style={styles.landmarkFieldLabel}>Tên quán / Nhà hàng:</Text>
+        <TextInput
+          style={styles.landmarkInput}
+          value={storeLandmark.ten_quan}
+          onChangeText={t => setStoreLandmark({ ...storeLandmark, ten_quan: t })}
+          placeholder="Tên quán..."
+        />
+
+        <Text style={styles.landmarkFieldLabel}>Địa chỉ mốc quán:</Text>
+        <TextInput
+          style={[styles.landmarkInput, { height: 54 }]}
+          multiline
+          value={storeLandmark.dia_chi_quan}
+          onChangeText={t => setStoreLandmark({ ...storeLandmark, dia_chi_quan: t })}
+          placeholder="504 Đại lộ Bình Dương..."
+        />
+
+        <View style={styles.landmarkCoordsRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.landmarkFieldLabel}>Vĩ độ (Latitude):</Text>
+            <TextInput
+              style={styles.landmarkInput}
+              value={String(storeLandmark.vi_do)}
+              keyboardType="numeric"
+              onChangeText={t => setStoreLandmark({ ...storeLandmark, vi_do: t })}
+            />
+          </View>
+          <View style={{ width: 10 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.landmarkFieldLabel}>Kinh độ (Longitude):</Text>
+            <TextInput
+              style={styles.landmarkInput}
+              value={String(storeLandmark.kinh_do)}
+              keyboardType="numeric"
+              onChangeText={t => setStoreLandmark({ ...storeLandmark, kinh_do: t })}
+            />
+          </View>
+        </View>
+
+        <View style={styles.landmarkCoordsRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.landmarkFieldLabel}>Bán kính phục vụ (km):</Text>
+            <TextInput
+              style={styles.landmarkInput}
+              value={String(storeLandmark.ban_kinh_phuc_vu_km)}
+              keyboardType="numeric"
+              onChangeText={t => setStoreLandmark({ ...storeLandmark, ban_kinh_phuc_vu_km: t })}
+            />
+          </View>
+          <View style={{ width: 10 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.landmarkFieldLabel}>Đơn giá ship/km (đ):</Text>
+            <TextInput
+              style={styles.landmarkInput}
+              value={String(storeLandmark.gia_ship_moi_km)}
+              keyboardType="numeric"
+              onChangeText={t => setStoreLandmark({ ...storeLandmark, gia_ship_moi_km: t })}
+            />
+          </View>
+        </View>
+
+        <TouchableOpacity 
+          style={styles.saveLandmarkBtn}
+          onPress={handleSaveStoreLandmark}
+          disabled={savingLandmark}
+        >
+          {savingLandmark ? (
+            <ActivityIndicator color="#FFF" size="small" />
+          ) : (
+            <Text style={styles.saveLandmarkBtnText}>💾 Lưu Địa Chỉ & Mốc Quán</Text>
+          )}
+        </TouchableOpacity>
+      </View>
       {/* Khối quản lý Voucher */}
       <View style={styles.settingsGroupCard}>
         <View style={styles.groupHeaderRow}>
@@ -1567,5 +1700,62 @@ const styles = StyleSheet.create({
   modalSubmitText: {
     color: '#FFFFFF',
     fontWeight: '800',
+  },
+  landmarkTag: {
+    backgroundColor: '#EDE7F6',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  landmarkTagText: {
+    color: '#6A1B9A',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  landmarkDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  landmarkFieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 4,
+    marginTop: 6,
+  },
+  landmarkInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#1E293B',
+    marginBottom: 6,
+  },
+  landmarkCoordsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  saveLandmarkBtn: {
+    backgroundColor: '#6A1B9A',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  saveLandmarkBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  adminOrderDist: {
+    fontSize: 12,
+    color: '#0284C7',
+    fontWeight: '600',
+    marginTop: 2,
   },
 });

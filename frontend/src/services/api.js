@@ -134,6 +134,16 @@ export const fetchItems = async (categoryId = '', search = '') => {
   }
 };
 
+// Lấy toàn bộ danh sách món ăn (dành cho Bếp và Admin)
+export const fetchMenuItems = async () => {
+  try {
+    const response = await api.get('/menu/items?limit=100');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Lỗi tải danh mục món ăn!');
+  }
+};
+
 // Lấy chi tiết món ăn (kèm size/topping)
 export const fetchItemDetail = async (itemId) => {
   try {
@@ -213,16 +223,21 @@ export const clearCart = async () => {
 // IV. CÁC API ĐƠN HÀNG & TIẾN TRÌNH (ORDER & TRACKING API - SPRINT 2)
 // ============================================================================
 
-// Khởi tạo đơn hàng mới (Checkout, hỗ trợ Voucher ma_code)
-export const createOrder = async (dia_chi_giao_hang, so_dien_thoai_nhan, ghi_chu, phuong_thuc_thanh_toan, ma_code = null) => {
+// Khởi tạo đơn hàng mới (Checkout, hỗ trợ Voucher ma_code & Tọa độ giao hàng)
+export const createOrder = async (dia_chi_giao_hang, so_dien_thoai_nhan, ghi_chu, phuong_thuc_thanh_toan, ma_code = null, coords = null) => {
   try {
-    const response = await api.post('/orders', {
+    const payload = {
       dia_chi_giao_hang,
       so_dien_thoai_nhan,
       ghi_chu,
       phuong_thuc_thanh_toan,
       ma_code: ma_code || undefined
-    });
+    };
+    if (coords && coords.lat && coords.lng) {
+      payload.vi_do = coords.lat;
+      payload.kinh_do = coords.lng;
+    }
+    const response = await api.post('/orders', payload);
     return response.data;
   } catch (error) {
     throw error.response?.data || new Error('Lỗi kết nối máy chủ!');
@@ -364,13 +379,38 @@ export const fetchPaymentDetail = async (orderId) => {
 // VI. CÁC API VẬN HÀNH CHO SHIPPER & BẾP (KITCHEN & DELIVERY)
 // ============================================================================
 
-// Shipper nhận đơn giao
-export const acceptOrderDelivery = async (orderId) => {
+// Shipper nhận đơn giao kèm tọa độ GPS
+export const acceptOrderDelivery = async (orderId, coords = null) => {
   try {
-    const response = await api.put(`/orders/${orderId}/accept-delivery`);
+    const payload = {};
+    if (coords && coords.lat && coords.lng) {
+      payload.vi_do = coords.lat;
+      payload.kinh_do = coords.lng;
+    }
+    const response = await api.put(`/orders/${orderId}/accept-delivery`, payload);
     return response.data;
   } catch (error) {
     throw error.response?.data || new Error('Không thể nhận đơn giao!');
+  }
+};
+
+// Lấy thông tin địa chỉ mốc của quán & bán kính phục vụ
+export const fetchStoreLandmark = async () => {
+  try {
+    const response = await api.get('/store/landmark');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể tải thông tin mốc quán!');
+  }
+};
+
+// Cập nhật cấu hình địa chỉ mốc quán dành cho Admin
+export const updateAdminStoreLandmark = async (landmarkData) => {
+  try {
+    const response = await api.put('/admin/store-landmark', landmarkData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể cập nhật mốc quán!');
   }
 };
 

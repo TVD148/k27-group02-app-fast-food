@@ -19,7 +19,26 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import { fetchOrders, acceptOrderDelivery, updateOrderStatus, fetchShipperStats } from '../services/api';
+import { fetchOrders, acceptOrderDelivery, updateOrderStatus, fetchShipperStats, fetchStoreLandmark } from '../services/api';
+
+function calculateHaversine(lat1, lon1, lat2, lon2) {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+  const p1 = parseFloat(lat1);
+  const l1 = parseFloat(lon1);
+  const p2 = parseFloat(lat2);
+  const l2 = parseFloat(lon2);
+  if (isNaN(p1) || isNaN(l1) || isNaN(p2) || isNaN(l2)) return null;
+
+  const R = 6371; // km
+  const dLat = (p2 - p1) * Math.PI / 180;
+  const dLon = (l2 - l1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(p1 * Math.PI / 180) * Math.cos(p2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return parseFloat((R * c).toFixed(2));
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -118,6 +137,15 @@ export default function ShipperScreen({ navigation }) {
   const [showLocationPermissionModal, setShowLocationPermissionModal] = useState(false);
   const [showCameraPermissionModal, setShowCameraPermissionModal] = useState(false);
 
+  // Mốc quán và phạm vi nhận đơn
+  const [storeLandmark, setStoreLandmark] = useState({
+    dia_chi_quan: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
+    vi_do: 10.9805,
+    kinh_do: 106.6745,
+    ban_kinh_phuc_vu_km: 3.0,
+    gia_ship_moi_km: 5000
+  });
+
   // Modal Chụp ảnh minh chứng giao hàng
   const [cameraModalVisible, setCameraModalVisible] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
@@ -139,9 +167,10 @@ export default function ShipperScreen({ navigation }) {
         setCurrentUser(JSON.parse(storedUser));
       }
 
-      const [orderRes, statsRes] = await Promise.all([
+      const [orderRes, statsRes, landmarkRes] = await Promise.all([
         fetchOrders(),
-        fetchShipperStats()
+        fetchShipperStats(),
+        fetchStoreLandmark().catch(() => null)
       ]);
 
       if (orderRes.success) {
@@ -149,6 +178,9 @@ export default function ShipperScreen({ navigation }) {
       }
       if (statsRes.success) {
         setStats(statsRes.data || {});
+      }
+      if (landmarkRes && landmarkRes.success && landmarkRes.data) {
+        setStoreLandmark(landmarkRes.data);
       }
     } catch (error) {
       console.log('Lỗi tải dữ liệu shipper:', error.message);
@@ -181,16 +213,18 @@ export default function ShipperScreen({ navigation }) {
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         setCurrentLocation(loc.coords);
         setIsOnline(true);
-        Alert.alert('Sẵn sàng làm việc 🚀', 'Đã cấp quyền GPS! Bạn đang trực tuyến và có thể nhận đơn hàng gần nhất.');
+        Alert.alert('Đã BẬT trực tuyến! 🟢', 'Bạn đang ở trạng thái sẵn sàng nhận các cuốc đơn giao quanh khu vực.');
       } else {
-        Alert.alert('Chưa cấp quyền GPS', 'Bạn cần cấp quyền vị trí để hệ thống gợi ý đơn hàng gần bạn.');
+        setIsOnline(true);
+        Alert.alert('Đã BẬT trực tuyến (Vị trí xấp xỉ)', 'Hệ thống sẽ định vị đơn theo khu vực phục vụ của quán.');
       }
-    } catch (err) {
-      setIsOnline(true); // Fallback giả lập trực tuyến
+    } catch (e) {
+      setIsOnline(true);
+      Alert.alert('Đã BẬT trực tuyến', 'Sẵn sàng nhận đơn giao.');
     }
   };
 
-  // Shipper nhận đơn giao
+  // Shipper bấm nhận đơn giao (Kiểm tra phạm vi 3km từ quán & Tính phí ship 5.000đ/1km)
   const handleAcceptOrder = async (orderId) => {
     if (!isOnline) {
       Alert.alert('Chưa trực tuyến ⚠️', 'Vui lòng nhấn nút "Bắt đầu làm việc" phía trên để bật trực tuyến trước khi nhận đơn!');
@@ -199,9 +233,43 @@ export default function ShipperScreen({ navigation }) {
 
     setActingOrderId(orderId);
     try {
-      const res = await acceptOrderDelivery(orderId);
+      // 1. Lấy vị trí GPS hiện tại của Shipper
+      let shipperCoords = null;
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          if (loc && loc.coords) {
+            shipperCoords = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+          }
+        }
+      } catch (locErr) {
+        console.log('GPS không sẵn sàng, sử dụng vị trí ước tính:', locErr.message);
+      }
+
+      // Nếu không lấy được GPS (VD chạy web hoặc giả lập), lấy vị trí gần mốc quán (~0.5km)
+      if (!shipperCoords) {
+        shipperCoords = { lat: storeLandmark.vi_do + 0.003, lng: storeLandmark.kinh_do + 0.003 };
+      }
+
+      // 2. Kiểm tra khoảng cách từ Shipper đến Mốc Quán (Phạm vi 3km)
+      const distToStore = calculateHaversine(storeLandmark.vi_do, storeLandmark.kinh_do, shipperCoords.lat, shipperCoords.lng);
+      if (distToStore !== null && distToStore > (storeLandmark.ban_kinh_phuc_vu_km || 3.0)) {
+        Alert.alert(
+          'Ngoài phạm vi nhận đơn 🚫',
+          `Bạn đang ở cách quán ${distToStore}km (vượt quá bán kính 3km của quán). Shipper chỉ được nhận đơn khi trong phạm vi 3km từ quán (${storeLandmark.dia_chi_quan}). Vui lòng di chuyển lại gần quán!`
+        );
+        return;
+      }
+
+      const res = await acceptOrderDelivery(orderId, shipperCoords);
       if (res.success) {
-        Alert.alert('Nhận đơn thành công! 🚀', 'Hãy tới quán FastFood nhận đồ ăn và bắt đầu giao cho khách.');
+        const distKm = res.data?.khoang_cach_km || '1.5';
+        const fee = res.data?.phi_giao_hang ? res.data.phi_giao_hang.toLocaleString('vi-VN') : '10.000';
+        Alert.alert(
+          'Nhận đơn thành công! 🚀',
+          `Khoảng cách ban đầu tới khách: ${distKm} km\nTiền ship thù lao: +${fee} đ (5.000đ/1km)\nHãy tới quán nhận đồ ăn và giao cho khách!`
+        );
         setActiveBottomTab('delivering');
         loadShipperData();
       }
@@ -292,8 +360,14 @@ export default function ShipperScreen({ navigation }) {
     return (
       <View style={styles.cardsList}>
         {availableOrders.map(order => {
-          const mockDistance = (1.5 + (order.ma_don_hang % 4) * 0.8).toFixed(1); // 1.5 - 3.9 km
-          const shipperFee = Math.round(15000 + (parseFloat(mockDistance) * 5000));
+          const orderDistance = order.khoang_cach_km 
+            ? parseFloat(order.khoang_cach_km).toFixed(1) 
+            : (1.5 + (order.ma_don_hang % 3) * 0.5).toFixed(1);
+          // Đơn giá 5.000đ mỗi 1km khoảng cách
+          const shipperFee = order.phi_giao_hang 
+            ? parseFloat(order.phi_giao_hang) 
+            : Math.max(5000, Math.round(parseFloat(orderDistance) * (storeLandmark?.gia_ship_moi_km || 5000)));
+          const codAmount = parseFloat(order.tong_tien || order.tong_thanh_toan || 0);
 
           return (
             <View key={order.ma_don_hang} style={styles.availableCard}>
@@ -310,13 +384,13 @@ export default function ShipperScreen({ navigation }) {
               <View style={styles.metricGrid}>
                 <View style={styles.metricCol}>
                   <Text style={styles.metricLabel}>Khoảng cách</Text>
-                  <Text style={styles.metricValue}>📍 {mockDistance} km</Text>
+                  <Text style={styles.metricValue}>📍 {orderDistance} km</Text>
                 </View>
 
                 <View style={styles.metricDivider} />
 
                 <View style={styles.metricCol}>
-                  <Text style={styles.metricLabel}>Thu lao shipper</Text>
+                  <Text style={styles.metricLabel}>Thù lao (5k/km)</Text>
                   <Text style={[styles.metricValue, { color: '#00897B' }]}>
                     💰 +{shipperFee.toLocaleString('vi-VN')} đ
                   </Text>
@@ -327,14 +401,14 @@ export default function ShipperScreen({ navigation }) {
                 <View style={styles.metricCol}>
                   <Text style={styles.metricLabel}>Thu tiền COD</Text>
                   <Text style={[styles.metricValue, { color: '#E53935' }]}>
-                    💵 {parseFloat(order.tong_tien).toLocaleString('vi-VN')} đ
+                    💵 {codAmount.toLocaleString('vi-VN')} đ
                   </Text>
                 </View>
               </View>
 
               <View style={styles.addressBox}>
-                <Text style={styles.addressStoreText}>🏬 Lấy tại: Cửa hàng FastFood (123 Đại Lộ Bình Dương)</Text>
-                <Text style={styles.addressCustomerText}>🎯 Giao tới: {order.dia_chi_giao || 'Địa chỉ khách hàng'}</Text>
+                <Text style={styles.addressStoreText}>🏬 Lấy tại: {storeLandmark?.dia_chi_quan || 'Cửa hàng FastFood (504 Đại Lộ Bình Dương)'}</Text>
+                <Text style={styles.addressCustomerText}>🎯 Giao tới: {order.dia_chi_giao || order.dia_chi_giao_hang || 'Địa chỉ khách hàng'}</Text>
               </View>
 
               {/* Nút CTA Nhận đơn ngay */}

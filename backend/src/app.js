@@ -19,6 +19,7 @@ const orderRoutes = require('./routes/orderRoutes');
 const nutritionRoutes = require('./routes/nutritionRoutes');
 const voucherRoutes = require('./routes/voucherRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const storeRoutes = require('./routes/storeRoutes');
 
 // Khai báo các đường dẫn API gốc
 app.use('/api/auth', authRoutes);
@@ -29,6 +30,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/nutrition', nutritionRoutes);
 app.use('/api/vouchers', voucherRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/store', storeRoutes);
 
 // Route chào mừng cơ bản để test server
 app.get('/', (req, res) => {

@@ -524,6 +524,83 @@ const getIngredients = async (req, res) => {
   }
 };
 
+// 7. Lấy cấu hình địa chỉ mốc quán (GET /api/admin/store-landmark hoặc /api/store/landmark)
+const getStoreLandmark = async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT * FROM cau_hinh_quan WHERE id = 1');
+    if (rows.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          ten_quan: 'Cửa hàng FastFood BDU',
+          dia_chi_quan: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
+          vi_do: 10.9805,
+          kinh_do: 106.6745,
+          ban_kinh_phuc_vu_km: 3.0,
+          gia_ship_moi_km: 5000
+        }
+      });
+    }
+    const row = rows[0];
+    return res.status(200).json({
+      success: true,
+      data: {
+        id: row.id,
+        ten_quan: row.ten_quan,
+        dia_chi_quan: row.dia_chi_quan,
+        vi_do: parseFloat(row.vi_do),
+        kinh_do: parseFloat(row.kinh_do),
+        ban_kinh_phuc_vu_km: parseFloat(row.ban_kinh_phuc_vu_km),
+        gia_ship_moi_km: parseFloat(row.gia_ship_moi_km)
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi lấy cấu hình mốc quán.', error: error.message });
+  }
+};
+
+// 8. Cập nhật cấu hình địa chỉ mốc quán (PUT /api/admin/store-landmark)
+const updateStoreLandmark = async (req, res) => {
+  try {
+    const { ten_quan, dia_chi_quan, vi_do, kinh_do, ban_kinh_phuc_vu_km, gia_ship_moi_km } = req.body;
+    if (!dia_chi_quan) {
+      return res.status(400).json({ success: false, message: 'Địa chỉ mốc quán không được để trống!' });
+    }
+    const lat = parseFloat(vi_do) || 10.9805;
+    const lng = parseFloat(kinh_do) || 106.6745;
+    const radius = parseFloat(ban_kinh_phuc_vu_km) || 3.0;
+    const pricePerKm = parseFloat(gia_ship_moi_km) || 5000;
+    const name = ten_quan || 'Cửa hàng FastFood BDU';
+
+    await db.query(`
+      INSERT INTO cau_hinh_quan (id, ten_quan, dia_chi_quan, vi_do, kinh_do, ban_kinh_phuc_vu_km, gia_ship_moi_km)
+      VALUES (1, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        ten_quan = VALUES(ten_quan),
+        dia_chi_quan = VALUES(dia_chi_quan),
+        vi_do = VALUES(vi_do),
+        kinh_do = VALUES(kinh_do),
+        ban_kinh_phuc_vu_km = VALUES(ban_kinh_phuc_vu_km),
+        gia_ship_moi_km = VALUES(gia_ship_moi_km)
+    `, [name, dia_chi_quan, lat, lng, radius, pricePerKm]);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Cập nhật địa chỉ mốc quán và phạm vi giao hàng thành công!',
+      data: {
+        ten_quan: name,
+        dia_chi_quan,
+        vi_do: lat,
+        kinh_do: lng,
+        ban_kinh_phuc_vu_km: radius,
+        gia_ship_moi_km: pricePerKm
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi cập nhật cấu hình mốc quán.', error: error.message });
+  }
+};
+
 module.exports = {
   createCategory,
   updateCategory,
@@ -540,5 +617,7 @@ module.exports = {
   createUser,
   updateUserRole,
   getDashboardStats,
-  getIngredients
+  getIngredients,
+  getStoreLandmark,
+  updateStoreLandmark
 };
