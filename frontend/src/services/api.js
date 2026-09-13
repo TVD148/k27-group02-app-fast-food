@@ -715,7 +715,7 @@ export const updateAdminUserRole = async (userId, ma_vai_tro) => {
   }
 };
 
-// Danh sách nguyên liệu dinh dưỡng
+// Quản lý nguyên liệu & định lượng dinh dưỡng
 export const fetchAdminIngredients = async () => {
   try {
     const response = await api.get('/admin/ingredients');
@@ -725,4 +725,32 @@ export const fetchAdminIngredients = async () => {
   }
 };
 
+export const createAdminIngredient = async (ingredientData) => {
+  try {
+    const response = await api.post('/admin/ingredients', ingredientData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể tạo nguyên liệu mới!');
+  }
+};
+
+export const updateAdminIngredient = async (ingredientId, ingredientData) => {
+  try {
+    const response = await api.put(`/admin/ingredients/${ingredientId}`, ingredientData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể cập nhật nguyên liệu!');
+  }
+};
+
+export const deleteAdminIngredient = async (ingredientId) => {
+  try {
+    const response = await api.delete(`/admin/ingredients/${ingredientId}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể xóa nguyên liệu!');
+  }
+};
+
 export default api;
+

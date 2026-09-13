@@ -30,6 +30,12 @@ router.post('/option-groups', adminController.createOptionGroup);
 router.put('/option-groups/:id', adminController.updateOptionGroup);
 router.delete('/option-groups/:id', adminController.deleteOptionGroup);
 
+// Quản lý Nguyên liệu & Định lượng Dinh dưỡng
+router.post('/ingredients', adminController.createIngredient);
+router.put('/ingredients/:id', adminController.updateIngredient);
+router.delete('/ingredients/:id', adminController.deleteIngredient);
+
+
 // Quản lý Voucher & Khuyến mãi
 router.get('/vouchers', adminController.getAdminVouchers);
 router.post('/vouchers', adminController.createVoucher);

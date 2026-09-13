@@ -886,7 +886,7 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
-// 6. Lấy danh sách nguyên liệu dinh dưỡng (GET /api/admin/ingredients)
+// 6. Quản lý nguyên liệu dinh dưỡng (GET/POST/PUT/DELETE /api/admin/ingredients)
 const getIngredients = async (req, res) => {
   try {
     const [ingredients] = await db.query('SELECT * FROM nguyen_lieu ORDER BY ma_nguyen_lieu ASC');
@@ -895,6 +895,108 @@ const getIngredients = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Lỗi lấy danh sách nguyên liệu.', error: error.message });
   }
 };
+
+const createIngredient = async (req, res) => {
+  try {
+    const { ten_nguyen_lieu, don_vi_tinh, calo, protein, carbs, fat, don_gia_thay_doi } = req.body;
+    if (!ten_nguyen_lieu || !ten_nguyen_lieu.trim()) {
+      return res.status(400).json({ success: false, message: 'Tên nguyên liệu không được để trống!' });
+    }
+
+    const [result] = await db.query(
+      `INSERT INTO nguyen_lieu (ten_nguyen_lieu, don_vi_tinh, calo, protein, carbs, fat, don_gia_thay_doi, trang_thai)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+      [
+        ten_nguyen_lieu.trim(),
+        don_vi_tinh ? don_vi_tinh.trim() : 'phần',
+        parseFloat(calo) || 0,
+        parseFloat(protein) || 0,
+        parseFloat(carbs) || 0,
+        parseFloat(fat) || 0,
+        parseFloat(don_gia_thay_doi) || 0
+      ]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: 'Tạo nguyên liệu mới thành công!',
+      data: {
+        ma_nguyen_lieu: result.insertId,
+        ten_nguyen_lieu: ten_nguyen_lieu.trim(),
+        don_vi_tinh: don_vi_tinh ? don_vi_tinh.trim() : 'phần',
+        calo: parseFloat(calo) || 0,
+        protein: parseFloat(protein) || 0,
+        carbs: parseFloat(carbs) || 0,
+        fat: parseFloat(fat) || 0,
+        don_gia_thay_doi: parseFloat(don_gia_thay_doi) || 0,
+        trang_thai: 1
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi tạo nguyên liệu mới.', error: error.message });
+  }
+};
+
+const updateIngredient = async (req, res) => {
+  try {
+    const ingredientId = req.params.id;
+    const { ten_nguyen_lieu, don_vi_tinh, calo, protein, carbs, fat, don_gia_thay_doi, trang_thai } = req.body;
+    if (!ten_nguyen_lieu || !ten_nguyen_lieu.trim()) {
+      return res.status(400).json({ success: false, message: 'Tên nguyên liệu không được để trống!' });
+    }
+
+    await db.query(
+      `UPDATE nguyen_lieu 
+       SET ten_nguyen_lieu = ?, don_vi_tinh = ?, calo = ?, protein = ?, carbs = ?, fat = ?, don_gia_thay_doi = ?, trang_thai = ?
+       WHERE ma_nguyen_lieu = ?`,
+      [
+        ten_nguyen_lieu.trim(),
+        don_vi_tinh ? don_vi_tinh.trim() : 'phần',
+        parseFloat(calo) || 0,
+        parseFloat(protein) || 0,
+        parseFloat(carbs) || 0,
+        parseFloat(fat) || 0,
+        parseFloat(don_gia_thay_doi) || 0,
+        trang_thai !== undefined ? trang_thai : 1,
+        ingredientId
+      ]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Cập nhật thông tin nguyên liệu thành công!',
+      data: {
+        ma_nguyen_lieu: parseInt(ingredientId),
+        ten_nguyen_lieu: ten_nguyen_lieu.trim(),
+        don_vi_tinh: don_vi_tinh ? don_vi_tinh.trim() : 'phần',
+        calo: parseFloat(calo) || 0,
+        protein: parseFloat(protein) || 0,
+        carbs: parseFloat(carbs) || 0,
+        fat: parseFloat(fat) || 0,
+        don_gia_thay_doi: parseFloat(don_gia_thay_doi) || 0,
+        trang_thai: trang_thai !== undefined ? trang_thai : 1
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi cập nhật nguyên liệu.', error: error.message });
+  }
+};
+
+const deleteIngredient = async (req, res) => {
+  try {
+    const ingredientId = req.params.id;
+    await db.query('DELETE FROM mon_an_nguyen_lieu WHERE ma_nguyen_lieu = ?', [ingredientId]);
+    await db.query('DELETE FROM nguyen_lieu WHERE ma_nguyen_lieu = ?', [ingredientId]);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Xóa nguyên liệu thành công!'
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi xóa nguyên liệu.', error: error.message });
+  }
+};
+
 
 // 7. Lấy cấu hình địa chỉ mốc quán (GET /api/admin/store-landmark hoặc /api/store/landmark)
 const getStoreLandmark = async (req, res) => {
@@ -996,6 +1098,10 @@ module.exports = {
   getOnlinePersonnel,
   getDashboardStats,
   getIngredients,
+  createIngredient,
+  updateIngredient,
+  deleteIngredient,
   getStoreLandmark,
   updateStoreLandmark
 };
+
