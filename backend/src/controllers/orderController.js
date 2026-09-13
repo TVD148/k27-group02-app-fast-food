@@ -118,7 +118,7 @@ const createOrder = async (req, res) => {
     const custLng = kinh_do || (coords && coords.lng) || null;
 
     let distanceKm = null;
-    let phiGiaoHang = 15000; // Mặc định nếu không có GPS
+    let phiGiaoHang = 5000; // Mặc định 5k cho đơn dưới 1km hoặc khi chưa có GPS
 
     if (custLat && custLng) {
       distanceKm = calculateHaversineDistance(store.vi_do, store.kinh_do, custLat, custLng);
@@ -129,8 +129,14 @@ const createOrder = async (req, res) => {
           message: `Rất tiếc! Quán chỉ nhận giao hàng trong bán kính ${store.ban_kinh_phuc_vu_km}km. Địa chỉ của bạn cách quán ${distanceKm}km (vượt quá ${store.ban_kinh_phuc_vu_km}km)!`
         });
       }
-      // Phí giao hàng tạm tính theo khoảng cách mốc: 5000đ/1km (tối thiểu 5000đ)
-      phiGiaoHang = Math.max(5000, Math.round(distanceKm * store.gia_ship_moi_km));
+      // Phí giao hàng tính từ vị trí QUÁN: dưới 1km là 5.000đ, từ 1km trở đi cứ 1km thêm 5k, 100m thêm 500đ
+      if (distanceKm <= 1.0) {
+        phiGiaoHang = 5000;
+      } else {
+        const extraKm = distanceKm - 1.0;
+        const extra100m = Math.ceil(Math.round(extraKm * 1000) / 100);
+        phiGiaoHang = 5000 + extra100m * 500;
+      }
     }
 
     // 4. Tính toán tổng tiền
@@ -591,50 +597,23 @@ const acceptDelivery = async (req, res) => {
     const shipperLat = vi_do || (coords && coords.lat) || null;
     const shipperLng = kinh_do || (coords && coords.lng) || null;
 
-    let distShipperToCustomer = parseFloat(order.khoang_cach_km || 0);
-    let newShippingFee = parseFloat(order.phi_giao_hang || 15000);
-    let newTotal = parseFloat(order.tong_thanh_toan);
-
-    // 1. Kiểm tra phạm vi 3km của Shipper so với Quán
-    if (shipperLat && shipperLng) {
-      const distShipperToStore = calculateHaversineDistance(store.vi_do, store.kinh_do, shipperLat, shipperLng);
-      if (distShipperToStore > store.ban_kinh_phuc_vu_km) {
-        return res.status(400).json({
-          success: false,
-          message: `Bạn đang ở cách quán ${distShipperToStore}km (vượt quá phạm vi ${store.ban_kinh_phuc_vu_km}km để nhận đơn). Vui lòng di chuyển đến gần quán trong bán kính 3km!`
-        });
-      }
-
-      // 2. Tiền ship được tính từ khoảng cách ban đầu khi shipper nhận đơn đến địa điểm khách nhận đơn (5.000đ/1km)
-      const custLat = order.vi_do_giao ? parseFloat(order.vi_do_giao) : null;
-      const custLng = order.kinh_do_giao ? parseFloat(order.kinh_do_giao) : null;
-
-      if (custLat && custLng) {
-        distShipperToCustomer = calculateHaversineDistance(shipperLat, shipperLng, custLat, custLng);
-      } else {
-        // Nếu đơn hàng cũ chưa có tọa độ khách, lấy khoảng cách từ shipper đến quán + 1km
-        distShipperToCustomer = Math.max(1.0, distShipperToStore);
-      }
-
-      newShippingFee = Math.max(5000, Math.round(distShipperToCustomer * store.gia_ship_moi_km));
-      newTotal = Math.max(0, parseFloat(order.tong_tien_hang) + newShippingFee - parseFloat(order.so_tien_giam || 0));
-    }
+    // Khoảng cách và phí giao hàng giữ nguyên theo khoảng cách từ QUÁN đến KHÁCH HÀNG (không tính từ vị trí shipper nữa)
+    const fixedDistanceKm = parseFloat(order.khoang_cach_km || 0);
+    const fixedShippingFee = parseFloat(order.phi_giao_hang || 5000);
+    const fixedTotal = parseFloat(order.tong_thanh_toan);
 
     const [users] = await db.query('SELECT ho_ten FROM nguoi_dung WHERE ma_nguoi_dung = ?', [userId]);
     const shipperName = users.length > 0 ? users[0].ho_ten : 'Tài xế';
 
-    // Cập nhật ma_shipper, tọa độ ban đầu của shipper, khoảng cách và phí ship mới tính
+    // Cập nhật ma_shipper, trạng thái đang giao, và tọa độ hiện tại của shipper để khách theo dõi trên bản đồ
     await db.query(`
       UPDATE don_hang 
       SET ma_shipper = ?, 
           trang_thai_don_hang = "dang_giao",
           vi_do_shipper = ?,
-          kinh_do_shipper = ?,
-          khoang_cach_km = ?,
-          phi_giao_hang = ?,
-          tong_thanh_toan = ?
+          kinh_do_shipper = ?
       WHERE ma_don_hang = ?
-    `, [userId, shipperLat, shipperLng, distShipperToCustomer, newShippingFee, newTotal, orderId]);
+    `, [userId, shipperLat, shipperLng, orderId]);
 
     // Ghi log
     await db.query(`
@@ -645,7 +624,7 @@ const acceptDelivery = async (req, res) => {
       orderId, 
       order.trang_thai_don_hang, 
       'dang_giao', 
-      `Shipper đã nhận đơn (Khoảng cách: ${distShipperToCustomer} km, Tiền ship: ${newShippingFee.toLocaleString('vi-VN')} đ)`, 
+      `Shipper đã nhận đơn giao tới khách (Khoảng cách từ quán: ${fixedDistanceKm} km, Tiền ship: ${fixedShippingFee.toLocaleString('vi-VN')} đ)`, 
       `${shipperName} (Shipper)`
     ]);
 
@@ -655,9 +634,9 @@ const acceptDelivery = async (req, res) => {
       data: { 
         ma_don_hang: parseInt(orderId), 
         trang_thai: 'dang_giao',
-        khoang_cach_km: distShipperToCustomer,
-        phi_giao_hang: newShippingFee,
-        tong_thanh_toan: newTotal
+        khoang_cach_km: fixedDistanceKm,
+        phi_giao_hang: fixedShippingFee,
+        tong_thanh_toan: fixedTotal
       }
     });
   } catch (error) {

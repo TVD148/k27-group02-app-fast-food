@@ -40,6 +40,16 @@ function calculateHaversine(lat1, lon1, lat2, lon2) {
   return parseFloat((R * c).toFixed(2));
 }
 
+function calculateShippingFee(distanceKm) {
+  if (distanceKm === null || distanceKm === undefined) return 5000;
+  const d = parseFloat(distanceKm);
+  if (isNaN(d) || d <= 0) return 5000;
+  if (d <= 1.0) return 5000;
+  const extraKm = d - 1.0;
+  const extra100m = Math.ceil(Math.round(extraKm * 1000) / 100);
+  return 5000 + extra100m * 500;
+}
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Thành phần Swipe to Confirm (Vuốt để xác nhận) chuẩn Checklist.design
@@ -264,11 +274,11 @@ export default function ShipperScreen({ navigation }) {
 
       const res = await acceptOrderDelivery(orderId, shipperCoords);
       if (res.success) {
-        const distKm = res.data?.khoang_cach_km || '1.5';
-        const fee = res.data?.phi_giao_hang ? res.data.phi_giao_hang.toLocaleString('vi-VN') : '10.000';
+        const distKm = res.data?.khoang_cach_km || '1.0';
+        const fee = res.data?.phi_giao_hang ? res.data.phi_giao_hang.toLocaleString('vi-VN') : '5.000';
         Alert.alert(
           'Nhận đơn thành công! 🚀',
-          `Khoảng cách ban đầu tới khách: ${distKm} km\nTiền ship thù lao: +${fee} đ (5.000đ/1km)\nHãy tới quán nhận đồ ăn và giao cho khách!`
+          `Khoảng cách từ quán tới khách: ${distKm} km\nTiền ship thù lao: +${fee} đ (dưới 1km là 5k, +500đ/100m)\nHãy tới quán nhận đồ ăn và giao cho khách!`
         );
         setActiveBottomTab('delivering');
         loadShipperData();
@@ -362,11 +372,11 @@ export default function ShipperScreen({ navigation }) {
         {availableOrders.map(order => {
           const orderDistance = order.khoang_cach_km 
             ? parseFloat(order.khoang_cach_km).toFixed(1) 
-            : (1.5 + (order.ma_don_hang % 3) * 0.5).toFixed(1);
-          // Đơn giá 5.000đ mỗi 1km khoảng cách
+            : (1.0 + (order.ma_don_hang % 3) * 0.5).toFixed(1);
+          // Đơn giá: < 1km = 5.000đ, từ 1km trở đi: +5.000đ/1km (+500đ/100m)
           const shipperFee = order.phi_giao_hang 
             ? parseFloat(order.phi_giao_hang) 
-            : Math.max(5000, Math.round(parseFloat(orderDistance) * (storeLandmark?.gia_ship_moi_km || 5000)));
+            : calculateShippingFee(orderDistance);
           const codAmount = parseFloat(order.tong_tien || order.tong_thanh_toan || 0);
 
           return (
@@ -383,14 +393,14 @@ export default function ShipperScreen({ navigation }) {
               {/* Thông số khoảng cách & thù lao nổi bật theo yêu cầu */}
               <View style={styles.metricGrid}>
                 <View style={styles.metricCol}>
-                  <Text style={styles.metricLabel}>Khoảng cách</Text>
+                  <Text style={styles.metricLabel}>Từ quán tới khách</Text>
                   <Text style={styles.metricValue}>📍 {orderDistance} km</Text>
                 </View>
 
                 <View style={styles.metricDivider} />
 
                 <View style={styles.metricCol}>
-                  <Text style={styles.metricLabel}>Thù lao (5k/km)</Text>
+                  <Text style={styles.metricLabel}>Thù lao ship</Text>
                   <Text style={[styles.metricValue, { color: '#00897B' }]}>
                     💰 +{shipperFee.toLocaleString('vi-VN')} đ
                   </Text>

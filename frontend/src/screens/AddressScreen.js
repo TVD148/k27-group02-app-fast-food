@@ -16,14 +16,48 @@ import {
   addUserAddress, 
   updateUserAddress, 
   setDefaultUserAddress, 
-  deleteUserAddress 
+  deleteUserAddress,
+  fetchStoreLandmark
 } from '../services/api';
 import MapLocationPicker from '../components/MapLocationPicker';
+
+function calculateHaversine(lat1, lon1, lat2, lon2) {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+  const R = 6371; // Bán kính Trái Đất (km)
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
+
+// Quy tắc tính tiền ship mới:
+// - Khoảng cách <= 1.0 km: mặc định 5.000đ
+// - Từ 1km trở đi: cứ cách 1km là thêm 5k, 100m là thêm 500đ
+function calculateShippingFee(distanceKm) {
+  if (distanceKm === null || distanceKm === undefined) return 5000;
+  const d = parseFloat(distanceKm);
+  if (isNaN(d) || d <= 0) return 5000;
+  if (d <= 1.0) return 5000;
+  const extraKm = d - 1.0;
+  const extra100m = Math.ceil(Math.round(extraKm * 1000) / 100);
+  return 5000 + extra100m * 500;
+}
 
 export default function AddressScreen({ navigation, route }) {
   const [addresses, setAddresses] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [storeLandmark, setStoreLandmark] = useState({
+    dia_chi_quan: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
+    vi_do: 10.9805,
+    kinh_do: 106.6745,
+    ban_kinh_phuc_vu_km: 3.0,
+    gia_ship_moi_km: 5000
+  });
 
   // Modal Map Location Picker (Chuẩn Shopee / Grab)
   const [modalVisible, setModalVisible] = useState(false);
@@ -32,10 +66,23 @@ export default function AddressScreen({ navigation, route }) {
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       loadSavedAddresses();
+      loadLandmark();
     });
     loadSavedAddresses();
+    loadLandmark();
     return unsubscribe;
   }, [navigation]);
+
+  const loadLandmark = async () => {
+    try {
+      const res = await fetchStoreLandmark();
+      if (res && res.success && res.data) {
+        setStoreLandmark(res.data);
+      }
+    } catch (e) {
+      console.log('Dùng mốc quán mặc định:', e);
+    }
+  };
 
   const getUserAddressKey = (user) => {
     if (!user) return null;
@@ -361,55 +408,84 @@ export default function AddressScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
           ) : (
-            addresses.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[styles.addressCard, item.isDefault && styles.addressCardDefault]}
-                activeOpacity={0.85}
-                onPress={() => handleSelectAddress(item)}
-              >
-                <View style={styles.cardTopRow}>
-                  <View style={styles.labelBadgeRow}>
-                    <Text style={styles.labelIcon}>{item.icon || '📍'}</Text>
-                    <Text style={styles.labelText}>{item.label}</Text>
-                    {item.isDefault && (
-                      <View style={styles.defaultBadge}>
-                        <Text style={styles.defaultBadgeText}>✓ Mặc định</Text>
-                      </View>
-                    )}
+            addresses.map((item) => {
+              const distanceKm = item.khoang_cach_km != null 
+                ? parseFloat(item.khoang_cach_km) 
+                : (item.coords && item.coords.lat && item.coords.lng && storeLandmark)
+                  ? calculateHaversine(storeLandmark.vi_do, storeLandmark.kinh_do, item.coords.lat, item.coords.lng)
+                  : null;
+
+              const shippingFee = distanceKm !== null ? calculateShippingFee(distanceKm) : 5000;
+              const maxRadius = storeLandmark?.ban_kinh_phuc_vu_km || 3.0;
+              const isOutOfRange = distanceKm !== null && distanceKm > maxRadius;
+
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.addressCard, item.isDefault && styles.addressCardDefault]}
+                  activeOpacity={0.85}
+                  onPress={() => handleSelectAddress(item)}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={styles.labelBadgeRow}>
+                      <Text style={styles.labelIcon}>{item.icon || '📍'}</Text>
+                      <Text style={styles.labelText}>{item.label}</Text>
+                      {item.isDefault && (
+                        <View style={styles.defaultBadge}>
+                          <Text style={styles.defaultBadgeText}>✓ Mặc định</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.actionRow}>
+                      <TouchableOpacity 
+                        style={styles.editBtn}
+                        onPress={() => openEditModal(item)}
+                      >
+                        <Text style={styles.actionBtnText}>✏️</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.deleteBtn}
+                        onPress={() => handleDeleteAddress(item.id)}
+                      >
+                        <Text style={styles.actionBtnText}>🗑️</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
 
-                  <View style={styles.actionRow}>
-                    <TouchableOpacity 
-                      style={styles.editBtn}
-                      onPress={() => openEditModal(item)}
-                    >
-                      <Text style={styles.actionBtnText}>✏️</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={styles.deleteBtn}
-                      onPress={() => handleDeleteAddress(item.id)}
-                    >
-                      <Text style={styles.actionBtnText}>🗑️</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <Text style={styles.recipientText}>
-                  {item.name} • <Text style={styles.phoneText}>{item.phone}</Text>
-                </Text>
-                <Text style={styles.detailAddressText}>{item.address}</Text>
-                {item.detail ? (
-                  <Text style={styles.subDetailText}>Ghi chú: {item.detail}</Text>
-                ) : null}
-
-                <View style={styles.cardFooterRow}>
-                  <Text style={[styles.selectStatusText, item.isDefault && styles.selectedStatusText]}>
-                    {item.isDefault ? 'Đang chọn giao tới đây ✓' : 'Nhấp để chọn giao tới đây'}
+                  <Text style={styles.recipientText}>
+                    {item.name} • <Text style={styles.phoneText}>{item.phone}</Text>
                   </Text>
-                </View>
-              </TouchableOpacity>
-            ))
+                  <Text style={styles.detailAddressText}>{item.address}</Text>
+                  {item.detail ? (
+                    <Text style={styles.subDetailText}>Ghi chú: {item.detail}</Text>
+                  ) : null}
+
+                  {/* THÔNG TIN KHOẢNG CÁCH TỚI QUÁN VÀ TIỀN SHIP DỰ KIẾN THEO YÊU CẦU */}
+                  <View style={[styles.distanceBadgeRow, isOutOfRange && styles.distanceBadgeOutOfRange]}>
+                    <Text style={styles.distanceBadgeIcon}>{isOutOfRange ? '⚠️' : '📏'}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.distanceBadgeText, isOutOfRange && styles.distanceBadgeTextOutOfRange]}>
+                        {distanceKm !== null
+                          ? `Cách quán: ${distanceKm} km • Tiền ship: ${shippingFee.toLocaleString('vi-VN')} đ (${distanceKm <= 1.0 ? 'Mặc định 5k dưới 1km' : '+500đ/100m'})`
+                          : 'Chưa có tọa độ GPS • Bấm ✏️ ghim vị trí để tính khoảng cách'}
+                      </Text>
+                      {isOutOfRange && (
+                        <Text style={styles.outOfRangeSubText}>
+                          (Vượt quá bán kính phục vụ {maxRadius}km của quán)
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+
+                  <View style={styles.cardFooterRow}>
+                    <Text style={[styles.selectStatusText, item.isDefault && styles.selectedStatusText]}>
+                      {item.isDefault ? 'Đang chọn giao tới đây ✓' : 'Nhấp để chọn giao tới đây'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
           )}
         </ScrollView>
 
@@ -749,5 +825,39 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: 'bold',
+  },
+  distanceBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    marginTop: 4,
+    marginBottom: 6,
+    gap: 6,
+  },
+  distanceBadgeOutOfRange: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  distanceBadgeIcon: {
+    fontSize: 14,
+  },
+  distanceBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#15803D',
+  },
+  distanceBadgeTextOutOfRange: {
+    color: '#B91C1C',
+  },
+  outOfRangeSubText: {
+    fontSize: 10,
+    color: '#DC2626',
+    fontWeight: '600',
+    marginTop: 2,
   },
 });

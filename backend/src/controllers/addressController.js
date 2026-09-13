@@ -1,38 +1,110 @@
 const db = require('../config/db');
 
-// Helper định dạng dữ liệu trả về cho đồng bộ với Frontend
-const formatAddressItem = (row) => ({
-  id: row.ma_dia_chi.toString(),
-  ma_dia_chi: row.ma_dia_chi,
-  name: row.ten_nguoi_nhan,
-  phone: row.so_dien_thoai,
-  label: row.nhan_dia_chi || 'Nhà riêng',
-  icon: row.nhan_dia_chi === 'Nhà riêng' ? '🏠' : row.nhan_dia_chi === 'Văn phòng' ? '🏢' : '📍',
-  address: row.dia_chi,
-  detail: row.ghi_chu || '',
-  coords: (row.vi_do && row.kinh_do) ? {
-    lat: parseFloat(row.vi_do),
-    lng: parseFloat(row.kinh_do)
-  } : null,
-  isDefault: !!row.mac_dinh,
-  created_at: row.ngay_tao
-});
+function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Bán kính Trái Đất (km)
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
+
+// Quy tắc tính tiền ship mới: dưới 1km là 5.000đ, từ 1km trở đi cứ 1km thêm 5k, 100m thêm 500đ
+function calculateShippingFee(distanceKm) {
+  if (distanceKm === null || distanceKm === undefined) return 5000;
+  const d = parseFloat(distanceKm);
+  if (isNaN(d) || d <= 0) return 5000;
+  if (d <= 1.0) return 5000;
+  const extraKm = d - 1.0;
+  const extra100m = Math.ceil(Math.round(extraKm * 1000) / 100);
+  return 5000 + extra100m * 500;
+}
+
+const getStoreConfig = async () => {
+  try {
+    const [landmarkRows] = await db.query('SELECT * FROM cau_hinh_quan WHERE id = 1');
+    if (landmarkRows.length > 0) {
+      const row = landmarkRows[0];
+      return {
+        ten_quan: row.ten_quan,
+        dia_chi_quan: row.dia_chi_quan,
+        vi_do: parseFloat(row.vi_do || 10.9805),
+        kinh_do: parseFloat(row.kinh_do || 106.6745),
+        ban_kinh_phuc_vu_km: parseFloat(row.ban_kinh_phuc_vu_km || 3.0),
+        gia_ship_moi_km: parseFloat(row.gia_ship_moi_km || 5000)
+      };
+    }
+  } catch (e) {
+    console.log('Lỗi query cau_hinh_quan:', e.message);
+  }
+  return {
+    ten_quan: 'Cửa hàng FastFood BDU',
+    dia_chi_quan: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
+    vi_do: 10.9805,
+    kinh_do: 106.6745,
+    ban_kinh_phuc_vu_km: 3.0,
+    gia_ship_moi_km: 5000
+  };
+};
+
+// Helper định dạng dữ liệu trả về cho đồng bộ với Frontend kèm Khoảng cách tới quán & Tiền ship
+const formatAddressItem = (row, storeLandmark = null) => {
+  let khoangCachKm = null;
+  let phiShipDuKien = 5000;
+  let trongBanKinh = true;
+
+  if (row.vi_do && row.kinh_do && storeLandmark) {
+    khoangCachKm = calculateHaversineDistance(
+      storeLandmark.vi_do,
+      storeLandmark.kinh_do,
+      parseFloat(row.vi_do),
+      parseFloat(row.kinh_do)
+    );
+    phiShipDuKien = calculateShippingFee(khoangCachKm);
+    trongBanKinh = khoangCachKm <= storeLandmark.ban_kinh_phuc_vu_km;
+  }
+
+  return {
+    id: row.ma_dia_chi.toString(),
+    ma_dia_chi: row.ma_dia_chi,
+    name: row.ten_nguoi_nhan,
+    phone: row.so_dien_thoai,
+    label: row.nhan_dia_chi || 'Nhà riêng',
+    icon: row.nhan_dia_chi === 'Nhà riêng' ? '🏠' : row.nhan_dia_chi === 'Văn phòng' ? '🏢' : '📍',
+    address: row.dia_chi,
+    detail: row.ghi_chu || '',
+    coords: (row.vi_do && row.kinh_do) ? {
+      lat: parseFloat(row.vi_do),
+      lng: parseFloat(row.kinh_do)
+    } : null,
+    khoang_cach_km: khoangCachKm,
+    phi_ship_du_kien: phiShipDuKien,
+    trong_ban_kinh: trongBanKinh,
+    isDefault: !!row.mac_dinh,
+    created_at: row.ngay_tao
+  };
+};
 
 // 1. LẤY DANH SÁCH ĐỊA CHỈ TRONG SỔ ĐỊA CHỈ CỦA NGƯỜI DÙNG (GET /api/address)
 const getAddresses = async (req, res) => {
   try {
     const userId = req.user.id;
+    const storeLandmark = await getStoreConfig();
     const [rows] = await db.query(
       'SELECT * FROM dia_chi_nguoi_dung WHERE ma_nguoi_dung = ? ORDER BY mac_dinh DESC, ngay_cap_nhat DESC',
       [userId]
     );
 
-    const formattedList = rows.map(formatAddressItem);
+    const formattedList = rows.map(row => formatAddressItem(row, storeLandmark));
 
     return res.status(200).json({
       success: true,
       message: 'Lấy danh sách sổ địa chỉ thành công!',
-      data: formattedList
+      data: formattedList,
+      store_landmark: storeLandmark
     });
   } catch (error) {
     return res.status(500).json({
@@ -105,10 +177,11 @@ const createAddress = async (req, res) => {
       [insertResult.insertId]
     );
 
+    const storeLandmark = await getStoreConfig();
     return res.status(201).json({
       success: true,
       message: 'Đã thêm địa chỉ vào sổ địa chỉ thành công!',
-      data: formatAddressItem(newRows[0])
+      data: formatAddressItem(newRows[0], storeLandmark)
     });
   } catch (error) {
     return res.status(500).json({
@@ -186,10 +259,11 @@ const updateAddress = async (req, res) => {
       [addressId]
     );
 
+    const storeLandmark = await getStoreConfig();
     return res.status(200).json({
       success: true,
       message: 'Cập nhật địa chỉ thành công!',
-      data: formatAddressItem(updatedRows[0])
+      data: formatAddressItem(updatedRows[0], storeLandmark)
     });
   } catch (error) {
     return res.status(500).json({
@@ -239,11 +313,12 @@ const setDefaultAddress = async (req, res) => {
       [targetAddress.dia_chi, userId]
     );
 
+    const storeLandmark = await getStoreConfig();
     return res.status(200).json({
       success: true,
       message: 'Đã đặt địa chỉ làm mặc định!',
       data: {
-        ...formatAddressItem(targetAddress),
+        ...formatAddressItem(targetAddress, storeLandmark),
         isDefault: true
       }
     });

@@ -43,6 +43,19 @@ function calculateHaversine(lat1, lon1, lat2, lon2) {
   return parseFloat((R * c).toFixed(2));
 }
 
+// Quy tắc tính tiền ship mới:
+// - Khoảng cách <= 1.0 km: mặc định 5.000đ
+// - Từ 1km trở đi: cứ cách 1km là thêm 5k, 100m là thêm 500đ
+function calculateShippingFee(distanceKm) {
+  if (distanceKm === null || distanceKm === undefined) return 5000;
+  const d = parseFloat(distanceKm);
+  if (isNaN(d) || d <= 0) return 5000;
+  if (d <= 1.0) return 5000;
+  const extraKm = d - 1.0;
+  const extra100m = Math.ceil(Math.round(extraKm * 1000) / 100);
+  return 5000 + extra100m * 500;
+}
+
 export default function CheckoutScreen({ route, navigation }) {
   const { cartData, grandTotal: initialGrandTotal } = route.params || {};
 
@@ -80,11 +93,9 @@ export default function CheckoutScreen({ route, navigation }) {
   const maxRadius = storeLandmark?.ban_kinh_phuc_vu_km || 3.0;
   const isOutOfRange = distanceKm !== null && distanceKm > maxRadius;
 
-  const rawSubtotal = cartData?.tong_tien || (initialGrandTotal ? initialGrandTotal - 15000 : 0);
-  // Tính tiền ship: 5.000đ mỗi 1km khoảng cách (hoặc 15.000đ mặc định)
-  const shippingFee = distanceKm !== null 
-    ? Math.max(5000, Math.round(distanceKm * (storeLandmark?.gia_ship_moi_km || 5000)))
-    : 15000;
+  const rawSubtotal = cartData?.tong_tien || (initialGrandTotal ? initialGrandTotal - 5000 : 0);
+  // Quy tắc tính tiền ship mới: dưới 1km là 5.000đ, từ 1km trở đi cứ 1km thêm 5k, 100m thêm 500đ
+  const shippingFee = calculateShippingFee(distanceKm);
   const discountAmount = appliedVoucher ? parseFloat(appliedVoucher.so_tien_giam) : 0;
   const grandTotal = Math.max(0, rawSubtotal + shippingFee - discountAmount);
 
@@ -463,7 +474,7 @@ export default function CheckoutScreen({ route, navigation }) {
                     <Text style={[styles.distanceBadgeText, isOutOfRange && styles.distanceBadgeTextOutOfRange]}>
                       {isOutOfRange 
                         ? `🚫 Cách quán ${distanceKm} km (Vượt quá bán kính phục vụ ${maxRadius}km)` 
-                        : `📍 Cách quán ${distanceKm} km • Tiền ship: ${shippingFee.toLocaleString('vi-VN')} đ (5.000đ/km)`}
+                        : `📍 Cách quán ${distanceKm} km • Tiền ship: ${shippingFee.toLocaleString('vi-VN')} đ (${distanceKm <= 1.0 ? 'Mặc định 5k dưới 1km' : '+500đ/100m'})`}
                     </Text>
                   </View>
                 ) : (
@@ -514,7 +525,7 @@ export default function CheckoutScreen({ route, navigation }) {
 
             <View style={styles.priceRow}>
               <Text style={styles.priceLabel}>
-                Phí giao hàng {distanceKm !== null ? `(${distanceKm} km x 5.000đ)` : ''}:
+                Phí giao hàng {distanceKm !== null ? `(${distanceKm} km)` : ''}:
               </Text>
               <Text style={styles.priceValue}>{shippingFee.toLocaleString('vi-VN')} đ</Text>
             </View>
