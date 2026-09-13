@@ -3,23 +3,32 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
 // CẤU HÌNH ĐƯỜNG DẪN API GỐC (BACKEND)
-// Tự động nhận diện IP máy tính đang phát Expo Metro Bundler để bạn đổi mạng Wi-Fi không cần sửa lại code!
+const normalizeApiUrl = (url) => {
+  if (!url) return '';
+  let cleaned = String(url).trim().replace(/[\r\n\t]/g, '').replace(/\/+$/, '');
+  if (!cleaned.endsWith('/api')) {
+    cleaned = `${cleaned}/api`;
+  }
+  return cleaned;
+};
+
 const getBaseUrl = () => {
-  // Ưu tiên cho môi trường phát triển Web trên máy tính (localhost) kết nối trực tiếp không qua tunnel
+  // Ưu tiên 1: Phát triển Web trên máy tính (localhost) kết nối trực tiếp không qua tunnel
   if (typeof window !== 'undefined' && window.location && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     return 'http://localhost:5000/api';
   }
 
+  // Ưu tiên 2: Biến môi trường EXPO_PUBLIC_API_URL được cấu hình
   if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
+    return normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL);
   }
 
-  // Ưu tiên 1: Tự động lấy hostname nếu đang chạy trên Trình duyệt Web khác
+  // Ưu tiên 3: Tự động lấy hostname nếu đang chạy trên Trình duyệt Web khác
   if (typeof window !== 'undefined' && window.location && window.location.hostname) {
     return `http://${window.location.hostname}:5000/api`;
   }
 
-  // Ưu tiên 2: Tự động nhận diện IP máy tính cho Expo Go trên Điện thoại
+  // Ưu tiên 4: Tự động nhận diện IP máy tính cho Expo Go trên Điện thoại
   const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost || Constants.manifest2?.extra?.expoGo?.debuggerHost;
   if (hostUri) {
     const ip = hostUri.split(':').shift();
@@ -32,6 +41,7 @@ const getBaseUrl = () => {
 };
 
 const BASE_URL = getBaseUrl();
+console.log('📡 [API Config] Đang kết nối tới Backend tại:', BASE_URL);
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -71,7 +81,8 @@ export const registerUser = async (ho_ten, email, mat_khau, so_dien_thoai, dia_c
     });
     return response.data;
   } catch (error) {
-    throw error.response?.data || new Error('Lỗi kết nối mạng!');
+    const errorMsg = error.response?.data?.message || error.message || 'Lỗi kết nối mạng!';
+    throw new Error(errorMsg);
   }
 };
 
@@ -91,7 +102,8 @@ export const loginUser = async (email_or_phone, mat_khau) => {
     
     return response.data;
   } catch (error) {
-    throw error.response?.data || new Error('Lỗi kết nối mạng!');
+    const errorMsg = error.response?.data?.message || error.message || 'Lỗi kết nối mạng!';
+    throw new Error(errorMsg);
   }
 };
 

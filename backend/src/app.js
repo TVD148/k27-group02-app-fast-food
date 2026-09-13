@@ -21,16 +21,39 @@ const voucherRoutes = require('./routes/voucherRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const storeRoutes = require('./routes/storeRoutes');
 
-// Khai báo các đường dẫn API gốc
+// Log mọi request gửi đến server để dễ dàng kiểm tra kết nối
+app.use((req, res, next) => {
+  console.log(`[API Call] ${req.method} ${req.url}`);
+  next();
+});
+
+// Khai báo các đường dẫn API gốc (Hỗ trợ cả tiền tố /api/ và không có /api/)
 app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
+
 app.use('/api/menu', menuRoutes);
+app.use('/menu', menuRoutes);
+
 app.use('/api/admin', adminRoutes);
+app.use('/admin', adminRoutes);
+
 app.use('/api/cart', cartRoutes);
+app.use('/cart', cartRoutes);
+
 app.use('/api/orders', orderRoutes);
+app.use('/orders', orderRoutes);
+
 app.use('/api/nutrition', nutritionRoutes);
+app.use('/nutrition', nutritionRoutes);
+
 app.use('/api/vouchers', voucherRoutes);
+app.use('/vouchers', voucherRoutes);
+
 app.use('/api/payments', paymentRoutes);
+app.use('/payments', paymentRoutes);
+
 app.use('/api/store', storeRoutes);
+app.use('/store', storeRoutes);
 
 // Route chào mừng cơ bản để test server
 app.get('/', (req, res) => {
