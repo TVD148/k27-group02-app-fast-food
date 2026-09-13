@@ -141,11 +141,13 @@ export default function CustomNutritionScreen({ route, navigation }) {
     try {
       // Đóng gói cấu hình dinh dưỡng tùy biến và giá sau tùy biến
       const adjusted_labels = [];
-      ingredients.forEach(ing => {
+      const sourceIngredients = (recipe && recipe.length > 0) ? recipe : (foodData?.cong_thuc_nguyen_lieu || []);
+      sourceIngredients.forEach(ing => {
         const qty = quantities[ing.ma_nguyen_lieu] !== undefined ? quantities[ing.ma_nguyen_lieu] : 1;
-        if (qty > 1) {
+        const defaultQty = parseFloat(ing.so_luong_mac_dinh || 1);
+        if (qty > defaultQty) {
           adjusted_labels.push(`Tăng ${ing.ten_nguyen_lieu} (x${qty})`);
-        } else if (qty < 1) {
+        } else if (qty < defaultQty) {
           adjusted_labels.push(`Bớt ${ing.ten_nguyen_lieu} (x${qty})`);
         }
       });

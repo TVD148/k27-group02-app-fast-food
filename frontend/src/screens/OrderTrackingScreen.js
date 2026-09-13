@@ -8,9 +8,10 @@ import {
   ActivityIndicator, 
   Alert, 
   RefreshControl,
-  SafeAreaView 
+  SafeAreaView,
+  Linking 
 } from 'react-native';
-import { fetchOrderDetail, updateOrderStatus } from '../services/api';
+import { fetchOrderDetail, updateOrderStatus, fetchStoreLandmark } from '../services/api';
 
 export default function OrderTrackingScreen({ route, navigation }) {
   const { orderId } = route.params;
@@ -18,9 +19,11 @@ export default function OrderTrackingScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [canceling, setCanceling] = useState(false);
+  const [storeHotline, setStoreHotline] = useState('0901234567');
 
   useEffect(() => {
     loadOrderDetails();
+    loadStoreHotline();
 
     // Tự động kiểm tra trạng thái đơn mỗi 4 giây để cập nhật ngay khi shipper giao tới hoàn thành
     const timer = setInterval(() => {
@@ -28,6 +31,9 @@ export default function OrderTrackingScreen({ route, navigation }) {
         .then(res => {
           if (res && res.success && res.data) {
             setOrder(res.data);
+            if (res.data.so_dien_thoai_quan) {
+              setStoreHotline(res.data.so_dien_thoai_quan);
+            }
           }
         })
         .catch(() => {});
@@ -35,6 +41,22 @@ export default function OrderTrackingScreen({ route, navigation }) {
 
     return () => clearInterval(timer);
   }, [orderId]);
+
+  const loadStoreHotline = async () => {
+    try {
+      const res = await fetchStoreLandmark();
+      if (res && res.success && res.data?.so_dien_thoai_quan) {
+        setStoreHotline(res.data.so_dien_thoai_quan);
+      }
+    } catch (e) {}
+  };
+
+  const handleCallStore = (phone) => {
+    const targetPhone = phone || storeHotline || '0901234567';
+    Linking.openURL(`tel:${targetPhone}`).catch(() => {
+      Alert.alert('Không thể thực hiện cuộc gọi', `Vui lòng bấm gọi số: ${targetPhone}`);
+    });
+  };
 
   const loadOrderDetails = async (isManual = false) => {
     if (!isManual) setLoading(true);
@@ -226,6 +248,46 @@ export default function OrderTrackingScreen({ route, navigation }) {
           <Text style={styles.mascotTitle}>{mascot.title}</Text>
           <Text style={styles.mascotDesc}>{mascot.desc}</Text>
         </View>
+
+        {/* Thông báo Hotline quán khi Bếp đang nấu món (Khách muốn hủy hoặc thay đổi thì gọi số này) */}
+        {['dang_che_bien', 'san_sang_giao'].includes(order.trang_thai_don_hang) && (
+          <View style={styles.kitchenCookingNoticeCard}>
+            <View style={styles.kitchenCookingHeader}>
+              <View style={styles.kitchenCookingIconWrap}>
+                <Text style={styles.kitchenCookingIcon}>👨‍🍳</Text>
+              </View>
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={styles.kitchenCookingTitle}>Bếp đang chuẩn bị món ăn!</Text>
+                <Text style={styles.kitchenCookingSub}>Đơn hàng đã tiếp nhận vào bếp và đang nấu nóng hổi</Text>
+              </View>
+            </View>
+
+            <View style={styles.kitchenCookingDivider} />
+
+            <Text style={styles.kitchenCookingDesc}>
+              💬 Nếu bạn muốn <Text style={{ fontWeight: '700', color: '#DC2626' }}>hủy đơn</Text> hoặc <Text style={{ fontWeight: '700', color: '#D97706' }}>thay đổi món ăn</Text>, vui lòng liên hệ ngay với quán qua số điện thoại:
+            </Text>
+
+            <TouchableOpacity 
+              style={styles.hotlineCallBtn}
+              activeOpacity={0.85}
+              onPress={() => handleCallStore(order.so_dien_thoai_quan || storeHotline)}
+            >
+              <View style={styles.hotlineCallLeft}>
+                <View style={styles.hotlinePhoneCircle}>
+                  <Text style={styles.hotlinePhoneIcon}>📞</Text>
+                </View>
+                <View>
+                  <Text style={styles.hotlineStoreLabel}>Hotline Nhà Hàng FastFood</Text>
+                  <Text style={styles.hotlinePhoneNumber}>{order.so_dien_thoai_quan || storeHotline || '0901234567'}</Text>
+                </View>
+              </View>
+              <View style={styles.hotlineCallRight}>
+                <Text style={styles.hotlineCallText}>GỌI NGAY ⚡</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Thông tin giao nhận */}
         <View style={styles.sectionCard}>
@@ -570,6 +632,108 @@ const styles = StyleSheet.create({
   stepActionBtnText: {
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '800',
+  },
+  kitchenCookingNoticeCard: {
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1.5,
+    borderColor: '#FED7AA',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#EA580C',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  kitchenCookingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  kitchenCookingIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFEDD5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  kitchenCookingIcon: {
+    fontSize: 24,
+  },
+  kitchenCookingTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#9A3412',
+  },
+  kitchenCookingSub: {
+    fontSize: 12,
+    color: '#C2410C',
+    marginTop: 2,
+  },
+  kitchenCookingDivider: {
+    height: 1,
+    backgroundColor: '#FED7AA',
+    marginVertical: 12,
+  },
+  kitchenCookingDesc: {
+    fontSize: 13,
+    color: '#431407',
+    lineHeight: 19,
+    marginBottom: 12,
+  },
+  hotlineCallBtn: {
+    backgroundColor: '#EA580C',
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    shadowColor: '#EA580C',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  hotlineCallLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  hotlinePhoneCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  hotlinePhoneIcon: {
+    fontSize: 16,
+  },
+  hotlineStoreLabel: {
+    fontSize: 10,
+    color: '#FED7AA',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  hotlinePhoneNumber: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  hotlineCallRight: {
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  hotlineCallText: {
+    color: '#EA580C',
+    fontSize: 12,
     fontWeight: '800',
   },
 });

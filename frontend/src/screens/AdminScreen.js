@@ -57,34 +57,127 @@ import {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // ============================================================================
-// COMPONENT: BIỂU ĐỒ ĐƯỜNG (LINE CHART) DOANH THU THUẦN REACT NATIVE
 // ============================================================================
-function RevenueLineChart({ hourlyData = [] }) {
+// COMPONENT: BIỂU ĐỒ DOANH THU THEO GIỜ & THEO NGÀY (CHỌN BẤT CỨ NGÀY/THÁNG/NĂM)
+// ============================================================================
+function RevenueLineChart({ 
+  hourlyData = [], 
+  selectedDate = 'all', 
+  availableDates = [], 
+  selectedDateRevenue = 0, 
+  selectedDateOrders = 0, 
+  onSelectDate, 
+  loadingChart = false 
+}) {
   const [selectedPoint, setSelectedPoint] = useState(null);
+  const [showDatePickerModal, setShowDatePickerModal] = useState(false);
+
+  // Lấy ngày hôm nay theo giờ địa phương YYYY-MM-DD
+  const todayStr = useMemo(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  // Ngày hôm qua
+  const yesterdayStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  // State cho bộ chọn ngày trong Modal: Năm, Tháng (0-11), Ngày (1-31)
+  const [pickerYear, setPickerYear] = useState(() => new Date().getFullYear());
+  const [pickerMonth, setPickerMonth] = useState(() => new Date().getMonth());
+  const [pickerDay, setPickerDay] = useState(() => new Date().getDate());
+
+  const openDatePicker = () => {
+    if (selectedDate && selectedDate !== 'all') {
+      const parts = selectedDate.split('-');
+      if (parts.length === 3) {
+        setPickerYear(parseInt(parts[0], 10));
+        setPickerMonth(parseInt(parts[1], 10) - 1);
+        setPickerDay(parseInt(parts[2], 10));
+      }
+    } else {
+      const now = new Date();
+      setPickerYear(now.getFullYear());
+      setPickerMonth(now.getMonth());
+      setPickerDay(now.getDate());
+    }
+    setShowDatePickerModal(true);
+  };
+
+  const handleConfirmDate = () => {
+    const formatted = `${pickerYear}-${String(pickerMonth + 1).padStart(2, '0')}-${String(pickerDay).padStart(2, '0')}`;
+    setShowDatePickerModal(false);
+    setSelectedPoint(null);
+    onSelectDate && onSelectDate(formatted);
+  };
+
+  // Tính toán số ngày trong tháng đang chọn
+  const daysInMonth = useMemo(() => {
+    return new Date(pickerYear, pickerMonth + 1, 0).getDate();
+  }, [pickerYear, pickerMonth]);
+
+  // Điều chỉnh pickerDay nếu vượt quá số ngày trong tháng
+  useEffect(() => {
+    if (pickerDay > daysInMonth) {
+      setPickerDay(daysInMonth);
+    }
+  }, [daysInMonth, pickerDay]);
+
+  // Tính ngày đầu tuần của tháng (Thứ 2 = 0, ..., Chủ Nhật = 6)
+  const firstDayOfWeek = useMemo(() => {
+    const day = new Date(pickerYear, pickerMonth, 1).getDay();
+    return day === 0 ? 6 : day - 1;
+  }, [pickerYear, pickerMonth]);
 
   const defaultZeroHours = [
-    { hour: '08:00', amount: 0 },
-    { hour: '10:00', amount: 0 },
-    { hour: '12:00', amount: 0 },
-    { hour: '14:00', amount: 0 },
-    { hour: '16:00', amount: 0 },
-    { hour: '18:00', amount: 0 },
-    { hour: '20:00', amount: 0 },
-    { hour: '22:00', amount: 0 },
+    { hour: '08:00', amount: 0, orders: 0, slot_label: '00h - 08h' },
+    { hour: '10:00', amount: 0, orders: 0, slot_label: '09h - 10h' },
+    { hour: '12:00', amount: 0, orders: 0, slot_label: '11h - 12h' },
+    { hour: '14:00', amount: 0, orders: 0, slot_label: '13h - 14h' },
+    { hour: '16:00', amount: 0, orders: 0, slot_label: '15h - 16h' },
+    { hour: '18:00', amount: 0, orders: 0, slot_label: '17h - 18h' },
+    { hour: '20:00', amount: 0, orders: 0, slot_label: '19h - 20h' },
+    { hour: '22:00', amount: 0, orders: 0, slot_label: '21h - 23h' },
   ];
 
   const data = (hourlyData && hourlyData.length > 0) ? hourlyData : defaultZeroHours;
   const maxAmount = Math.max(...data.map(d => d.amount), 50000);
   const chartHeight = 170;
 
+  const formatDateLabel = (d) => {
+    if (!d || d === 'all') return 'Toàn thời gian';
+    if (d === todayStr) return `Hôm nay (${d.split('-')[2]}/${d.split('-')[1]})`;
+    if (d === yesterdayStr) return `Hôm qua (${d.split('-')[2]}/${d.split('-')[1]})`;
+    try {
+      const parts = d.split('-');
+      if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    } catch (e) {}
+    return d;
+  };
+
+  const isCustomDate = selectedDate !== 'all' && selectedDate !== todayStr && selectedDate !== yesterdayStr;
+
   return (
     <View style={styles.chartWrapper}>
+      {/* Tiêu đề & tooltip / loading */}
       <View style={styles.chartHeaderRow}>
-        <Text style={styles.chartTitle}>📈 Biểu Đồ Hoạt Động Theo Giờ</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={styles.chartTitle}>📈 Biểu Đồ Hoạt Động Theo Giờ</Text>
+          {loadingChart && <ActivityIndicator size="small" color="#7C3AED" />}
+        </View>
         {selectedPoint ? (
           <View style={styles.tooltipBadge}>
             <Text style={styles.tooltipText}>
-              {selectedPoint.hour}: {selectedPoint.orders ? `${selectedPoint.orders} đơn hàng` : 'Hoạt động'}
+              {selectedPoint.slot_label || selectedPoint.hour}: {Number(selectedPoint.amount || 0).toLocaleString('vi-VN')} đ ({selectedPoint.orders || 0} đơn)
             </Text>
           </View>
         ) : (
@@ -92,6 +185,125 @@ function RevenueLineChart({ hourlyData = [] }) {
         )}
       </View>
 
+      {/* Thanh chọn ngày xem (hỗ trợ chọn bất cứ ngày/tháng/năm nào) */}
+      <View style={styles.chartDateFilterContainer}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chartDateScroll}
+        >
+          {/* Nút Chọn ngày/tháng/năm bất kỳ */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={openDatePicker}
+            style={styles.chartDatePickBtn}
+          >
+            <Text style={styles.chartDatePickBtnText}>📅 Chọn ngày/tháng/năm...</Text>
+          </TouchableOpacity>
+
+          {/* Tất cả */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              setSelectedPoint(null);
+              onSelectDate && onSelectDate('all');
+            }}
+            style={[
+              styles.chartDateChip,
+              selectedDate === 'all' && styles.chartDateChipActive
+            ]}
+          >
+            <Text style={[
+              styles.chartDateChipText,
+              selectedDate === 'all' && styles.chartDateChipTextActive
+            ]}>
+              Toàn thời gian
+            </Text>
+          </TouchableOpacity>
+
+          {/* Hôm nay */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              setSelectedPoint(null);
+              onSelectDate && onSelectDate(todayStr);
+            }}
+            style={[
+              styles.chartDateChip,
+              selectedDate === todayStr && styles.chartDateChipActive
+            ]}
+          >
+            <Text style={[
+              styles.chartDateChipText,
+              selectedDate === todayStr && styles.chartDateChipTextActive
+            ]}>
+              Hôm nay
+            </Text>
+          </TouchableOpacity>
+
+          {/* Hôm qua */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              setSelectedPoint(null);
+              onSelectDate && onSelectDate(yesterdayStr);
+            }}
+            style={[
+              styles.chartDateChip,
+              selectedDate === yesterdayStr && styles.chartDateChipActive
+            ]}
+          >
+            <Text style={[
+              styles.chartDateChipText,
+              selectedDate === yesterdayStr && styles.chartDateChipTextActive
+            ]}>
+              Hôm qua
+            </Text>
+          </TouchableOpacity>
+
+          {/* Hiển thị ngày tùy chọn nếu đang xem */}
+          {isCustomDate && (
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={openDatePicker}
+              style={[styles.chartDateChip, styles.chartDateChipActive]}
+            >
+              <Text style={[styles.chartDateChipText, styles.chartDateChipTextActive]}>
+                📅 {formatDateLabel(selectedDate)}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+      </View>
+
+      {/* Thẻ tóm tắt ngày được chọn (Chạm để đổi ngày) */}
+      <TouchableOpacity 
+        activeOpacity={0.75}
+        onPress={openDatePicker}
+        style={styles.chartSummaryBanner}
+      >
+        <View style={styles.chartSummaryItem}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text style={styles.chartSummaryLabel}>Ngày xem</Text>
+            <Text style={{ fontSize: 10, color: '#7C3AED', fontWeight: '700' }}>✎ Đổi</Text>
+          </View>
+          <Text style={styles.chartSummaryDateText} numberOfLines={1}>{formatDateLabel(selectedDate)}</Text>
+        </View>
+        <View style={styles.chartSummaryDivider} />
+        <View style={styles.chartSummaryItem}>
+          <Text style={styles.chartSummaryLabel}>Tổng thu</Text>
+          <Text style={styles.chartSummaryRevenueText}>
+            {Number(selectedDateRevenue || 0).toLocaleString('vi-VN')} đ
+          </Text>
+        </View>
+        <View style={styles.chartSummaryDivider} />
+        <View style={styles.chartSummaryItem}>
+          <Text style={styles.chartSummaryLabel}>Số đơn</Text>
+          <Text style={styles.chartSummaryOrdersText}>{selectedDateOrders || 0} đơn</Text>
+        </View>
+      </TouchableOpacity>
+
+      {/* Biểu đồ cột */}
       <View style={[styles.chartBody, { height: chartHeight }]}>
         {/* Đường lưới ngang (Grid lines) */}
         <View style={[styles.gridLine, { top: 0 }]} />
@@ -115,6 +327,13 @@ function RevenueLineChart({ hourlyData = [] }) {
                 onPress={() => setSelectedPoint(item)}
                 style={styles.pointCol}
               >
+                {hasRevenue && (
+                  <View style={styles.miniValTag}>
+                    <Text style={styles.miniValText}>
+                      {item.amount >= 1000 ? `${Math.round(item.amount / 1000)}k` : `${item.amount}`}
+                    </Text>
+                  </View>
+                )}
                 <View style={styles.verticalTrack}>
                   <View
                     style={[
@@ -141,6 +360,187 @@ function RevenueLineChart({ hourlyData = [] }) {
           })}
         </View>
       </View>
+
+      {/* MODAL LỊCH CHỌN BẤT CỨ NGÀY / THÁNG / NĂM */}
+      <Modal
+        visible={showDatePickerModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDatePickerModal(false)}
+      >
+        <View style={styles.calModalOverlay}>
+          <View style={styles.calModalContent}>
+            {/* Header Modal */}
+            <View style={styles.calModalHeader}>
+              <Text style={styles.calModalTitle}>📅 Chọn Ngày / Tháng / Năm</Text>
+              <TouchableOpacity 
+                style={styles.calModalCloseBtn}
+                onPress={() => setShowDatePickerModal(false)}
+              >
+                <Text style={styles.calModalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Điều hướng Tháng & Năm */}
+            <View style={styles.calNavRow}>
+              {/* Chọn Tháng */}
+              <View style={styles.calNavGroup}>
+                <TouchableOpacity
+                  style={styles.calNavBtn}
+                  onPress={() => {
+                    if (pickerMonth === 0) {
+                      setPickerMonth(11);
+                      setPickerYear(y => y - 1);
+                    } else {
+                      setPickerMonth(m => m - 1);
+                    }
+                  }}
+                >
+                  <Text style={styles.calNavBtnText}>‹</Text>
+                </TouchableOpacity>
+                <Text style={styles.calNavTitle}>Tháng {pickerMonth + 1}</Text>
+                <TouchableOpacity
+                  style={styles.calNavBtn}
+                  onPress={() => {
+                    if (pickerMonth === 11) {
+                      setPickerMonth(0);
+                      setPickerYear(y => y + 1);
+                    } else {
+                      setPickerMonth(m => m + 1);
+                    }
+                  }}
+                >
+                  <Text style={styles.calNavBtnText}>›</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Chọn Năm */}
+              <View style={styles.calNavGroup}>
+                <TouchableOpacity
+                  style={styles.calNavBtn}
+                  onPress={() => setPickerYear(y => y - 1)}
+                >
+                  <Text style={styles.calNavBtnText}>‹</Text>
+                </TouchableOpacity>
+                <Text style={styles.calNavTitle}>Năm {pickerYear}</Text>
+                <TouchableOpacity
+                  style={styles.calNavBtn}
+                  onPress={() => setPickerYear(y => y + 1)}
+                >
+                  <Text style={styles.calNavBtnText}>›</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Thứ trong tuần */}
+            <View style={styles.calWeekHeader}>
+              {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((w, i) => (
+                <Text key={i} style={styles.calWeekDayText}>{w}</Text>
+              ))}
+            </View>
+
+            {/* Lưới các ngày trong tháng */}
+            <View style={styles.calGrid}>
+              {/* Khoảng trống các ngày đầu tuần */}
+              {Array.from({ length: firstDayOfWeek }).map((_, i) => (
+                <View key={`empty-${i}`} style={styles.calDayCell} />
+              ))}
+
+              {/* Danh sách ngày 1..daysInMonth */}
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const dayNum = i + 1;
+                const isSelected = pickerDay === dayNum;
+                const dateKey = `${pickerYear}-${String(pickerMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                const isToday = dateKey === todayStr;
+                const hasOrders = Array.isArray(availableDates) && availableDates.includes(dateKey);
+
+                return (
+                  <TouchableOpacity
+                    key={`day-${dayNum}`}
+                    activeOpacity={0.6}
+                    onPress={() => setPickerDay(dayNum)}
+                    style={styles.calDayCell}
+                  >
+                    <View style={[
+                      styles.calDayInner,
+                      isToday && styles.calDayInnerToday,
+                      isSelected && styles.calDayInnerSelected,
+                    ]}>
+                      <Text style={[
+                        styles.calDayText,
+                        isToday && styles.calDayTextToday,
+                        isSelected && styles.calDayTextSelected,
+                      ]}>
+                        {dayNum}
+                      </Text>
+                    </View>
+                    {hasOrders && !isSelected && <View style={styles.calOrderDot} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Phím tắt chọn nhanh */}
+            <View style={styles.calQuickRow}>
+              <TouchableOpacity
+                style={styles.calQuickChip}
+                onPress={() => {
+                  const now = new Date();
+                  setPickerYear(now.getFullYear());
+                  setPickerMonth(now.getMonth());
+                  setPickerDay(now.getDate());
+                }}
+              >
+                <Text style={styles.calQuickChipText}>Hôm nay</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.calQuickChip}
+                onPress={() => {
+                  const yest = new Date();
+                  yest.setDate(yest.getDate() - 1);
+                  setPickerYear(yest.getFullYear());
+                  setPickerMonth(yest.getMonth());
+                  setPickerDay(yest.getDate());
+                }}
+              >
+                <Text style={styles.calQuickChipText}>Hôm qua</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.calQuickChip}
+                onPress={() => setPickerDay(1)}
+              >
+                <Text style={styles.calQuickChipText}>Đầu tháng</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Xem trước ngày được chọn */}
+            <View style={styles.calSelectedPreview}>
+              <Text style={styles.calSelectedPreviewText}>
+                Ngày đã chọn: {String(pickerDay).padStart(2, '0')}/{String(pickerMonth + 1).padStart(2, '0')}/{pickerYear}
+              </Text>
+            </View>
+
+            {/* Nút hành động */}
+            <View style={styles.calActionsRow}>
+              <TouchableOpacity
+                style={styles.calCancelBtn}
+                onPress={() => setShowDatePickerModal(false)}
+              >
+                <Text style={styles.calCancelBtnText}>Hủy</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.calConfirmBtn}
+                onPress={handleConfirmDate}
+              >
+                <Text style={styles.calConfirmBtnText}>🎯 Xem ngày này</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -247,10 +647,33 @@ export default function AdminScreen({ navigation }) {
     all_online: []
   });
 
+  // Lọc biểu đồ hoạt động theo giờ & ngày
+  const [selectedChartDate, setSelectedChartDate] = useState('all');
+  const [loadingChart, setLoadingChart] = useState(false);
+
+  const handleSelectChartDate = async (date) => {
+    setSelectedChartDate(date);
+    setLoadingChart(true);
+    try {
+      const statsRes = await fetchDashboardStats(date);
+      if (statsRes && statsRes.success && statsRes.data) {
+        setStats(prev => ({
+          ...(prev || {}),
+          ...statsRes.data
+        }));
+      }
+    } catch (err) {
+      console.log('Lỗi chọn ngày biểu đồ:', err.message);
+    } finally {
+      setLoadingChart(false);
+    }
+  };
+
   // Mốc quán & Bán kính phục vụ (Cột mốc 3km)
   const [storeLandmark, setStoreLandmark] = useState({
     ten_quan: 'Cửa hàng FastFood BDU',
     dia_chi_quan: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
+    so_dien_thoai_quan: '0901234567',
     vi_do: '10.980500',
     kinh_do: '106.674500',
     ban_kinh_phuc_vu_km: '3.0',
@@ -370,12 +793,10 @@ export default function AdminScreen({ navigation }) {
 
   const loadAdminDataSilently = async () => {
     try {
-      const [foodsRes, ordersRes, onlineRes] = await Promise.all([
-        fetchMenuItems().catch(() => null),
+      const [ordersRes, onlineRes] = await Promise.all([
         fetchOrders().catch(() => null),
         fetchOnlinePersonnel().catch(() => null)
       ]);
-      if (foodsRes && foodsRes.success) setFoods(foodsRes.data || []);
       if (ordersRes && ordersRes.success) setOrders(ordersRes.data || []);
       if (onlineRes && onlineRes.success && onlineRes.data) setOnlinePersonnel(onlineRes.data);
     } catch (e) {}
@@ -388,7 +809,7 @@ export default function AdminScreen({ navigation }) {
       if (storedUser) setCurrentUser(JSON.parse(storedUser));
 
       const [statsRes, foodsRes, ordersRes, vouchersRes, usersRes, landmarkRes, onlineRes, categoriesRes, optionGroupsRes, ingredientsRes] = await Promise.all([
-        fetchDashboardStats().catch(() => null),
+        fetchDashboardStats(selectedChartDate).catch(() => null),
         fetchMenuItems().catch(() => null),
         fetchOrders().catch(() => null),
         fetchAdminVouchers().catch(() => null),
@@ -415,6 +836,7 @@ export default function AdminScreen({ navigation }) {
         setStoreLandmark({
           ten_quan: landmarkRes.data.ten_quan || 'Cửa hàng FastFood BDU',
           dia_chi_quan: landmarkRes.data.dia_chi_quan || '',
+          so_dien_thoai_quan: landmarkRes.data.so_dien_thoai_quan || '0901234567',
           vi_do: String(landmarkRes.data.vi_do || '10.9805'),
           kinh_do: String(landmarkRes.data.kinh_do || '106.6745'),
           ban_kinh_phuc_vu_km: String(landmarkRes.data.ban_kinh_phuc_vu_km || '3.0'),
@@ -1289,8 +1711,16 @@ export default function AdminScreen({ navigation }) {
           </View>
         </View>
 
-        {/* 1. BIỂU ĐỒ ĐƯỜNG DOANH THU */}
-        <RevenueLineChart hourlyData={stats?.hourly_revenue || []} />
+        {/* 1. BIỂU ĐỒ ĐƯỜNG DOANH THU THEO GIỜ & THEO NGÀY */}
+        <RevenueLineChart 
+          hourlyData={stats?.hourly_revenue || []} 
+          selectedDate={selectedChartDate}
+          availableDates={stats?.available_dates || []}
+          selectedDateRevenue={stats?.selected_date_revenue ?? stats?.total_revenue ?? 0}
+          selectedDateOrders={stats?.selected_date_orders ?? stats?.total_orders ?? 0}
+          onSelectDate={handleSelectChartDate}
+          loadingChart={loadingChart}
+        />
 
         {/* 2. HIỂN THỊ SỐ LƯỢNG SHIPPER / BẾP ĐANG ONLINE THẬT SỰ (KHÔNG DÙNG DỮ LIỆU GIẢ) */}
         <View style={styles.onlinePersonnelSection}>
@@ -1869,6 +2299,15 @@ export default function AdminScreen({ navigation }) {
               value={storeLandmark.dia_chi_quan}
               onChangeText={t => setStoreLandmark({ ...storeLandmark, dia_chi_quan: t })}
               placeholder="504 Đại lộ Bình Dương..."
+            />
+
+            <Text style={styles.landmarkFieldLabel}>📞 Số điện thoại hotline quán (Khách gọi khi cần hủy/đổi món):</Text>
+            <TextInput
+              style={styles.landmarkInput}
+              value={storeLandmark.so_dien_thoai_quan}
+              onChangeText={t => setStoreLandmark({ ...storeLandmark, so_dien_thoai_quan: t })}
+              placeholder="0901234567..."
+              keyboardType="phone-pad"
             />
 
             <View style={styles.landmarkCoordsRow}>
@@ -3641,6 +4080,300 @@ const styles = StyleSheet.create({
   hourLabelSelected: {
     color: '#6A1B9A',
     fontWeight: '800',
+  },
+  chartDateFilterContainer: {
+    marginBottom: 10,
+  },
+  chartDateScroll: {
+    paddingVertical: 2,
+    alignItems: 'center',
+  },
+  chartDatePickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: '#EDE9FE',
+    borderWidth: 1.5,
+    borderColor: '#8B5CF6',
+    marginRight: 8,
+  },
+  chartDatePickBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#6D28D9',
+  },
+  chartDateChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginRight: 8,
+  },
+  chartDateChipActive: {
+    backgroundColor: '#7C3AED',
+    borderColor: '#7C3AED',
+  },
+  chartDateChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  chartDateChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  chartSummaryBanner: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#EDF2F7',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+  },
+  chartSummaryItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  chartSummaryDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#CBD5E1',
+  },
+  chartSummaryLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  chartSummaryDateText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 2,
+  },
+  chartSummaryRevenueText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#059669',
+    marginTop: 2,
+  },
+  chartSummaryOrdersText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#7C3AED',
+    marginTop: 2,
+  },
+  // Date Picker Calendar Modal
+  calModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  calModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 18,
+    width: '100%',
+    maxWidth: 380,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  calModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  calModalTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  calModalCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calModalCloseText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '700',
+  },
+  calNavRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    gap: 8,
+  },
+  calNavGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  calNavBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#EDE9FE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calNavBtnText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#6D28D9',
+    lineHeight: 20,
+  },
+  calNavTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  calWeekHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  calWeekDayText: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  calGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+  },
+  calDayCell: {
+    width: '14.28%',
+    height: 38,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 2,
+    position: 'relative',
+  },
+  calDayInner: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calDayInnerSelected: {
+    backgroundColor: '#7C3AED',
+  },
+  calDayInnerToday: {
+    borderWidth: 1.5,
+    borderColor: '#7C3AED',
+  },
+  calDayText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  calDayTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  calDayTextToday: {
+    color: '#7C3AED',
+    fontWeight: '800',
+  },
+  calOrderDot: {
+    position: 'absolute',
+    bottom: 2,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#10B981',
+  },
+  calQuickRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    gap: 6,
+  },
+  calQuickChip: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+  },
+  calQuickChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  calSelectedPreview: {
+    marginTop: 10,
+    padding: 8,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  calSelectedPreviewText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  calActionsRow: {
+    flexDirection: 'row',
+    marginTop: 10,
+    gap: 8,
+  },
+  calCancelBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+  },
+  calCancelBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  calConfirmBtn: {
+    flex: 2,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#7C3AED',
+    alignItems: 'center',
+  },
+  calConfirmBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   onlinePersonnelSection: {
     backgroundColor: '#FFFFFF',

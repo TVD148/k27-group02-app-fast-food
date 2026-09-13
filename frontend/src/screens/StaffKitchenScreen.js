@@ -152,15 +152,9 @@ export default function StaffKitchenScreen({ navigation }) {
 
   const loadDataSilently = async () => {
     try {
-      const [orderRes, menuRes] = await Promise.all([
-        fetchOrders().catch(() => null),
-        fetchMenuItems().catch(() => null)
-      ]);
+      const orderRes = await fetchOrders().catch(() => null);
       if (orderRes && orderRes.success) {
         setOrders(orderRes.data || []);
-      }
-      if (menuRes && menuRes.success) {
-        setMenuItems(menuRes.data || []);
       }
     } catch (e) {}
   };
@@ -230,6 +224,8 @@ export default function StaffKitchenScreen({ navigation }) {
           successMsg = 'Đã nhận đơn và chuyển sang trạng thái đang nấu thành công! 🍳';
         } else if (newStatus === 'san_sang_giao') {
           successMsg = 'Đã nấu xong! Đơn hàng đã sẵn sàng để Shipper nhận giao 🛵';
+        } else if (newStatus === 'da_huy') {
+          successMsg = 'Đã hủy đơn hàng theo yêu cầu của khách! Món ăn đã được hoàn lại kho. 🛑';
         } else if (res.message) {
           successMsg = res.message;
         }
@@ -244,6 +240,22 @@ export default function StaffKitchenScreen({ navigation }) {
     } finally {
       setUpdatingOrderId(null);
     }
+  };
+
+  // Hủy đơn hàng khi khách gọi tới (áp dụng cho đơn đang nấu)
+  const handleCancelOrderInKitchen = (orderId) => {
+    Alert.alert(
+      'Xác nhận hủy đơn hàng 🛑',
+      `Khách hàng gọi điện yêu cầu hủy đơn #${orderId}?\n\nThao tác này sẽ hủy chế biến, ghi nhận lịch sử và hoàn lại số lượng tồn kho cho các món ăn trong đơn.`,
+      [
+        { text: 'Quay lại', style: 'cancel' },
+        {
+          text: 'Xác Nhận Hủy Đơn',
+          style: 'destructive',
+          onPress: () => handleUpdateStatus(orderId, 'da_huy', 'Khách gọi yêu cầu hủy đơn khi bếp đang nấu')
+        }
+      ]
+    );
   };
 
   // Render Danh Sách Đơn Hàng Dạng Card
@@ -374,17 +386,27 @@ export default function StaffKitchenScreen({ navigation }) {
                 )}
 
                 {isCooking && (
-                  <TouchableOpacity
-                    style={styles.finishCookBtn}
-                    onPress={() => handleUpdateStatus(order.ma_don_hang, 'san_sang_giao', 'Báo hoàn tất')}
-                    disabled={updatingOrderId === order.ma_don_hang}
-                  >
-                    {updatingOrderId === order.ma_don_hang ? (
-                      <ActivityIndicator color="#FFF" size="small" />
-                    ) : (
-                      <Text style={styles.finishCookBtnText}>✅ Đã Nấu Xong</Text>
-                    )}
-                  </TouchableOpacity>
+                  <>
+                    <TouchableOpacity
+                      style={styles.cancelCookBtn}
+                      onPress={() => handleCancelOrderInKitchen(order.ma_don_hang)}
+                      disabled={updatingOrderId === order.ma_don_hang}
+                    >
+                      <Text style={styles.cancelCookBtnText}>🛑 Hủy Đơn</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.finishCookBtn}
+                      onPress={() => handleUpdateStatus(order.ma_don_hang, 'san_sang_giao', 'Báo hoàn tất')}
+                      disabled={updatingOrderId === order.ma_don_hang}
+                    >
+                      {updatingOrderId === order.ma_don_hang ? (
+                        <ActivityIndicator color="#FFF" size="small" />
+                      ) : (
+                        <Text style={styles.finishCookBtnText}>✅ Đã Nấu Xong</Text>
+                      )}
+                    </TouchableOpacity>
+                  </>
                 )}
 
                 {isReady && (
@@ -694,17 +716,27 @@ export default function StaffKitchenScreen({ navigation }) {
                 )}
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity
-                style={styles.fullWidthCompleteBtn}
-                onPress={() => handleUpdateStatus(selectedOrder?.ma_don_hang, 'san_sang_giao', 'Báo món hoàn tất')}
-                disabled={updatingOrderId === selectedOrder?.ma_don_hang}
-              >
-                {updatingOrderId === selectedOrder?.ma_don_hang ? (
-                  <ActivityIndicator color="#FFF" />
-                ) : (
-                  <Text style={styles.fullWidthCtaText}>✅ BÁO MÓN HOÀN TẤT ➔ CHUYỂN SHIPPER</Text>
-                )}
-              </TouchableOpacity>
+              <View style={styles.modalCookingFooterWrap}>
+                <TouchableOpacity
+                  style={styles.modalCancelOrderBtn}
+                  onPress={() => handleCancelOrderInKitchen(selectedOrder?.ma_don_hang)}
+                  disabled={updatingOrderId === selectedOrder?.ma_don_hang}
+                >
+                  <Text style={styles.modalCancelOrderText}>🛑 Khách Yêu Cầu Hủy Đơn</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.fullWidthCompleteBtn}
+                  onPress={() => handleUpdateStatus(selectedOrder?.ma_don_hang, 'san_sang_giao', 'Báo món hoàn tất')}
+                  disabled={updatingOrderId === selectedOrder?.ma_don_hang}
+                >
+                  {updatingOrderId === selectedOrder?.ma_don_hang ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <Text style={styles.fullWidthCtaText}>✅ BÁO MÓN HOÀN TẤT ➔ CHUYỂN SHIPPER</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         </SafeAreaView>
@@ -1246,6 +1278,40 @@ const styles = StyleSheet.create({
   },
   finishCookBtnText: {
     color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  cancelCookBtn: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  cancelCookBtnText: {
+    color: '#DC2626',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  modalCookingFooterWrap: {
+    gap: 10,
+  },
+  modalCancelOrderBtn: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  modalCancelOrderText: {
+    color: '#DC2626',
     fontWeight: '800',
     fontSize: 14,
   },

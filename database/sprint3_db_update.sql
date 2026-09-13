@@ -144,3 +144,10 @@ SET @sql_ctdh = IF(@exist_ctdh = 0, 'ALTER TABLE `chi_tiet_don_hang` ADD COLUMN 
 PREPARE stmt3 FROM @sql_ctdh;
 EXECUTE stmt3;
 DEALLOCATE PREPARE stmt3;
+
+-- 5.4 Thêm cột so_dien_thoai_quan vào bảng cau_hinh_quan
+SET @exist_chq_phone = (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'cau_hinh_quan' AND column_name = 'so_dien_thoai_quan');
+SET @sql_chq_phone = IF(@exist_chq_phone = 0, 'ALTER TABLE `cau_hinh_quan` ADD COLUMN `so_dien_thoai_quan` VARCHAR(20) DEFAULT "0901234567" COMMENT "Hotline liên hệ quán";', 'SELECT 1;');
+PREPARE stmt4 FROM @sql_chq_phone;
+EXECUTE stmt4;
+DEALLOCATE PREPARE stmt4;

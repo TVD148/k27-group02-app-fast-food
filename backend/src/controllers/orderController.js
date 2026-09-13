@@ -524,6 +524,10 @@ const getOrderDetail = async (req, res) => {
       ORDER BY ngay_tao ASC, ma_lich_su ASC
     `, [orderId]);
 
+    // 4. Lấy thông tin hotline quán từ cấu hình
+    const [landmarkRows] = await db.query('SELECT ten_quan, dia_chi_quan, so_dien_thoai_quan FROM cau_hinh_quan WHERE id = 1');
+    const storeInfo = landmarkRows.length > 0 ? landmarkRows[0] : null;
+
     return res.status(200).json({
       success: true,
       message: 'Lấy chi tiết đơn hàng thành công!',
@@ -533,6 +537,8 @@ const getOrderDetail = async (req, res) => {
         dia_chi_giao_hang: order.dia_chi_giao_hang,
         so_dien_thoai: order.so_dien_thoai_nhan,
         so_dien_thoai_nhan: order.so_dien_thoai_nhan,
+        so_dien_thoai_quan: storeInfo?.so_dien_thoai_quan || '0901234567',
+        ten_quan: storeInfo?.ten_quan || 'Cửa hàng FastFood BDU',
         tong_tien: parseFloat(order.tong_thanh_toan),
         tong_thanh_toan: parseFloat(order.tong_thanh_toan),
         tong_tien_hang: parseFloat(order.tong_tien_hang),
@@ -541,9 +547,6 @@ const getOrderDetail = async (req, res) => {
         khoang_cach_km: parseFloat(order.khoang_cach_km || 0),
         vi_do_giao: order.vi_do_giao ? parseFloat(order.vi_do_giao) : null,
         kinh_do_giao: order.kinh_do_giao ? parseFloat(order.kinh_do_giao) : null,
-        tong_tien_hang: parseFloat(order.tong_tien_hang),
-        phi_giao_hang: parseFloat(order.phi_giao_hang),
-        tong_thanh_toan: parseFloat(order.tong_thanh_toan),
         items: formattedItems,
         lich_su_trang_thai: history
       }

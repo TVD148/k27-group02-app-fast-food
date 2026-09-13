@@ -865,17 +865,44 @@ const getDashboardStats = async (req, res) => {
     const [usersStaffTotal] = await db.query('SELECT COUNT(*) as total_staff FROM nguoi_dung WHERE ma_vai_tro = 2');
     const [usersShipperTotal] = await db.query('SELECT COUNT(*) as total_shipper FROM nguoi_dung WHERE ma_vai_tro = 4');
 
-    // Thống kê doanh thu theo các khung giờ (08h - 22h)
-    const [hourlyRows] = await db.query(`
+    // Lấy danh sách tất cả các ngày có đơn hàng hoàn tất trong hệ thống (để admin chọn lọc)
+    const [availableDatesRows] = await db.query(`
+      SELECT DISTINCT DATE_FORMAT(ngay_dat, '%Y-%m-%d') as order_date
+      FROM don_hang
+      WHERE trang_thai_don_hang = 'da_giao'
+      ORDER BY order_date DESC
+      LIMIT 60
+    `);
+    const availableDates = availableDatesRows.map(r => r.order_date);
+
+    // Xác định ngày được chọn từ request (mặc định 'all' hoặc YYYY-MM-DD)
+    const selectedDate = req.query.date ? String(req.query.date).trim() : 'all';
+
+    // Thống kê doanh thu theo các khung giờ (08h - 22h) theo ngày được chọn
+    let hourlyQuery = `
       SELECT 
         HOUR(ngay_dat) as gio,
         COALESCE(SUM(tong_thanh_toan), 0) as doanh_thu,
         COUNT(*) as so_don
       FROM don_hang
       WHERE trang_thai_don_hang = 'da_giao'
-      GROUP BY HOUR(ngay_dat)
-      ORDER BY gio ASC
-    `);
+    `;
+    const hourlyParams = [];
+    if (selectedDate && selectedDate !== 'all') {
+      hourlyQuery += ' AND DATE(ngay_dat) = ?';
+      hourlyParams.push(selectedDate);
+    }
+    hourlyQuery += ' GROUP BY HOUR(ngay_dat) ORDER BY gio ASC';
+    const [hourlyRows] = await db.query(hourlyQuery, hourlyParams);
+
+    // Chi tiết từng giờ thực tế có doanh thu
+    const activeHoursDetail = hourlyRows.map(r => ({
+      hour: `${String(r.gio).padStart(2, '0')}:00`,
+      hour_end: `${String(parseInt(r.gio) + 1).padStart(2, '0')}:00`,
+      time_range: `${String(r.gio).padStart(2, '0')}h - ${String(parseInt(r.gio) + 1).padStart(2, '0')}h`,
+      amount: parseFloat(r.doanh_thu || 0),
+      orders: parseInt(r.so_don || 0)
+    }));
 
     // Chuẩn bị 8 mốc giờ trong ngày để vẽ biểu đồ (bao quát cả ngày 24h)
     const defaultHours = [8, 10, 12, 14, 16, 18, 20, 22];
@@ -890,10 +917,14 @@ const getDashboardStats = async (req, res) => {
       const orders = matched.reduce((sum, r) => sum + parseInt(r.so_don || 0), 0);
       return {
         hour: `${String(targetH).padStart(2, '0')}:00`,
+        slot_label: `${String(minH).padStart(2, '0')}h - ${String(maxH).padStart(2, '0')}h`,
         amount,
         orders
       };
     });
+
+    const selectedDateRevenue = hourlyRows.reduce((sum, r) => sum + parseFloat(r.doanh_thu || 0), 0);
+    const selectedDateOrders = hourlyRows.reduce((sum, r) => sum + parseInt(r.so_don || 0), 0);
 
     return res.status(200).json({
       success: true,
@@ -905,6 +936,11 @@ const getDashboardStats = async (req, res) => {
         total_foods: foodsCount[0].total_foods || 0,
         // Dữ liệu biểu đồ theo giờ thực tế
         hourly_revenue: hourlyData,
+        selected_date: selectedDate,
+        selected_date_revenue: selectedDateRevenue,
+        selected_date_orders: selectedDateOrders,
+        available_dates: availableDates,
+        active_hours_detail: activeHoursDetail,
         // Nhân sự thực sự trực tuyến
         online_staff_count: onlineStaffRows[0].total_online_staff || 0,
         online_shipper_count: onlineShipperRows[0].total_online_shipper || 0,
@@ -1040,6 +1076,7 @@ const getStoreLandmark = async (req, res) => {
         data: {
           ten_quan: 'Cửa hàng FastFood BDU',
           dia_chi_quan: '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương',
+          so_dien_thoai_quan: '0901234567',
           vi_do: 10.9805,
           kinh_do: 106.6745,
           ban_kinh_phuc_vu_km: 3.0,
@@ -1054,6 +1091,7 @@ const getStoreLandmark = async (req, res) => {
         id: row.id,
         ten_quan: row.ten_quan,
         dia_chi_quan: row.dia_chi_quan,
+        so_dien_thoai_quan: row.so_dien_thoai_quan || '0901234567',
         vi_do: parseFloat(row.vi_do),
         kinh_do: parseFloat(row.kinh_do),
         ban_kinh_phuc_vu_km: parseFloat(row.ban_kinh_phuc_vu_km),
@@ -1068,7 +1106,7 @@ const getStoreLandmark = async (req, res) => {
 // 8. Cập nhật cấu hình địa chỉ mốc quán (PUT /api/admin/store-landmark)
 const updateStoreLandmark = async (req, res) => {
   try {
-    const { ten_quan, dia_chi_quan, vi_do, kinh_do, ban_kinh_phuc_vu_km, gia_ship_moi_km } = req.body;
+    const { ten_quan, dia_chi_quan, so_dien_thoai_quan, vi_do, kinh_do, ban_kinh_phuc_vu_km, gia_ship_moi_km } = req.body;
     if (!dia_chi_quan) {
       return res.status(400).json({ success: false, message: 'Địa chỉ mốc quán không được để trống!' });
     }
@@ -1077,25 +1115,28 @@ const updateStoreLandmark = async (req, res) => {
     const radius = parseFloat(ban_kinh_phuc_vu_km) || 3.0;
     const pricePerKm = parseFloat(gia_ship_moi_km) || 5000;
     const name = ten_quan || 'Cửa hàng FastFood BDU';
+    const phone = (so_dien_thoai_quan && so_dien_thoai_quan.trim()) || '0901234567';
 
     await db.query(`
-      INSERT INTO cau_hinh_quan (id, ten_quan, dia_chi_quan, vi_do, kinh_do, ban_kinh_phuc_vu_km, gia_ship_moi_km)
-      VALUES (1, ?, ?, ?, ?, ?, ?)
+      INSERT INTO cau_hinh_quan (id, ten_quan, dia_chi_quan, so_dien_thoai_quan, vi_do, kinh_do, ban_kinh_phuc_vu_km, gia_ship_moi_km)
+      VALUES (1, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         ten_quan = VALUES(ten_quan),
         dia_chi_quan = VALUES(dia_chi_quan),
+        so_dien_thoai_quan = VALUES(so_dien_thoai_quan),
         vi_do = VALUES(vi_do),
         kinh_do = VALUES(kinh_do),
         ban_kinh_phuc_vu_km = VALUES(ban_kinh_phuc_vu_km),
         gia_ship_moi_km = VALUES(gia_ship_moi_km)
-    `, [name, dia_chi_quan, lat, lng, radius, pricePerKm]);
+    `, [name, dia_chi_quan, phone, lat, lng, radius, pricePerKm]);
 
     return res.status(200).json({
       success: true,
-      message: 'Cập nhật địa chỉ mốc quán và phạm vi giao hàng thành công!',
+      message: 'Cập nhật địa chỉ mốc quán, số điện thoại và phạm vi giao hàng thành công!',
       data: {
         ten_quan: name,
         dia_chi_quan,
+        so_dien_thoai_quan: phone,
         vi_do: lat,
         kinh_do: lng,
         ban_kinh_phuc_vu_km: radius,

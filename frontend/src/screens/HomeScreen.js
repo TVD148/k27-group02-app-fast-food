@@ -34,21 +34,19 @@ export default function HomeScreen({ navigation }) {
   const [loadingFoods, setLoadingFoods] = useState(true);
 
   useEffect(() => {
+    loadUserData();
+    loadCategoriesData();
+    loadFoodsData('', '');
+
     const unsubscribe = navigation.addListener('focus', () => {
       loadUserData();
       loadFoodsData(selectedCategory, searchQuery, true);
     });
-    loadUserData();
-    loadCategoriesData();
-    loadFoodsData('', '');
-    const interval = setInterval(() => {
-      loadFoodsData(selectedCategory, searchQuery, true);
-    }, 12000);
+
     return () => {
-      clearInterval(interval);
       unsubscribe();
     };
-  }, [navigation, selectedCategory, searchQuery]);
+  }, [navigation]);
 
   const loadUserData = async () => {
     try {

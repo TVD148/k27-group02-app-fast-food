@@ -2,9 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-// CẤU HÌNH ĐƯỜNG DẪN API GỐC (BACKEND)
-const ACTIVE_TUNNEL_URL = 'https://note-shame-sessions-opponents.trycloudflare.com/api';
-
+// CHỈNH ĐƯỜNG DẪN API DUY NHẤT TẠI FILE .env (EXPO_PUBLIC_API_URL)
 const normalizeApiUrl = (url) => {
   if (!url) return '';
   let cleaned = String(url).trim().replace(/[\r\n\t]/g, '').replace(/\/+$/, '');
@@ -20,14 +18,14 @@ const getBaseUrl = () => {
     return 'http://localhost:5000/api';
   }
 
-  // 2. Biến môi trường EXPO_PUBLIC_API_URL (loại bỏ nếu Metro bị cache link cũ đã tắt)
+  // 2. Đọc duy nhất từ file .env (EXPO_PUBLIC_API_URL)
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
-  if (envUrl && !envUrl.includes('enterprises-superintendent')) {
+  if (envUrl) {
     return normalizeApiUrl(envUrl);
   }
 
-  // 3. Tự động dùng đường hầm Cloudflare đang hoạt động
-  return ACTIVE_TUNNEL_URL;
+  // Mặc định nếu chưa thiết lập .env
+  return 'http://localhost:5000/api';
 };
 
 const BASE_URL = getBaseUrl();
@@ -35,7 +33,7 @@ console.log('📡 [API Config] Đang kết nối tới Backend tại:', BASE_URL
 
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000,
+  timeout: 25000, // 25s timeout để tránh timeout khi tunnel cold-start
   headers: {
     'Content-Type': 'application/json',
   },
@@ -44,6 +42,7 @@ const api = axios.create({
 // Interceptor tự động đính kèm Token JWT vào Header của mọi request nếu có
 api.interceptors.request.use(
   async (config) => {
+    console.log(`📡 [API Call] ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
     const token = await AsyncStorage.getItem('user_token');
     if (token) {
       config.headers['Authorization'] = token; // Token lưu trữ dạng 'Bearer eyJ...'
@@ -51,6 +50,14 @@ api.interceptors.request.use(
     return config;
   },
   (error) => {
+    return Promise.reject(error);
+  }
+);
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.log(`❌ [API Error] ${error.config?.method?.toUpperCase()} ${error.config?.baseURL}${error.config?.url} -> Code: ${error.code || 'UNKNOWN'}, Message: ${error.message}`);
     return Promise.reject(error);
   }
 );
@@ -538,10 +545,11 @@ export const toggleItemStatus = async (itemId) => {
 // VII. CÁC API QUẢN TRỊ VIÊN (ADMIN DASHBOARD & CRUD)
 // ============================================================================
 
-// Lấy thống kê tổng quan doanh thu & đơn hàng
-export const fetchDashboardStats = async () => {
+// Lấy thống kê tổng quan doanh thu & đơn hàng (hỗ trợ lọc theo ngày cụ thể YYYY-MM-DD hoặc 'all')
+export const fetchDashboardStats = async (date = '') => {
   try {
-    const response = await api.get('/admin/dashboard-stats');
+    const url = date ? `/admin/dashboard-stats?date=${encodeURIComponent(date)}` : '/admin/dashboard-stats';
+    const response = await api.get(url);
     return response.data;
   } catch (error) {
     throw error.response?.data || new Error('Không thể lấy thống kê quản trị!');
