@@ -160,34 +160,16 @@ export default function ProfileScreen({ navigation }) {
           desc: currentAddress ? `${currentAddress.label}: ${currentAddress.address}` : (user?.dia_chi || 'Quản lý & thêm địa chỉ bằng GPS'), 
           action: () => navigation.navigate('Address') 
         },
-        { 
-          icon: '💳', 
-          label: 'Phương thức thanh toán & VietQR', 
-          desc: 'Quản lý tài khoản ngân hàng / MoMo', 
-          action: () => navigation.navigate('Checkout') 
-        },
-        { 
-          icon: '🥗', 
-          label: 'Mục tiêu dinh dưỡng cá nhân', 
-          desc: 'Tùy biến hàm lượng Calo, Đạm, Tinh bột', 
-          action: () => navigation.navigate('CustomNutrition', { itemId: 1, foodName: 'Burger Bò Cực Hạn' }) 
-        },
       ]
     },
     {
       title: 'Hỗ trợ & Ứng dụng',
       items: [
         { 
-          icon: '🎁', 
-          label: 'Ví Voucher & Ưu đãi', 
-          desc: 'Mã giảm giá hấp dẫn dành cho bạn', 
-          action: () => navigation.navigate('Checkout') 
-        },
-        { 
           icon: '📞', 
           label: 'Trung tâm hỗ trợ khách hàng', 
           desc: 'Hotline 1900 8888 (24/7)', 
-          action: () => Alert.alert('Hỗ trợ', 'Hotline CSKH Fast Food: 1900 8888\nEmail: cskh@fastfood.com') 
+          action: () => Alert.alert('Hỗ trợ CSKH 📞', 'Hotline hỗ trợ: 1900 8888\nEmail: cskh@fastfood.com\nPhục vụ 24/7 giải đáp mọi thắc mắc đơn hàng.') 
         },
       ]
     }
