@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,8 +11,6 @@ import {
   RefreshControl,
   Linking,
   Modal,
-  PanResponder,
-  Animated,
   Dimensions,
   Platform,
   StatusBar
@@ -52,86 +50,8 @@ function calculateShippingFee(distanceKm) {
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Thành phần Swipe to Confirm (Vuốt để xác nhận) chuẩn Checklist.design
-function SwipeToConfirmButton({ onConfirm, title, icon = '➔', color = '#00897B' }) {
-  const [swiped, setSwiped] = useState(false);
-  const slideX = React.useRef(new Animated.Value(0)).current;
-  const sliderWidth = SCREEN_WIDTH - 64; // padding 32
-  const thumbWidth = 56;
-  const maxSlide = sliderWidth - thumbWidth;
-
-  const panResponder = React.useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dx > 0 && gestureState.dx <= maxSlide) {
-          slideX.setValue(gestureState.dx);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dx >= maxSlide * 0.75) {
-          Animated.timing(slideX, {
-            toValue: maxSlide,
-            duration: 150,
-            useNativeDriver: false,
-          }).start(() => {
-            setSwiped(true);
-            onConfirm();
-            setTimeout(() => {
-              slideX.setValue(0);
-              setSwiped(false);
-            }, 1000);
-          });
-        } else {
-          Animated.spring(slideX, {
-            toValue: 0,
-            useNativeDriver: false,
-          }).start();
-        }
-      },
-    })
-  ).current;
-
-  return (
-    <View style={[styles.swipeTrack, { borderColor: color }]}>
-      <Animated.View
-        style={[
-          styles.swipeFill,
-          {
-            backgroundColor: color,
-            width: slideX.interpolate({
-              inputRange: [0, maxSlide],
-              outputRange: [thumbWidth, sliderWidth],
-            }),
-          },
-        ]}
-      />
-      <Text style={styles.swipeTrackText}>{swiped ? 'Đã xác nhận thành công! ✅' : title}</Text>
-      <Animated.View
-        {...panResponder.panHandlers}
-        style={[
-          styles.swipeThumb,
-          {
-            transform: [
-              {
-                translateX: slideX.interpolate({
-                  inputRange: [0, maxSlide],
-                  outputRange: [0, maxSlide],
-                  extrapolate: 'clamp',
-                }),
-              },
-            ],
-          },
-        ]}
-      >
-        <Text style={styles.swipeThumbIcon}>{icon}</Text>
-      </Animated.View>
-    </View>
-  );
-}
-
 export default function ShipperScreen({ navigation }) {
-  // 4 Bottom Tabs chuẩn: 'available' (Đơn chờ nhận), 'delivering' (Đơn đang giao), 'earnings' (Thu nhập), 'profile' (Hồ sơ)
+  // 5 Bottom Tabs: 'available' (Chờ nhận), 'delivering' (Đang giao), 'history' (Đã giao), 'earnings' (Thu nhập), 'profile' (Hồ sơ)
   const [activeBottomTab, setActiveBottomTab] = useState('available');
 
   const [orders, setOrders] = useState([]);
@@ -141,11 +61,10 @@ export default function ShipperScreen({ navigation }) {
   const [actingOrderId, setActingOrderId] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
 
-  // Trạng thái Shipper trực tuyến & Contextual Permissions
+  // Trạng thái Shipper trực tuyến & GPS
   const [isOnline, setIsOnline] = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [showLocationPermissionModal, setShowLocationPermissionModal] = useState(false);
-  const [showCameraPermissionModal, setShowCameraPermissionModal] = useState(false);
 
   // Mốc quán và phạm vi nhận đơn
   const [storeLandmark, setStoreLandmark] = useState({
@@ -156,10 +75,13 @@ export default function ShipperScreen({ navigation }) {
     gia_ship_moi_km: 5000
   });
 
-  // Modal Chụp ảnh minh chứng giao hàng
-  const [cameraModalVisible, setCameraModalVisible] = useState(false);
-  const [capturedPhoto, setCapturedPhoto] = useState(null);
-  const [orderToDeliver, setOrderToDeliver] = useState(null);
+  // Bộ lọc ngày tháng cho Tab Lịch sử Đã Giao (chuẩn Shopee giống khách hàng)
+  const [historySelectedDate, setHistorySelectedDate] = useState(null); // 'YYYY-MM-DD' hoặc null
+  const [showHistoryDatePicker, setShowHistoryDatePicker] = useState(false);
+  const now = new Date();
+  const [calendarYear, setCalendarYear] = useState(now.getFullYear());
+  const [calendarMonth, setCalendarMonth] = useState(now.getMonth());
+  const [tempSelectedDate, setTempSelectedDate] = useState(null);
 
   useEffect(() => {
     loadShipperData();
@@ -410,46 +332,77 @@ export default function ShipperScreen({ navigation }) {
     );
   };
 
-  // 2. Contextual Camera Permission: Bước 2 hoàn thành giao -> Xin quyền Camera để chụp minh chứng
-  const handleInitiateDeliveryCompletion = (order) => {
-    setOrderToDeliver(order);
-    setShowCameraPermissionModal(true);
+  // 2. Helper functions cho bộ lọc ngày tháng chuẩn Shopee (giống màn hình khách hàng)
+  const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+  const firstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
+
+  const monthNames = [
+    'Tháng Một', 'Tháng Hai', 'Tháng Ba', 'Tháng Tư', 
+    'Tháng Năm', 'Tháng Sáu', 'Tháng Bảy', 'Tháng Tám', 
+    'Tháng Chín', 'Tháng Mười', 'Tháng Mười Một', 'Tháng Mười Hai'
+  ];
+
+  const handlePrevMonth = () => {
+    if (calendarMonth === 0) {
+      setCalendarMonth(11);
+      setCalendarYear(calendarYear - 1);
+    } else {
+      setCalendarMonth(calendarMonth - 1);
+    }
   };
 
-  const handleGrantCameraPermission = () => {
-    setShowCameraPermissionModal(false);
-    setCapturedPhoto(null);
-    setCameraModalVisible(true);
+  const handleNextMonth = () => {
+    if (calendarMonth === 11) {
+      setCalendarMonth(0);
+      setCalendarYear(calendarYear + 1);
+    } else {
+      setCalendarMonth(calendarMonth + 1);
+    }
   };
 
-  // Giả lập chụp ảnh biên lai/gói hàng
-  const handleCapturePhoto = () => {
-    setCapturedPhoto('https://images.unsplash.com/photo-1526367790999-0150786686a2?w=500&auto=format&fit=crop&q=60');
-  };
-
-  // Hoàn tất giao hàng sau khi đã có minh chứng
-  const handleFinalizeDeliveryWithProof = async () => {
-    if (!orderToDeliver) return;
-    try {
-      const res = await updateOrderStatus(orderToDeliver.ma_don_hang, 'da_giao', 'Đã giao thành công kèm ảnh minh chứng biên lai');
-      if (res.success) {
-        setCameraModalVisible(false);
-        Alert.alert(
-          'Giao hàng hoàn tất 🎉',
-          `Đã ghi nhận giao thành công đơn #${orderToDeliver.ma_don_hang} và thu tiền COD: ${parseFloat(orderToDeliver.tong_tien).toLocaleString('vi-VN')} đ!`
-        );
-        setOrderToDeliver(null);
-        setCapturedPhoto(null);
-        loadShipperData();
+  const handleOpenDatePicker = () => {
+    setTempSelectedDate(historySelectedDate);
+    if (historySelectedDate) {
+      const parts = historySelectedDate.split('-');
+      if (parts.length === 3) {
+        setCalendarYear(parseInt(parts[0], 10));
+        setCalendarMonth(parseInt(parts[1], 10) - 1);
       }
-    } catch (err) {
-      Alert.alert('Lỗi', err.message || 'Không thể hoàn tất đơn hàng!');
+    } else {
+      const d = new Date();
+      setCalendarYear(d.getFullYear());
+      setCalendarMonth(d.getMonth());
+    }
+    setShowHistoryDatePicker(true);
+  };
+
+  const handleClearDateFilter = () => {
+    setHistorySelectedDate(null);
+    setTempSelectedDate(null);
+    setShowHistoryDatePicker(false);
+  };
+
+  const handleApplyDateFilter = () => {
+    setHistorySelectedDate(tempSelectedDate);
+    setShowHistoryDatePicker(false);
+  };
+
+  const formatDateDisplay = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+      return dateStr;
+    } catch {
+      return dateStr;
     }
   };
 
   // Phân loại đơn:
   // Available: Bếp đang chế biến ('dang_che_bien') hoặc đã nấu xong ('san_sang_giao') mà chưa có shipper nhận
-  // Delivering: Đơn do shipper này đảm nhận
+  // Delivering: Đơn do shipper này đảm nhận đang giao
   const availableOrders = orders.filter(o => 
     (!o.ma_shipper || o.ma_shipper === null) && 
     (o.trang_thai_don_hang === 'san_sang_giao' || o.trang_thai_don_hang === 'dang_che_bien')
@@ -458,6 +411,26 @@ export default function ShipperScreen({ navigation }) {
     o.ma_shipper === currentUser?.id && 
     ['dang_giao', 'dang_che_bien', 'san_sang_giao'].includes(o.trang_thai_don_hang)
   );
+
+  // Đơn hàng đã giao thành công của shipper này (hỗ trợ lọc ngày theo chuẩn Shopee)
+  const deliveredOrders = useMemo(() => {
+    return orders.filter(o => {
+      if (o.trang_thai_don_hang !== 'da_giao') return false;
+      if (currentUser?.id && o.ma_shipper && o.ma_shipper !== currentUser.id) return false;
+
+      // Lọc theo ngày nếu có chọn
+      if (historySelectedDate) {
+        if (!o.ngay_dat) return false;
+        const d = new Date(o.ngay_dat);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const dateKey = `${y}-${m}-${day}`;
+        if (dateKey !== historySelectedDate) return false;
+      }
+      return true;
+    });
+  }, [orders, currentUser, historySelectedDate]);
 
   // Render Tab 1: Đơn Chờ Nhận (Available Orders)
   const renderAvailableOrdersTab = () => {
@@ -715,41 +688,25 @@ export default function ShipperScreen({ navigation }) {
                 </Text>
 
                 {isAtRestaurant ? (
-                  <View style={{ gap: 10, width: '100%' }}>
-                    <TouchableOpacity 
-                      style={styles.directPickUpBtn}
-                      onPress={() => handleConfirmPickedUp(order.ma_don_hang)}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.directPickUpBtnText}>
-                        📦 ĐÃ LẤY HÀNG TẠI QUÁN (BẮT ĐẦU GIAO)
-                      </Text>
-                    </TouchableOpacity>
-                    <SwipeToConfirmButton
-                      color="#EA580C"
-                      icon="👉"
-                      title="Hoặc vuốt: ĐÃ LẤY HÀNG TẠI QUÁN"
-                      onConfirm={() => handleConfirmPickedUp(order.ma_don_hang)}
-                    />
-                  </View>
+                  <TouchableOpacity 
+                    style={styles.directPickUpBtn}
+                    onPress={() => handleConfirmPickedUp(order.ma_don_hang)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.directPickUpBtnText}>
+                      📦 ĐÃ LẤY HÀNG TẠI QUÁN (BẮT ĐẦU GIAO)
+                    </Text>
+                  </TouchableOpacity>
                 ) : (
-                  <View style={{ gap: 10, width: '100%' }}>
-                    <TouchableOpacity 
-                      style={styles.directCompleteDeliveryBtn}
-                      onPress={() => handleDirectCompleteDelivery(order)}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.directCompleteDeliveryBtnText}>
-                        💰 ĐÃ GIAO TỚI NƠI • NHẬN TIỀN & BẤM HOÀN THÀNH ĐƠN
-                      </Text>
-                    </TouchableOpacity>
-                    <SwipeToConfirmButton
-                      color="#00897B"
-                      icon="📸"
-                      title="Hoặc vuốt: HOÀN THÀNH & CHỤP MINH CHỨNG"
-                      onConfirm={() => handleInitiateDeliveryCompletion(order)}
-                    />
-                  </View>
+                  <TouchableOpacity 
+                    style={styles.directCompleteDeliveryBtn}
+                    onPress={() => handleDirectCompleteDelivery(order)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.directCompleteDeliveryBtnText}>
+                      💰 ĐÃ GIAO TỚI NƠI • NHẬN TIỀN & BẤM HOÀN THÀNH ĐƠN
+                    </Text>
+                  </TouchableOpacity>
                 )}
               </View>
             </View>
@@ -908,29 +865,322 @@ export default function ShipperScreen({ navigation }) {
     );
   };
 
-  // Render Tab 4: Hồ sơ Shipper
-  const renderProfileTab = () => (
-    <ScrollView contentContainerStyle={styles.profileScroll}>
-      <View style={styles.shipperProfileHeaderCard}>
-        <View style={styles.shipperAvatarBox}>
-          <Text style={styles.shipperAvatarEmoji}>🛵</Text>
-        </View>
-        <Text style={styles.shipperName}>{currentUser?.ho_ten || 'Tài Xế FastFood'}</Text>
-        <Text style={styles.shipperPhone}>{currentUser?.so_dien_thoai || '0945678901'}</Text>
-        <View style={styles.shipperRatingRow}>
-          <Text style={styles.shipperStars}>⭐⭐⭐⭐⭐</Text>
-          <Text style={styles.shipperRatingScore}>4.9/5.0 (128 chuyến)</Text>
-        </View>
-      </View>
+  // Render Tab: Hồ sơ Shipper (Không có đánh giá ảo và số chuyến ảo)
+  const renderProfileTab = () => {
+    const totalEarnings = stats.total_shipping_earnings !== undefined 
+      ? Number(stats.total_shipping_earnings) 
+      : ((stats.total_delivered || 0) * 25000);
 
-      <TouchableOpacity 
-        style={styles.exitToHomeBtn}
-        onPress={() => navigation.navigate('Profile')}
-      >
-        <Text style={styles.exitToHomeBtnText}>➔ Mở Hồ Sơ Cá Nhân & Đăng Xuất</Text>
-      </TouchableOpacity>
-    </ScrollView>
-  );
+    return (
+      <ScrollView contentContainerStyle={styles.profileScroll}>
+        <View style={styles.shipperProfileHeaderCard}>
+          <View style={styles.shipperAvatarBox}>
+            <Text style={styles.shipperAvatarEmoji}>🛵</Text>
+          </View>
+          <Text style={styles.shipperName}>{currentUser?.ho_ten || 'Tài Xế FastFood'}</Text>
+          <Text style={styles.shipperPhone}>{currentUser?.so_dien_thoai || 'Chưa cập nhật SĐT'}</Text>
+          
+          <View style={[styles.onlineStatusPill, isOnline ? styles.onlineStatusPillGreen : styles.onlineStatusPillGray]}>
+            <Text style={[styles.onlineStatusText, isOnline ? styles.onlineStatusTextGreen : styles.onlineStatusTextGray]}>
+              {isOnline ? '🟢 Đang trực tuyến (Bật GPS)' : '⚪ Đang ngoại tuyến'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Thông tin hoạt động thực tế từ Database (Không dùng dữ liệu ảo) */}
+        <View style={styles.realProfileStatsCard}>
+          <Text style={styles.realProfileStatsTitle}>📊 HOẠT ĐỘNG THỰC TẾ</Text>
+          <View style={styles.realProfileStatRow}>
+            <Text style={styles.realProfileStatLabel}>Đơn đã giao thành công:</Text>
+            <Text style={styles.realProfileStatValue}>{stats.total_delivered || 0} đơn</Text>
+          </View>
+          <View style={styles.realProfileStatDivider} />
+          <View style={styles.realProfileStatRow}>
+            <Text style={styles.realProfileStatLabel}>Tổng tiền ship tích lũy:</Text>
+            <Text style={styles.realProfileStatValueGreen}>
+              {totalEarnings.toLocaleString('vi-VN')} đ
+            </Text>
+          </View>
+          <View style={styles.realProfileStatDivider} />
+          <View style={styles.realProfileStatRow}>
+            <Text style={styles.realProfileStatLabel}>Tiền COD đang giữ:</Text>
+            <Text style={styles.realProfileStatValueCod}>
+              {parseFloat(stats.total_cod || 0).toLocaleString('vi-VN')} đ
+            </Text>
+          </View>
+        </View>
+
+        <TouchableOpacity 
+          style={styles.viewDeliveredHistoryBtn}
+          onPress={() => setActiveBottomTab('history')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.viewDeliveredHistoryBtnText}>📜 Xem Lịch Sử Đơn Đã Giao</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.exitToHomeBtn}
+          onPress={() => navigation.navigate('Profile')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.exitToHomeBtnText}>➔ Mở Hồ Sơ Cá Nhân & Đăng Xuất</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  };
+
+  // Helper render ngày trong tháng cho Shopee Calendar
+  const renderHistoryCalendarDays = () => {
+    const totalDays = daysInMonth(calendarYear, calendarMonth);
+    const startDay = firstDayOfMonth(calendarYear, calendarMonth);
+    const grid = [];
+
+    // Ô trống đầu tháng
+    for (let i = 0; i < startDay; i++) {
+      grid.push(<View key={`empty-${i}`} style={styles.calCell} />);
+    }
+
+    // Các ngày trong tháng
+    for (let day = 1; day <= totalDays; day++) {
+      const mStr = String(calendarMonth + 1).padStart(2, '0');
+      const dStr = String(day).padStart(2, '0');
+      const dateKey = `${calendarYear}-${mStr}-${dStr}`;
+      const isSelected = tempSelectedDate === dateKey;
+
+      const isToday = 
+        now.getFullYear() === calendarYear &&
+        now.getMonth() === calendarMonth &&
+        now.getDate() === day;
+
+      grid.push(
+        <TouchableOpacity
+          key={dateKey}
+          style={[styles.calCell, isSelected && styles.calCellSelected]}
+          onPress={() => setTempSelectedDate(dateKey)}
+          activeOpacity={0.7}
+        >
+          <Text style={[
+            styles.calDayText, 
+            isSelected && styles.calDayTextSelected,
+            isToday && !isSelected && styles.calDayTodayText
+          ]}>
+            {day}
+          </Text>
+          {isToday && !isSelected && <View style={styles.todayDot} />}
+        </TouchableOpacity>
+      );
+    }
+    return grid;
+  };
+
+  // Render Tab: Lịch Sử Đơn Đã Giao (có bộ lọc theo ngày giống lịch sử đơn hàng bên khách hàng)
+  const renderHistoryTab = () => {
+    return (
+      <View style={{ flex: 1 }}>
+        {/* Bộ lọc ngày tháng chuẩn Shopee */}
+        <View style={styles.historyFilterBar}>
+          <TouchableOpacity 
+            style={[styles.historyDateBtn, historySelectedDate && styles.historyDateBtnActive]}
+            onPress={handleOpenDatePicker}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.historyDateIcon}>📅</Text>
+            <Text style={[styles.historyDateText, historySelectedDate && styles.historyDateTextActive]}>
+              {historySelectedDate ? `Ngày: ${formatDateDisplay(historySelectedDate)}` : 'Lọc theo ngày: Tất cả'}
+            </Text>
+            <Text style={[styles.historyDateChevron, historySelectedDate && styles.historyDateChevronActive]}>
+              {showHistoryDatePicker ? '▴' : '▾'}
+            </Text>
+          </TouchableOpacity>
+
+          {historySelectedDate && (
+            <TouchableOpacity 
+              style={styles.historyClearFilterBtn}
+              onPress={handleClearDateFilter}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.historyClearFilterText}>✕ Bỏ lọc</Text>
+            </TouchableOpacity>
+          )}
+
+          <View style={{ flex: 1 }} />
+          <View style={styles.historyCountPill}>
+            <Text style={styles.historyCountText}>{deliveredOrders.length} đơn</Text>
+          </View>
+        </View>
+
+        {/* Danh sách đơn hàng đã giao */}
+        {deliveredOrders.length === 0 ? (
+          <View style={styles.historyEmptyCard}>
+            <View style={styles.historyEmptyIllustration}>
+              <Text style={{ fontSize: 38 }}>📋</Text>
+            </View>
+            <Text style={styles.historyEmptyTitle}>
+              {historySelectedDate ? 'Không có đơn giao trong ngày này' : 'Chưa có đơn hàng đã giao'}
+            </Text>
+            <Text style={styles.historyEmptyDesc}>
+              {historySelectedDate 
+                ? `Không tìm thấy đơn hàng nào bạn đã hoàn thành vào ngày ${formatDateDisplay(historySelectedDate)}. Hãy thử chọn ngày khác hoặc bấm "Bỏ lọc".`
+                : 'Sau khi bạn nhận đơn và giao tận tay thành công cho khách, lịch sử đơn hàng chi tiết sẽ hiển thị tại đây!'}
+            </Text>
+            {historySelectedDate && (
+              <TouchableOpacity 
+                style={styles.historyResetDateBtn}
+                onPress={handleClearDateFilter}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.historyResetDateBtnText}>Đặt lại bộ lọc ngày</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <View style={styles.historyListWrap}>
+            {deliveredOrders.map((order) => {
+              const orderDate = new Date(order.ngay_dat);
+              const dateStr = !isNaN(orderDate.getTime()) 
+                ? orderDate.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })
+                : order.ngay_dat;
+              const dishes = Array.isArray(order.danh_sach_mon) ? order.danh_sach_mon : [];
+              const shipFee = parseFloat(order.phi_giao_hang || 5000);
+              const codAmount = parseFloat(order.tong_tien || order.tong_thanh_toan || 0);
+              const isCod = (order.phuong_thuc_thanh_toan || 'tien_mat') === 'tien_mat';
+
+              return (
+                <View key={order.ma_don_hang} style={styles.historyOrderCard}>
+                  {/* Header Đơn: Mã đơn & Badge Hoàn thành */}
+                  <View style={styles.historyCardHeader}>
+                    <View style={styles.historyIdTimeCol}>
+                      <Text style={styles.historyOrderId}>Đơn #{order.ma_don_hang}</Text>
+                      <Text style={styles.historyOrderTime}>• {dateStr}</Text>
+                    </View>
+                    <View style={styles.historyCompletedBadge}>
+                      <Text style={styles.historyCompletedBadgeText}>🎉 Hoàn thành</Text>
+                    </View>
+                  </View>
+
+                  {/* Thông tin khách hàng & Địa chỉ giao */}
+                  <View style={styles.historyCustomerBox}>
+                    <View style={styles.historyCustomerRow}>
+                      <Text style={styles.historyCustomerName}>
+                        👤 {order.ten_khach_hang || order.ho_ten || 'Khách hàng'}
+                      </Text>
+                      {order.so_dien_thoai_nhan || order.so_dien_thoai ? (
+                        <Text style={styles.historyCustomerPhone}>
+                          📞 {order.so_dien_thoai_nhan || order.so_dien_thoai}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Text style={styles.historyAddressText} numberOfLines={2}>
+                      📍 {order.dia_chi_giao_hang || order.dia_chi_giao || 'Địa chỉ khách hàng'}
+                    </Text>
+                  </View>
+
+                  {/* Danh sách món ăn trong đơn ("ngày nào đặt món gì") */}
+                  <View style={styles.historyDishesSection}>
+                    {dishes.length > 0 ? (
+                      dishes.map((dish, idx) => (
+                        <View key={dish.ma_chi_tiet || idx} style={styles.historyDishRow}>
+                          <Text style={styles.historyDishBullet}>🍔</Text>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.historyDishName} numberOfLines={1}>
+                              {dish.ten_mon} <Text style={styles.historyDishQty}>x{dish.so_luong}</Text>
+                            </Text>
+                          </View>
+                          <Text style={styles.historyDishPrice}>
+                            {parseFloat(dish.thanh_tien || (dish.don_gia * dish.so_luong)).toLocaleString('vi-VN')} đ
+                          </Text>
+                        </View>
+                      ))
+                    ) : (
+                      <View style={styles.historyDishRow}>
+                        <Text style={styles.historyDishBullet}>📦</Text>
+                        <Text style={styles.historyDishName}>Đơn hàng món ăn nhanh</Text>
+                        <Text style={styles.historyDishPrice}>{order.tong_so_mon || 1} món</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Footer quyền lợi tài xế: Tiền ship & Tiền COD */}
+                  <View style={styles.historyCardFooter}>
+                    <View style={styles.historyFeeRow}>
+                      <Text style={styles.historyFeeLabel}>Tiền công ship nhận:</Text>
+                      <Text style={styles.historyShipFeeValue}>+{shipFee.toLocaleString('vi-VN')} đ</Text>
+                    </View>
+                    <View style={styles.historyFeeRow}>
+                      <Text style={styles.historyFeeLabel}>
+                        {isCod ? 'Tiền COD đã thu:' : 'Hình thức thanh toán:'}
+                      </Text>
+                      <Text style={isCod ? styles.historyCodValue : styles.historyOnlinePayValue}>
+                        {isCod ? `${codAmount.toLocaleString('vi-VN')} đ` : '💳 Đã TT Online'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Modal Lịch Chọn Ngày Chuẩn Shopee */}
+        <Modal
+          visible={showHistoryDatePicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowHistoryDatePicker(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.calModalCard}>
+              {/* Header Tháng Năm & Mũi tên chuyển tháng */}
+              <View style={styles.calMonthHeader}>
+                <TouchableOpacity onPress={handlePrevMonth} style={styles.calMonthArrow}>
+                  <Text style={styles.calMonthArrowText}>‹</Text>
+                </TouchableOpacity>
+                <Text style={styles.calMonthTitle}>
+                  {monthNames[calendarMonth]} {calendarYear}
+                </Text>
+                <TouchableOpacity onPress={handleNextMonth} style={styles.calMonthArrow}>
+                  <Text style={styles.calMonthArrowText}>›</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Hàng Tiêu Đề Thứ trong Tuần */}
+              <View style={styles.calWeekRow}>
+                {['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map((d, index) => (
+                  <Text key={d} style={[styles.calWeekDayText, index === 0 && styles.calSundayText]}>
+                    {d}
+                  </Text>
+                ))}
+              </View>
+
+              {/* Lưới các Ngày Trong Tháng */}
+              <View style={styles.calGrid}>
+                {renderHistoryCalendarDays()}
+              </View>
+
+              {/* Nút Hành Động Ở Dưới Cùng: Xóa Bộ Lọc / Áp Dụng */}
+              <View style={styles.calBtnGroup}>
+                <TouchableOpacity 
+                  style={styles.calResetBtn} 
+                  onPress={handleClearDateFilter}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.calResetBtnText}>Xóa bộ lọc</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.calApplyBtn} 
+                  onPress={handleApplyDateFilter}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.calApplyBtnText}>Áp dụng ngày</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeContainer}>
@@ -971,6 +1221,7 @@ export default function ShipperScreen({ navigation }) {
           >
             {activeBottomTab === 'available' && renderAvailableOrdersTab()}
             {activeBottomTab === 'delivering' && renderDeliveringTab()}
+            {activeBottomTab === 'history' && renderHistoryTab()}
             {activeBottomTab === 'earnings' && renderEarningsTab()}
             {activeBottomTab === 'profile' && renderProfileTab()}
           </ScrollView>
@@ -978,7 +1229,7 @@ export default function ShipperScreen({ navigation }) {
       </View>
 
       {/* ========================================================================= */}
-      {/* 4 BOTTOM TABS CHUẨN UX: Đơn chờ nhận, Đơn đang giao, Thu nhập, Hồ sơ */}
+      {/* 5 BOTTOM TABS CHUẨN UX: Đơn chờ nhận, Đơn đang giao, Đã giao, Thu nhập, Hồ sơ */}
       {/* ========================================================================= */}
       <View style={styles.bottomNavContainer}>
         <TouchableOpacity
@@ -1016,6 +1267,23 @@ export default function ShipperScreen({ navigation }) {
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={[styles.bottomTabItem, activeBottomTab === 'history' && styles.bottomTabActive]}
+          onPress={() => setActiveBottomTab('history')}
+        >
+          <View style={styles.badgeWrap}>
+            <Text style={styles.bottomIcon}>📜</Text>
+            {deliveredOrders.length > 0 && (
+              <View style={[styles.tabBadge, { backgroundColor: '#16A34A' }]}>
+                <Text style={styles.tabBadgeText}>{deliveredOrders.length}</Text>
+              </View>
+            )}
+          </View>
+          <Text style={[styles.bottomTabLabel, activeBottomTab === 'history' && styles.bottomTabLabelActive]}>
+            Đã giao
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={[styles.bottomTabItem, activeBottomTab === 'earnings' && styles.bottomTabActive]}
           onPress={() => setActiveBottomTab('earnings')}
         >
@@ -1037,7 +1305,7 @@ export default function ShipperScreen({ navigation }) {
       </View>
 
       {/* ========================================================================= */}
-      {/* 1. CONTEXTUAL POP-UP: XIN QUYỀN VỊ TRÍ (LOCATION PERMISSION) */}
+      {/* POP-UP: XIN QUYỀN VỊ TRÍ (LOCATION PERMISSION) */}
       {/* ========================================================================= */}
       <Modal
         visible={showLocationPermissionModal}
@@ -1072,108 +1340,6 @@ export default function ShipperScreen({ navigation }) {
             </View>
           </View>
         </View>
-      </Modal>
-
-      {/* ========================================================================= */}
-      {/* 2. CONTEXTUAL POP-UP: XIN QUYỀN CAMERA (CAMERA PERMISSION) */}
-      {/* ========================================================================= */}
-      <Modal
-        visible={showCameraPermissionModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowCameraPermissionModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.permissionPopupCard}>
-            <View style={[styles.permissionIconCircle, { backgroundColor: '#EDE7F6' }]}>
-              <Text style={styles.permissionIcon}>📸</Text>
-            </View>
-            <Text style={styles.permissionTitle}>Chụp ảnh minh chứng giao hàng</Text>
-            <Text style={styles.permissionBody}>
-              Ứng dụng cần quyền sử dụng máy ảnh để chụp hình ảnh gói hàng hoặc biên lai đã trao tận tay khách hàng nhằm đảm bảo an toàn đơn hàng và đối soát tiền COD.
-            </Text>
-
-            <View style={styles.permissionButtonGroup}>
-              <TouchableOpacity
-                style={styles.cancelPermissionBtn}
-                onPress={() => setShowCameraPermissionModal(false)}
-              >
-                <Text style={styles.cancelPermissionText}>Để sau</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.acceptPermissionBtn, { backgroundColor: '#6A1B9A' }]}
-                onPress={handleGrantCameraPermission}
-              >
-                <Text style={styles.acceptPermissionText}>Mở Máy Ảnh</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ========================================================================= */}
-      {/* 3. MÀN HÌNH CHỤP ẢNH MINH CHỨNG VỚI KHUNG CANH GÓC BIÊN LAI */}
-      {/* ========================================================================= */}
-      <Modal
-        visible={cameraModalVisible}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setCameraModalVisible(false)}
-      >
-        <SafeAreaView style={styles.cameraScreenSafe}>
-          <View style={styles.cameraHeader}>
-            <Text style={styles.cameraHeaderTitle}>📸 CHỤP ẢNH MINH CHỨNG GIAO HÀNG</Text>
-            <TouchableOpacity onPress={() => setCameraModalVisible(false)}>
-              <Text style={styles.cameraCloseBtnText}>✕ Thoát</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.viewFinderContainer}>
-            {/* Khung canh góc biên lai/gói hàng chuẩn UI Checklist */}
-            <View style={styles.guideFrame}>
-              <View style={[styles.cornerGuide, styles.topLeft]} />
-              <View style={[styles.cornerGuide, styles.topRight]} />
-              <View style={[styles.cornerGuide, styles.bottomLeft]} />
-              <View style={[styles.cornerGuide, styles.bottomRight]} />
-
-              {capturedPhoto ? (
-                <View style={styles.capturedPhotoPreview}>
-                  <Text style={styles.capturedEmoji}>🧾📦</Text>
-                  <Text style={styles.capturedSuccessText}>Đã chụp minh chứng gói hàng & biên lai!</Text>
-                </View>
-              ) : (
-                <View style={styles.aimCenter}>
-                  <Text style={styles.aimInstruction}>Canh biên lai hoặc đồ ăn vào giữa khung hình</Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          <View style={styles.cameraFooter}>
-            {!capturedPhoto ? (
-              <TouchableOpacity style={styles.shutterButton} onPress={handleCapturePhoto}>
-                <View style={styles.shutterInnerCircle} />
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.afterCaptureActions}>
-                <TouchableOpacity 
-                  style={styles.retakeBtn} 
-                  onPress={() => setCapturedPhoto(null)}
-                >
-                  <Text style={styles.retakeBtnText}>🔄 Chụp lại</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={styles.confirmFinalDeliveryBtn}
-                  onPress={handleFinalizeDeliveryWithProof}
-                >
-                  <Text style={styles.confirmFinalDeliveryText}>✅ Xác nhận & Thu COD</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -2307,5 +2473,480 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
     textAlign: 'center',
+  },
+
+  // Profile enhancements (bỏ đánh giá ảo, số chuyến ảo)
+  onlineStatusPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 10,
+  },
+  onlineStatusPillGreen: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  onlineStatusPillGray: {
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  onlineStatusText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  onlineStatusTextGreen: {
+    color: '#15803D',
+  },
+  onlineStatusTextGray: {
+    color: '#64748B',
+  },
+  realProfileStatsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 14,
+  },
+  realProfileStatsTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginBottom: 12,
+    letterSpacing: 0.5,
+  },
+  realProfileStatRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  realProfileStatLabel: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  realProfileStatValue: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#0F172A',
+  },
+  realProfileStatValueGreen: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#059669',
+  },
+  realProfileStatValueCod: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#E11D48',
+  },
+  realProfileStatDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginVertical: 4,
+  },
+  viewDeliveredHistoryBtn: {
+    backgroundColor: '#00897B',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginBottom: 12,
+    shadowColor: '#00897B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  viewDeliveredHistoryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  // History Tab Styles (Lịch sử đơn đã giao & Bộ lọc ngày Shopee)
+  historyFilterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 8,
+  },
+  historyDateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  historyDateBtnActive: {
+    borderColor: '#00897B',
+    backgroundColor: '#E0F2F1',
+  },
+  historyDateIcon: {
+    fontSize: 14,
+  },
+  historyDateText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  historyDateTextActive: {
+    color: '#00897B',
+    fontWeight: '800',
+  },
+  historyDateChevron: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginLeft: 2,
+  },
+  historyDateChevronActive: {
+    color: '#00897B',
+  },
+  historyClearFilterBtn: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  historyClearFilterText: {
+    color: '#DC2626',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  historyCountPill: {
+    backgroundColor: '#E0F2F1',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  historyCountText: {
+    color: '#00897B',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+
+  // Empty state for History
+  historyEmptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginVertical: 16,
+  },
+  historyEmptyIllustration: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  historyEmptyTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#1E293B',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  historyEmptyDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  historyResetDateBtn: {
+    backgroundColor: '#00897B',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  historyResetDateBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+
+  // Delivered Order Card
+  historyListWrap: {
+    gap: 12,
+  },
+  historyOrderCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  historyCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 10,
+    marginBottom: 10,
+  },
+  historyIdTimeCol: {
+    flex: 1,
+  },
+  historyOrderId: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#0F172A',
+  },
+  historyOrderTime: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  historyCompletedBadge: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  historyCompletedBadgeText: {
+    color: '#15803D',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  historyCustomerBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+    gap: 4,
+  },
+  historyCustomerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  historyCustomerName: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  historyCustomerPhone: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0284C7',
+  },
+  historyAddressText: {
+    fontSize: 12,
+    color: '#475569',
+    lineHeight: 16,
+  },
+  historyDishesSection: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 10,
+    marginBottom: 10,
+    gap: 6,
+  },
+  historyDishRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  historyDishBullet: {
+    fontSize: 13,
+  },
+  historyDishName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  historyDishQty: {
+    color: '#EA580C',
+    fontWeight: '800',
+  },
+  historyDishPrice: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  historyCardFooter: {
+    gap: 4,
+  },
+  historyFeeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  historyFeeLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  historyShipFeeValue: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#059669',
+  },
+  historyCodValue: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#DC2626',
+  },
+  historyOnlinePayValue: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#2563EB',
+  },
+
+  // Modal Shopee Date Picker Styles
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  calModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    width: '100%',
+    maxWidth: 360,
+    padding: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+  },
+  calMonthHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  calMonthArrow: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  calMonthArrowText: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#374151',
+  },
+  calMonthTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  calWeekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    paddingBottom: 8,
+  },
+  calWeekDayText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B7280',
+    width: 40,
+    textAlign: 'center',
+  },
+  calSundayText: {
+    color: '#DC2626',
+  },
+  calGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+  },
+  calCell: {
+    width: `${100 / 7}%`,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginVertical: 2,
+  },
+  calCellSelected: {
+    backgroundColor: '#00897B',
+    borderRadius: 20,
+  },
+  calDayText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  calDayTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+  },
+  calDayTodayText: {
+    color: '#00897B',
+    fontWeight: '800',
+  },
+  todayDot: {
+    position: 'absolute',
+    bottom: 4,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#00897B',
+  },
+  calBtnGroup: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  calResetBtn: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#00897B',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  calResetBtnText: {
+    color: '#00897B',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  calApplyBtn: {
+    flex: 1,
+    backgroundColor: '#00897B',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  calApplyBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });
