@@ -5,11 +5,16 @@ import Constants from 'expo-constants';
 // CẤU HÌNH ĐƯỜNG DẪN API GỐC (BACKEND)
 // Tự động nhận diện IP máy tính đang phát Expo Metro Bundler để bạn đổi mạng Wi-Fi không cần sửa lại code!
 const getBaseUrl = () => {
+  // Ưu tiên cho môi trường phát triển Web trên máy tính (localhost) kết nối trực tiếp không qua tunnel
+  if (typeof window !== 'undefined' && window.location && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return 'http://localhost:5000/api';
+  }
+
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
 
-  // Ưu tiên 1: Tự động lấy hostname nếu đang chạy trên Trình duyệt Web (Chrome, Edge...)
+  // Ưu tiên 1: Tự động lấy hostname nếu đang chạy trên Trình duyệt Web khác
   if (typeof window !== 'undefined' && window.location && window.location.hostname) {
     return `http://${window.location.hostname}:5000/api`;
   }
