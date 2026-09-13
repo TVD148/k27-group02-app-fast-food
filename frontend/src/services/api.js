@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
 // CẤU HÌNH ĐƯỜNG DẪN API GỐC (BACKEND)
+const ACTIVE_TUNNEL_URL = 'https://note-shame-sessions-opponents.trycloudflare.com/api';
+
 const normalizeApiUrl = (url) => {
   if (!url) return '';
   let cleaned = String(url).trim().replace(/[\r\n\t]/g, '').replace(/\/+$/, '');
@@ -13,31 +15,19 @@ const normalizeApiUrl = (url) => {
 };
 
 const getBaseUrl = () => {
-  // Ưu tiên 1: Phát triển Web trên máy tính (localhost) kết nối trực tiếp không qua tunnel
+  // 1. Phát triển Web trên máy tính (localhost) kết nối trực tiếp
   if (typeof window !== 'undefined' && window.location && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     return 'http://localhost:5000/api';
   }
 
-  // Ưu tiên 2: Biến môi trường EXPO_PUBLIC_API_URL được cấu hình
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL);
+  // 2. Biến môi trường EXPO_PUBLIC_API_URL (loại bỏ nếu Metro bị cache link cũ đã tắt)
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (envUrl && !envUrl.includes('enterprises-superintendent')) {
+    return normalizeApiUrl(envUrl);
   }
 
-  // Ưu tiên 3: Tự động lấy hostname nếu đang chạy trên Trình duyệt Web khác
-  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-    return `http://${window.location.hostname}:5000/api`;
-  }
-
-  // Ưu tiên 4: Tự động nhận diện IP máy tính cho Expo Go trên Điện thoại
-  const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost || Constants.manifest2?.extra?.expoGo?.debuggerHost;
-  if (hostUri) {
-    const ip = hostUri.split(':').shift();
-    if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
-      return `http://${ip}:5000/api`;
-    }
-  }
-
-  return 'http://localhost:5000/api';
+  // 3. Tự động dùng đường hầm Cloudflare đang hoạt động
+  return ACTIVE_TUNNEL_URL;
 };
 
 const BASE_URL = getBaseUrl();
