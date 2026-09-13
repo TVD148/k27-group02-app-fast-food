@@ -143,12 +143,20 @@ const getItemDetail = async (req, res) => {
     // Chuyển đối tượng map thành mảng
     const item_options = Object.values(optionGroupsMap);
 
+    // 4. Kiểm tra xem món này có nguyên liệu có thể tùy biến dinh dưỡng hay không
+    const [nguyenLieuCustom] = await db.query(
+      'SELECT COUNT(*) as count FROM mon_an_nguyen_lieu WHERE ma_mon_an = ? AND co_the_tuy_bien = 1',
+      [itemId]
+    );
+    const co_the_tuy_bien_dinh_duong = (nguyenLieuCustom[0]?.count || 0) > 0;
+
     return res.status(200).json({
       success: true,
       message: 'Lấy thông tin chi tiết món ăn thành công!',
       data: {
         ...item,
         gia_ban: parseFloat(item.gia_ban),
+        co_the_tuy_bien_dinh_duong,
         item_options
       }
     });

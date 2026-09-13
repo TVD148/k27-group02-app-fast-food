@@ -367,6 +367,17 @@ export const updateOrderStatus = async (orderId, trang_thai_moi, ghi_chu = '') =
   }
 };
 
+// Đặt lại đơn hàng (Đưa các món về lại giỏ hàng)
+export const reorderOrder = async (orderId) => {
+  try {
+    const response = await api.post(`/orders/${orderId}/reorder`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Lỗi kết nối máy chủ!');
+  }
+};
+
+
 // ============================================================================
 // V. CÁC API SPRINT 3: DINH DƯỠNG (KILLER FEATURE), VOUCHER & VIETQR PAYMENT
 // ============================================================================

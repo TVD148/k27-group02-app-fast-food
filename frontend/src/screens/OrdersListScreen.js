@@ -10,16 +10,18 @@ import {
   SafeAreaView,
   Modal,
   ScrollView,
-  StatusBar
+  StatusBar,
+  Alert
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchOrders } from '../services/api';
+import { fetchOrders, reorderOrder } from '../services/api';
 import BottomTabBar from '../components/BottomTabBar';
 
 export default function OrdersListScreen({ navigation }) {
   const [allOrders, setAllOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [reorderingId, setReorderingId] = useState(null);
 
   // Tab phân loại danh mục đơn hàng
   const [selectedTab, setSelectedTab] = useState('');
@@ -33,6 +35,35 @@ export default function OrdersListScreen({ navigation }) {
   const [calendarYear, setCalendarYear] = useState(now.getFullYear());
   const [calendarMonth, setCalendarMonth] = useState(now.getMonth()); // 0-indexed
   const [tempSelectedDate, setTempSelectedDate] = useState(null);
+
+  const handleReorder = async (order) => {
+    try {
+      setReorderingId(order.ma_don_hang);
+      const res = await reorderOrder(order.ma_don_hang);
+      if (res && res.success) {
+        Alert.alert(
+          'Đặt lại đơn hàng 🛒',
+          'Đã đưa các món ăn từ đơn hàng này về lại giỏ hàng của bạn thành công!',
+          [
+            {
+              text: 'Đến Giỏ Hàng',
+              onPress: () => navigation.navigate('Cart')
+            },
+            {
+              text: 'Xem tiếp',
+              style: 'cancel'
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Thông báo', res?.message || 'Không thể đặt lại đơn hàng lúc này.');
+      }
+    } catch (err) {
+      Alert.alert('Lỗi', err.message || 'Có lỗi xảy ra khi đặt lại đơn hàng.');
+    } finally {
+      setReorderingId(null);
+    }
+  };
 
   useEffect(() => {
     loadOrders();
@@ -272,10 +303,12 @@ export default function OrdersListScreen({ navigation }) {
         activeOpacity={0.88}
         onPress={() => navigation.navigate('OrderTracking', { orderId: item.ma_don_hang })}
       >
-        {/* Header đơn */}
+        {/* Header đơn: Danh mục các món ăn trong đơn thay vì #12 */}
         <View style={styles.cardHeader}>
           <View style={styles.orderIdBadgeWrap}>
-            <Text style={styles.orderIdText}>Đơn #{item.ma_don_hang}</Text>
+            <Text style={styles.orderIdText} numberOfLines={1}>
+              {item.tieu_de_danh_muc || `Đơn #${item.ma_don_hang}`}
+            </Text>
             <Text style={styles.orderDateHeader}>• {dateStr}</Text>
           </View>
           <View style={[styles.badgePill, { backgroundColor: badge.bg }]}>
@@ -295,6 +328,16 @@ export default function OrdersListScreen({ navigation }) {
                   <Text style={styles.dishNameText}>
                     {dish.ten_mon} <Text style={styles.dishQtyText}>x{dish.so_luong}</Text>
                   </Text>
+                  {Array.isArray(dish.tuy_chon_labels) && dish.tuy_chon_labels.length > 0 && (
+                    <Text style={styles.dishOptionText}>
+                      ✨ {dish.tuy_chon_labels.map(o => o.ten || o).join(', ')}
+                    </Text>
+                  )}
+                  {dish.dinh_duong_tuy_bien && (
+                    <Text style={styles.dishNutritionText}>
+                      🥗 Tùy biến: {dish.dinh_duong_tuy_bien.calo ? `${dish.dinh_duong_tuy_bien.calo} kcal` : 'Đã chỉnh Calo/Nguyên liệu'}
+                    </Text>
+                  )}
                   {dish.ghi_chu ? (
                     <Text style={styles.dishNoteText}>📝 {dish.ghi_chu}</Text>
                   ) : null}
@@ -320,17 +363,31 @@ export default function OrdersListScreen({ navigation }) {
           </Text>
         </View>
 
-        {/* Footer tổng tiền & nút xem chi tiết */}
+        {/* Footer tổng tiền & nút Đặt lại */}
         <View style={styles.cardFooter}>
-          <Text style={styles.totalItemsCountText}>
-            Tổng {item.tong_so_mon || 1} món
-          </Text>
-          <View style={styles.totalPriceWrap}>
-            <Text style={styles.totalPriceLabel}>Thành tiền: </Text>
-            <Text style={styles.totalPriceValue}>
-              {parseFloat(item.tong_thanh_toan || item.tong_tien).toLocaleString('vi-VN')} đ
+          <View>
+            <Text style={styles.totalItemsCountText}>
+              Tổng {item.tong_so_mon || 1} món
             </Text>
+            <View style={styles.totalPriceWrap}>
+              <Text style={styles.totalPriceLabel}>Thành tiền: </Text>
+              <Text style={styles.totalPriceValue}>
+                {parseFloat(item.tong_thanh_toan || item.tong_tien).toLocaleString('vi-VN')} đ
+              </Text>
+            </View>
           </View>
+          <TouchableOpacity 
+            style={[styles.reorderBtn, reorderingId === item.ma_don_hang && styles.reorderBtnDisabled]}
+            disabled={reorderingId === item.ma_don_hang}
+            onPress={() => handleReorder(item)}
+            activeOpacity={0.8}
+          >
+            {reorderingId === item.ma_don_hang ? (
+              <ActivityIndicator size="small" color="#FFF" />
+            ) : (
+              <Text style={styles.reorderBtnText}>🔁 Đặt lại</Text>
+            )}
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
@@ -675,12 +732,15 @@ const styles = StyleSheet.create({
   orderIdBadgeWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+    flex: 1,
+    marginRight: 8,
   },
   orderIdText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
     color: '#111827',
+    flexShrink: 1,
   },
   orderDateHeader: {
     fontSize: 12,
@@ -722,6 +782,17 @@ const styles = StyleSheet.create({
   dishQtyText: {
     color: '#EE4D2D',
     fontWeight: '800',
+  },
+  dishOptionText: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  dishNutritionText: {
+    fontSize: 11,
+    color: '#00A896',
+    fontWeight: '600',
+    marginTop: 2,
   },
   dishNoteText: {
     fontSize: 11,
@@ -779,6 +850,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     color: '#EE4D2D',
+  },
+  reorderBtn: {
+    backgroundColor: '#EE4D2D',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#EE4D2D',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+  },
+  reorderBtnDisabled: {
+    opacity: 0.6,
+  },
+  reorderBtnText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
 
   // Loading & Empty States

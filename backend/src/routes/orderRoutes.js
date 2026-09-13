@@ -24,4 +24,8 @@ router.put('/:id/status', orderController.updateOrderStatus);
 // 6. Tài xế Shipper nhận đơn giao
 router.put('/:id/accept-delivery', orderController.acceptDelivery);
 
+// 7. Đặt lại đơn hàng (Đưa các món về lại giỏ hàng)
+router.post('/:id/reorder', orderController.reorderOrder);
+
 module.exports = router;
+

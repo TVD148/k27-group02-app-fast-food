@@ -95,11 +95,27 @@ export default function ProfileScreen({ navigation }) {
         setUser(null);
         setCurrentAddress(null);
       }
+
+      // Tải cài đặt Chế độ ban đêm đã lưu
+      const savedDarkMode = await AsyncStorage.getItem('app_dark_mode');
+      if (savedDarkMode !== null) {
+        setDarkMode(JSON.parse(savedDarkMode));
+      }
     } catch (e) {
       setUser(null);
       setCurrentAddress(null);
     }
   };
+
+  const handleToggleDarkMode = async (val) => {
+    setDarkMode(val);
+    try {
+      await AsyncStorage.setItem('app_dark_mode', JSON.stringify(val));
+    } catch (e) {
+      console.log('Lỗi lưu dark mode:', e);
+    }
+  };
+
 
   const handleOpenEditProfile = () => {
     if (!user) {
@@ -211,22 +227,22 @@ export default function ProfileScreen({ navigation }) {
   ];
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+    <SafeAreaView style={[styles.safeArea, darkMode && { backgroundColor: '#0B1120' }]}>
+      <View style={[styles.container, darkMode && { backgroundColor: '#0F172A' }]}>
         {/* Header Hồ Sơ & Cài Đặt Không Có Nút Quay Về (Dùng BottomTabBar) */}
-        <View style={styles.screenHeader}>
-          <Text style={styles.screenHeaderTitle}>Hồ Sơ & Cài Đặt</Text>
+        <View style={[styles.screenHeader, darkMode && { backgroundColor: '#1E293B', borderBottomColor: '#334155' }]}>
+          <Text style={[styles.screenHeaderTitle, darkMode && { color: '#F8FAFC' }]}>Hồ Sơ & Cài Đặt</Text>
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* 1. Header Hồ Sơ & Avatar (Chạm vào để sửa tên, SĐT, Email) */}
           <TouchableOpacity 
-            style={styles.profileHeaderCard}
+            style={[styles.profileHeaderCard, darkMode && { backgroundColor: '#1E293B', borderColor: '#334155' }]}
             activeOpacity={user ? 0.85 : 1}
             onPress={user ? handleOpenEditProfile : undefined}
           >
             <View style={styles.avatarWrapper}>
-              <View style={styles.avatarCircle}>
+              <View style={[styles.avatarCircle, darkMode && { backgroundColor: '#334155' }]}>
                 <Text style={styles.avatarEmoji}>{user ? '🧑‍🍳' : '👤'}</Text>
               </View>
               {user && (
@@ -239,8 +255,8 @@ export default function ProfileScreen({ navigation }) {
 
             {user ? (
               <View style={styles.userInfoBox}>
-                <Text style={styles.userName}>{user.ho_ten || 'Khách hàng FastFood'}</Text>
-                <Text style={styles.userSubText}>📞 {user.so_dien_thoai} {user.email ? `• ✉️ ${user.email}` : ''}</Text>
+                <Text style={[styles.userName, darkMode && { color: '#F8FAFC' }]}>{user.ho_ten || 'Khách hàng FastFood'}</Text>
+                <Text style={[styles.userSubText, darkMode && { color: '#94A3B8' }]}>📞 {user.so_dien_thoai} {user.email ? `• ✉️ ${user.email}` : ''}</Text>
                 {user.ma_vai_tro && user.ma_vai_tro !== 1 && (
                   <View style={[
                     styles.memberBadge, 
@@ -263,8 +279,8 @@ export default function ProfileScreen({ navigation }) {
               </View>
             ) : (
               <View style={styles.userInfoBox}>
-                <Text style={styles.userName}>Khách ghé thăm</Text>
-                <Text style={styles.userSubText}>Đăng nhập để nhận voucher 30% và tích điểm</Text>
+                <Text style={[styles.userName, darkMode && { color: '#F8FAFC' }]}>Khách ghé thăm</Text>
+                <Text style={[styles.userSubText, darkMode && { color: '#94A3B8' }]}>Đăng nhập để nhận voucher 30% và tích điểm</Text>
                 <TouchableOpacity 
                   style={styles.loginCtaBtn}
                   onPress={() => navigation.navigate('Login')}
@@ -278,37 +294,37 @@ export default function ProfileScreen({ navigation }) {
           {/* 2. CHỨC NĂNG NGHIỆP VỤ CHUYÊN TRÁCH THEO VAI TRÒ (Chỉ hiển thị cho Nhân viên, Shipper, hoặc Admin) */}
           {user && (user.ma_vai_tro === 2 || user.ma_vai_tro === 3 || user.ma_vai_tro === 4) && (
             <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>Chức năng nghiệp vụ chuyên trách</Text>
-              <View style={styles.menuCard}>
+              <Text style={[styles.sectionTitle, darkMode && { color: '#94A3B8' }]}>Chức năng nghiệp vụ chuyên trách</Text>
+              <View style={[styles.menuCard, darkMode && { backgroundColor: '#1E293B', borderColor: '#334155', borderWidth: 1 }]}>
                 {user?.ma_vai_tro === 3 && (
                   <TouchableOpacity 
-                    style={[styles.menuItemRow, styles.menuItemBorder]}
+                    style={[styles.menuItemRow, styles.menuItemBorder, darkMode && { borderBottomColor: '#334155' }]}
                     onPress={() => navigation.navigate('Admin')}
                   >
                     <View style={[styles.menuIconCircle, { backgroundColor: '#EDE7F6' }]}>
                       <Text style={styles.menuIconText}>👑</Text>
                     </View>
                     <View style={styles.menuTextBox}>
-                      <Text style={[styles.menuLabel, { color: '#6A1B9A', fontWeight: 'bold' }]}>FastFood Admin Portal</Text>
-                      <Text style={styles.menuDesc}>Quản lý món, tùy biến, voucher, nhân sự, doanh thu</Text>
+                      <Text style={[styles.menuLabel, { color: '#A855F7', fontWeight: 'bold' }]}>FastFood Admin Portal</Text>
+                      <Text style={[styles.menuDesc, darkMode && { color: '#94A3B8' }]}>Quản lý món, tùy biến, voucher, nhân sự, doanh thu</Text>
                     </View>
-                    <Text style={styles.chevronIcon}>›</Text>
+                    <Text style={[styles.chevronIcon, darkMode && { color: '#64748B' }]}>›</Text>
                   </TouchableOpacity>
                 )}
 
                 {(user?.ma_vai_tro === 2 || user?.ma_vai_tro === 3) && (
                   <TouchableOpacity 
-                    style={[styles.menuItemRow, user?.ma_vai_tro === 3 ? styles.menuItemBorder : null]}
+                    style={[styles.menuItemRow, user?.ma_vai_tro === 3 ? styles.menuItemBorder : null, darkMode && user?.ma_vai_tro === 3 && { borderBottomColor: '#334155' }]}
                     onPress={() => navigation.navigate('StaffKitchen')}
                   >
                     <View style={[styles.menuIconCircle, { backgroundColor: '#FBE9E7' }]}>
                       <Text style={styles.menuIconText}>🍳</Text>
                     </View>
                     <View style={styles.menuTextBox}>
-                      <Text style={[styles.menuLabel, { color: '#D84315', fontWeight: 'bold' }]}>Màn Hình Bếp & Cửa Hàng</Text>
-                      <Text style={styles.menuDesc}>Nhận đơn, nấu món, xem dinh dưỡng, báo shipper</Text>
+                      <Text style={[styles.menuLabel, { color: '#FB923C', fontWeight: 'bold' }]}>Màn Hình Bếp & Cửa Hàng</Text>
+                      <Text style={[styles.menuDesc, darkMode && { color: '#94A3B8' }]}>Nhận đơn, nấu món, xem dinh dưỡng, báo shipper</Text>
                     </View>
-                    <Text style={styles.chevronIcon}>›</Text>
+                    <Text style={[styles.chevronIcon, darkMode && { color: '#64748B' }]}>›</Text>
                   </TouchableOpacity>
                 )}
 
@@ -321,10 +337,10 @@ export default function ProfileScreen({ navigation }) {
                       <Text style={styles.menuIconText}>🛵</Text>
                     </View>
                     <View style={styles.menuTextBox}>
-                      <Text style={[styles.menuLabel, { color: '#00897B', fontWeight: 'bold' }]}>Màn Hình Shipper Giao Hàng</Text>
-                      <Text style={styles.menuDesc}>Nhận đơn chờ, gọi khách, thu tiền COD</Text>
+                      <Text style={[styles.menuLabel, { color: '#2DD4BF', fontWeight: 'bold' }]}>Màn Hình Shipper Giao Hàng</Text>
+                      <Text style={[styles.menuDesc, darkMode && { color: '#94A3B8' }]}>Nhận đơn chờ, gọi khách, thu tiền COD</Text>
                     </View>
-                    <Text style={styles.chevronIcon}>›</Text>
+                    <Text style={[styles.chevronIcon, darkMode && { color: '#64748B' }]}>›</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -334,23 +350,27 @@ export default function ProfileScreen({ navigation }) {
           {/* 4. Menu List theo cấu trúc nhóm chuẩn Checklist.design */}
           {menuSections.map((section, sIndex) => (
             <View key={sIndex} style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>{section.title}</Text>
-              <View style={styles.menuCard}>
+              <Text style={[styles.sectionTitle, darkMode && { color: '#94A3B8' }]}>{section.title}</Text>
+              <View style={[styles.menuCard, darkMode && { backgroundColor: '#1E293B', borderColor: '#334155', borderWidth: 1 }]}>
                 {section.items.map((item, index) => (
                   <TouchableOpacity 
                     key={index}
-                    style={[styles.menuItemRow, index < section.items.length - 1 && styles.menuItemBorder]}
+                    style={[
+                      styles.menuItemRow, 
+                      index < section.items.length - 1 && styles.menuItemBorder,
+                      darkMode && index < section.items.length - 1 && { borderBottomColor: '#334155' }
+                    ]}
                     onPress={item.action}
                     activeOpacity={0.7}
                   >
-                    <View style={styles.menuIconCircle}>
+                    <View style={[styles.menuIconCircle, darkMode && { backgroundColor: '#334155' }]}>
                       <Text style={styles.menuIconText}>{item.icon}</Text>
                     </View>
                     <View style={styles.menuTextBox}>
-                      <Text style={styles.menuLabel}>{item.label}</Text>
-                      <Text style={styles.menuDesc} numberOfLines={1}>{item.desc}</Text>
+                      <Text style={[styles.menuLabel, darkMode && { color: '#F1F5F9' }]}>{item.label}</Text>
+                      <Text style={[styles.menuDesc, darkMode && { color: '#94A3B8' }]} numberOfLines={1}>{item.desc}</Text>
                     </View>
-                    <Text style={styles.chevronIcon}>›</Text>
+                    <Text style={[styles.chevronIcon, darkMode && { color: '#64748B' }]}>›</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -359,12 +379,12 @@ export default function ProfileScreen({ navigation }) {
 
           {/* 3. Cài đặt Cấu hình & Công tắc gạt (Toggle/Switch) */}
           <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Cài đặt thông báo & Ứng dụng</Text>
-            <View style={styles.menuCard}>
-              <View style={[styles.switchRow, styles.menuItemBorder]}>
+            <Text style={[styles.sectionTitle, darkMode && { color: '#94A3B8' }]}>Cài đặt thông báo & Ứng dụng</Text>
+            <View style={[styles.menuCard, darkMode && { backgroundColor: '#1E293B', borderColor: '#334155', borderWidth: 1 }]}>
+              <View style={[styles.switchRow, styles.menuItemBorder, darkMode && { borderBottomColor: '#334155' }]}>
                 <View style={styles.switchTextBox}>
-                  <Text style={styles.switchLabel}>🔔 Thông báo tiến trình đơn hàng</Text>
-                  <Text style={styles.switchDesc}>Cập nhật khi bếp nhận đơn và shipper giao</Text>
+                  <Text style={[styles.switchLabel, darkMode && { color: '#F1F5F9' }]}>🔔 Thông báo tiến trình đơn hàng</Text>
+                  <Text style={[styles.switchDesc, darkMode && { color: '#94A3B8' }]}>Cập nhật khi bếp nhận đơn và shipper giao</Text>
                 </View>
                 <Switch 
                   value={orderNotif} 
@@ -374,10 +394,10 @@ export default function ProfileScreen({ navigation }) {
                 />
               </View>
 
-              <View style={[styles.switchRow, styles.menuItemBorder]}>
+              <View style={[styles.switchRow, styles.menuItemBorder, darkMode && { borderBottomColor: '#334155' }]}>
                 <View style={styles.switchTextBox}>
-                  <Text style={styles.switchLabel}>🏷️ Khuyến mãi & Voucher mới</Text>
-                  <Text style={styles.switchDesc}>Nhận thông báo ưu đãi giảm giá độc quyền</Text>
+                  <Text style={[styles.switchLabel, darkMode && { color: '#F1F5F9' }]}>🏷️ Khuyến mãi & Voucher mới</Text>
+                  <Text style={[styles.switchDesc, darkMode && { color: '#94A3B8' }]}>Nhận thông báo ưu đãi giảm giá độc quyền</Text>
                 </View>
                 <Switch 
                   value={promoNotif} 
@@ -389,12 +409,12 @@ export default function ProfileScreen({ navigation }) {
 
               <View style={styles.switchRow}>
                 <View style={styles.switchTextBox}>
-                  <Text style={styles.switchLabel}>🌙 Chế độ ban đêm</Text>
-                  <Text style={styles.switchDesc}>Giao diện dịu mắt khi dùng buổi tối</Text>
+                  <Text style={[styles.switchLabel, darkMode && { color: '#F1F5F9' }]}>🌙 Chế độ ban đêm</Text>
+                  <Text style={[styles.switchDesc, darkMode && { color: '#94A3B8' }]}>Giao diện dịu mắt khi dùng buổi tối</Text>
                 </View>
                 <Switch 
                   value={darkMode} 
-                  onValueChange={setDarkMode}
+                  onValueChange={handleToggleDarkMode}
                   trackColor={{ false: '#CBD5E1', true: '#00A896' }}
                   thumbColor="#FFFFFF"
                 />
@@ -415,10 +435,6 @@ export default function ProfileScreen({ navigation }) {
               </TouchableOpacity>
             </View>
           )}
-
-          <View style={styles.versionContainer}>
-            <Text style={styles.versionText}>GrabFast Mobile App • Phiên bản 3.0.1</Text>
-          </View>
         </ScrollView>
 
         {/* 5. Khung Bottom Navigation */}

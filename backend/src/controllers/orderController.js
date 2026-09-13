@@ -250,20 +250,20 @@ const createOrder = async (req, res) => {
     const orderId = orderResult.insertId;
 
     // 4b. Chèn chi tiết các món vào đơn hàng & Trừ tồn kho món ăn
-    for (const item of cartItems) {
       let optionLabels = [];
+      let rawOptionIds = [];
       if (item.tuy_chon_da_chon) {
-        const optionIds = typeof item.tuy_chon_da_chon === 'string'
+        rawOptionIds = typeof item.tuy_chon_da_chon === 'string'
           ? JSON.parse(item.tuy_chon_da_chon)
           : item.tuy_chon_da_chon;
 
-        if (Array.isArray(optionIds) && optionIds.length > 0) {
+        if (Array.isArray(rawOptionIds) && rawOptionIds.length > 0) {
           const [options] = await db.query(`
             SELECT gt.ten_gia_tri, gt.gia_tang_them, ntc.ten_nhom
             FROM gia_tri_tuy_chon gt
             JOIN nhom_tuy_chon ntc ON gt.ma_nhom = ntc.ma_nhom
             WHERE gt.ma_gia_tri IN (?)
-          `, [optionIds]);
+          `, [rawOptionIds]);
           optionLabels = options.map(opt => ({
             ten: `${opt.ten_nhom}: ${opt.ten_gia_tri}`,
             gia: parseFloat(opt.gia_tang_them)
@@ -275,11 +275,13 @@ const createOrder = async (req, res) => {
 
       await db.query(`
         INSERT INTO chi_tiet_don_hang (
-          ma_don_hang, ma_mon_an, ten_mon_an, don_gia, so_luong, tuy_chon_da_chon, thanh_tien
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          ma_don_hang, ma_mon_an, ten_mon_an, don_gia, so_luong, tuy_chon_da_chon, thanh_tien, dinh_duong_tuy_bien
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         orderId, item.ma_mon_an, item.ten_mon, unitPrice, item.so_luong,
-        JSON.stringify(optionLabels), parseFloat(item.gia_tam_tinh)
+        JSON.stringify({ ids: rawOptionIds, labels: optionLabels }),
+        parseFloat(item.gia_tam_tinh),
+        item.dinh_duong_tuy_bien ? (typeof item.dinh_duong_tuy_bien === 'object' ? JSON.stringify(item.dinh_duong_tuy_bien) : item.dinh_duong_tuy_bien) : null
       ]);
 
       // Trừ số lượng tồn kho
@@ -372,13 +374,23 @@ const getOrders = async (req, res) => {
     // Lấy kèm danh sách món ăn chi tiết trong từng đơn và chuẩn hóa các trường dữ liệu
     const ordersWithDetails = await Promise.all(orders.map(async (order) => {
       const [items] = await db.query(`
-        SELECT ct.*, m.ten_mon, m.hinh_anh, m.gia_ban
+        SELECT ct.*, m.ten_mon, m.hinh_anh, m.gia_ban, dm.ten_danh_muc
         FROM chi_tiet_don_hang ct
         JOIN mon_an m ON ct.ma_mon_an = m.ma_mon_an
+        LEFT JOIN danh_muc dm ON m.ma_danh_muc = dm.ma_danh_muc
         WHERE ct.ma_don_hang = ?
       `, [order.ma_don_hang]);
 
       const totalItemsCount = items.reduce((sum, it) => sum + (parseInt(it.so_luong) || 1), 0);
+
+      // Tạo tiêu đề gộp các danh mục của món ăn trong đơn
+      const uniqueCategories = [];
+      items.forEach(it => {
+        if (it.ten_danh_muc && !uniqueCategories.includes(it.ten_danh_muc)) {
+          uniqueCategories.push(it.ten_danh_muc);
+        }
+      });
+      const tieu_de_danh_muc = uniqueCategories.length > 0 ? uniqueCategories.join(', ') : (items[0]?.ten_mon || 'Món ăn');
 
       return {
         ...order,
@@ -397,16 +409,46 @@ const getOrders = async (req, res) => {
         vi_do_shipper: order.vi_do_shipper ? parseFloat(order.vi_do_shipper) : null,
         kinh_do_shipper: order.kinh_do_shipper ? parseFloat(order.kinh_do_shipper) : null,
         tong_so_mon: totalItemsCount,
-        danh_sach_mon: items.map(it => ({
-          ma_chi_tiet: it.ma_chi_tiet,
-          ma_mon_an: it.ma_mon_an,
-          ten_mon: it.ten_mon,
-          hinh_anh: it.hinh_anh,
-          so_luong: it.so_luong,
-          don_gia: parseFloat(it.don_gia || it.gia_ban || 0),
-          thanh_tien: parseFloat(it.thanh_tien || (it.don_gia * it.so_luong) || 0),
-          ghi_chu: it.ghi_chu_mon
-        }))
+        tieu_de_danh_muc,
+        danh_sach_mon: items.map(it => {
+          let customNutrition = null;
+          if (it.dinh_duong_tuy_bien) {
+            try {
+              customNutrition = typeof it.dinh_duong_tuy_bien === 'string'
+                ? JSON.parse(it.dinh_duong_tuy_bien)
+                : it.dinh_duong_tuy_bien;
+            } catch (e) {}
+          }
+
+          let optionLabels = [];
+          if (it.tuy_chon_da_chon) {
+            try {
+              const parsed = typeof it.tuy_chon_da_chon === 'string'
+                ? JSON.parse(it.tuy_chon_da_chon)
+                : it.tuy_chon_da_chon;
+              if (parsed && parsed.labels && Array.isArray(parsed.labels)) {
+                optionLabels = parsed.labels;
+              } else if (Array.isArray(parsed)) {
+                optionLabels = parsed;
+              }
+            } catch (e) {}
+          }
+
+          return {
+            ma_chi_tiet: it.ma_chi_tiet || it.ma_chi_tiet_don,
+            ma_mon_an: it.ma_mon_an,
+            ten_mon: it.ten_mon_an || it.ten_mon,
+            ten_danh_muc: it.ten_danh_muc,
+            hinh_anh: it.hinh_anh,
+            so_luong: it.so_luong,
+            don_gia: parseFloat(it.don_gia || it.gia_ban || 0),
+            thanh_tien: parseFloat(it.thanh_tien || (it.don_gia * it.so_luong) || 0),
+            ghi_chu: it.ghi_chu_mon,
+            tuy_chon_da_chon: it.tuy_chon_da_chon,
+            tuy_chon_labels: optionLabels,
+            dinh_duong_tuy_bien: customNutrition
+          };
+        })
       };
     }));
 
@@ -830,11 +872,106 @@ const getShipperStats = async (req, res) => {
   }
 };
 
+// 7. ĐẶT LẠI ĐƠN HÀNG (POST /api/orders/:id/reorder)
+const reorderOrder = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const orderId = req.params.id;
+
+    // 1. Kiểm tra đơn hàng có tồn tại và thuộc về user
+    const [orders] = await db.query('SELECT * FROM don_hang WHERE ma_don_hang = ?', [orderId]);
+    if (orders.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Đơn hàng không tồn tại!'
+      });
+    }
+
+    const order = orders[0];
+    if (order.ma_nguoi_dung !== userId && req.user.role !== 3) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn không có quyền đặt lại đơn hàng này!'
+      });
+    }
+
+    // 2. Lấy các món trong đơn hàng
+    const [orderItems] = await db.query('SELECT * FROM chi_tiet_don_hang WHERE ma_don_hang = ?', [orderId]);
+    if (orderItems.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Đơn hàng không có món ăn nào để đặt lại!'
+      });
+    }
+
+    // 3. Lấy hoặc tạo giỏ hàng cho user
+    let cartId;
+    const [existingCarts] = await db.query('SELECT ma_gio_hang FROM gio_hang WHERE ma_nguoi_dung = ?', [userId]);
+    if (existingCarts.length > 0) {
+      cartId = existingCarts[0].ma_gio_hang;
+    } else {
+      const [resC] = await db.query('INSERT INTO gio_hang (ma_nguoi_dung) VALUES (?)', [userId]);
+      cartId = resC.insertId;
+    }
+
+    // 4. Thêm từng món vào giỏ hàng
+    for (const item of orderItems) {
+      let optionIds = [];
+      if (item.tuy_chon_da_chon) {
+        try {
+          const parsed = typeof item.tuy_chon_da_chon === 'string' ? JSON.parse(item.tuy_chon_da_chon) : item.tuy_chon_da_chon;
+          if (parsed && Array.isArray(parsed.ids)) {
+            optionIds = parsed.ids;
+          } else if (Array.isArray(parsed)) {
+            if (typeof parsed[0] === 'number') {
+              optionIds = parsed;
+            }
+          }
+        } catch (e) {}
+      }
+
+      const itemNutrition = item.dinh_duong_tuy_bien ? (
+        typeof item.dinh_duong_tuy_bien === 'object'
+          ? JSON.stringify(item.dinh_duong_tuy_bien)
+          : item.dinh_duong_tuy_bien
+      ) : null;
+
+      const itemCost = parseFloat(item.thanh_tien || (item.don_gia * item.so_luong));
+
+      await db.query(`
+        INSERT INTO chi_tiet_gio_hang (
+          ma_gio_hang, ma_mon_an, so_luong, tuy_chon_da_chon, gia_tam_tinh, dinh_duong_tuy_bien
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `, [
+        cartId,
+        item.ma_mon_an,
+        item.so_luong,
+        JSON.stringify(optionIds),
+        itemCost,
+        itemNutrition
+      ]);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Đã đưa các món ăn trong đơn hàng về giỏ hàng thành công!'
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi hệ thống khi đặt lại đơn hàng.',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   createOrder,
   getOrders,
   getOrderDetail,
   updateOrderStatus,
   acceptDelivery,
-  getShipperStats
+  getShipperStats,
+  reorderOrder
 };
+

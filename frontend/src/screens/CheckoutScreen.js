@@ -330,7 +330,7 @@ export default function CheckoutScreen({ route, navigation }) {
               setVietQrData(qrRes.data);
               Alert.alert(
                 'Tạo đơn thành công! 📱',
-                `Đơn hàng #${newOrderId} đã được khởi tạo. Hãy quét mã VietQR để hoàn tất chuyển khoản!`,
+                'Đơn hàng của bạn đang chờ xác nhận từ nhà bếp. Hãy quét mã VietQR để hoàn tất chuyển khoản!',
                 [
                   { 
                     text: 'Xem mã QR VietQR', 
@@ -351,7 +351,7 @@ export default function CheckoutScreen({ route, navigation }) {
 
         Alert.alert(
           'Đặt hàng thành công! 🎉',
-          `Đơn hàng #${newOrderId} đã được gửi đến nhà bếp chế biến.`,
+          'Đơn hàng của bạn đang chờ xác nhận từ nhà bếp.',
           [
             { 
               text: 'Theo dõi đơn hàng', 
@@ -631,7 +631,7 @@ export default function CheckoutScreen({ route, navigation }) {
               <Text style={styles.submitBtnText}>
                 {isOutOfRange
                   ? `Ngoài bán kính giao hàng (${distanceKm} km) 🚫`
-                  : `Hoàn tất Thanh toán (${grandTotal.toLocaleString('vi-VN')} đ) 🚀`}
+                  : `Xác nhận Đặt hàng (${grandTotal.toLocaleString('vi-VN')} đ) 🚀`}
               </Text>
             )}
           </TouchableOpacity>
