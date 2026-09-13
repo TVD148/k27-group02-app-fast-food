@@ -10,10 +10,24 @@ const getAllVouchers = async (req, res) => {
        ORDER BY ma_voucher DESC`
     );
 
+    let usedVoucherIds = [];
+    if (req.user && req.user.id) {
+      const [usedOrders] = await db.query(
+        'SELECT DISTINCT ma_voucher FROM don_hang WHERE ma_nguoi_dung = ? AND ma_voucher IS NOT NULL AND trang_thai_don_hang != "da_huy"',
+        [req.user.id]
+      );
+      usedVoucherIds = usedOrders.map(r => r.ma_voucher);
+    }
+
+    const annotatedVouchers = vouchers.map(v => ({
+      ...v,
+      da_su_dung: usedVoucherIds.includes(v.ma_voucher)
+    }));
+
     return res.status(200).json({
       success: true,
       message: 'Tải danh sách mã giảm giá thành công',
-      data: vouchers
+      data: annotatedVouchers
     });
   } catch (error) {
     console.error('Lỗi getAllVouchers:', error);
@@ -56,7 +70,22 @@ const applyVoucher = async (req, res) => {
 
     const voucher = vouchers[0];
 
-    // 2.2 Kiểm tra trạng thái hoạt động
+    // 2.2 Kiểm tra tài khoản đã sử dụng mã này chưa (Mỗi tài khoản chỉ dùng được 1 lần)
+    const userId = req.user?.id;
+    if (userId) {
+      const [usedOrders] = await db.query(
+        'SELECT ma_don_hang FROM don_hang WHERE ma_nguoi_dung = ? AND ma_voucher = ? AND trang_thai_don_hang != "da_huy"',
+        [userId, voucher.ma_voucher]
+      );
+      if (usedOrders.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Mã giảm giá '${cleanCode}' đã được sử dụng trên tài khoản của bạn! Mỗi tài khoản chỉ được dùng mã này 1 lần.`
+        });
+      }
+    }
+
+    // 2.3 Kiểm tra trạng thái hoạt động
     if (voucher.trang_thai !== 'hoat_dong') {
       return res.status(400).json({
         success: false,
@@ -64,7 +93,7 @@ const applyVoucher = async (req, res) => {
       });
     }
 
-    // 2.3 Kiểm tra hạn sử dụng
+    // 2.4 Kiểm tra hạn sử dụng
     const now = new Date();
     const startDate = new Date(voucher.ngay_bat_dau);
     const endDate = new Date(voucher.ngay_ket_thuc);
@@ -83,7 +112,7 @@ const applyVoucher = async (req, res) => {
       });
     }
 
-    // 2.4 Kiểm tra số lượng lượt dùng phát hành
+    // 2.5 Kiểm tra số lượng lượt dùng phát hành
     if (voucher.so_luong_da_dung >= voucher.so_luong_phat_hanh) {
       return res.status(400).json({
         success: false,
@@ -91,7 +120,7 @@ const applyVoucher = async (req, res) => {
       });
     }
 
-    // 2.5 Kiểm tra đơn hàng tối thiểu (tiền đồ ăn đạt chuẩn mới được dùng mã)
+    // 2.6 Kiểm tra đơn hàng tối thiểu (tiền đồ ăn đạt chuẩn mới được dùng mã)
     const minOrder = parseFloat(voucher.don_hang_toi_thieu || 0);
     if (subtotal < minOrder) {
       return res.status(400).json({

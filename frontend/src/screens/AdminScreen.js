@@ -23,8 +23,19 @@ import {
   fetchOnlinePersonnel,
   fetchMenuItems,
   createFoodItem,
+  updateFoodItem,
   deleteFoodItem,
   toggleItemStatus,
+  fetchItemAdminDetails,
+  fetchCategories,
+  createAdminCategory,
+  updateAdminCategory,
+  deleteAdminCategory,
+  fetchAdminOptionGroups,
+  createAdminOptionGroup,
+  updateAdminOptionGroup,
+  deleteAdminOptionGroup,
+  fetchAdminIngredients,
   fetchOrders,
   updateOrderStatus,
   fetchAdminVouchers,
@@ -247,12 +258,45 @@ export default function AdminScreen({ navigation }) {
   const [orderSearchId, setOrderSearchId] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
 
+  // Data lists bổ sung
+  const [categories, setCategories] = useState([]);
+  const [optionGroups, setOptionGroups] = useState([]);
+  const [ingredients, setIngredients] = useState([]);
+
+  // Modal Category states
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [categoryForm, setCategoryForm] = useState({ ma_danh_muc: null, ten_danh_muc: '', mo_ta: '' });
+  const [savingCategory, setSavingCategory] = useState(false);
+
+  // Modal Option Group states (Kích cỡ & Vị)
+  const [showOptionGroupModal, setShowOptionGroupModal] = useState(false);
+  const [optionGroupForm, setOptionGroupForm] = useState({ 
+    ma_nhom: null, 
+    ten_nhom: '', 
+    la_bat_buoc: false, 
+    chon_toi_da: '1', 
+    values: [] 
+  });
+  const [savingOptionGroup, setSavingOptionGroup] = useState(false);
+
+  // Food item states (Thêm & Sửa món ăn đầy đủ)
+  const [editingFoodId, setEditingFoodId] = useState(null);
+  const [foodModalSubTab, setFoodModalSubTab] = useState('basic'); // 'basic' | 'options' | 'nutrition'
+  const [loadingFoodDetails, setLoadingFoodDetails] = useState(false);
+  const [foodForm, setFoodForm] = useState({ 
+    ten_mon: '', 
+    mo_ta: '', 
+    gia_ban: '', 
+    ma_danh_muc: '1',
+    hinh_anh: '',
+    ma_nhom_list: [],
+    nguyen_lieu_list: []
+  });
+
   // Modal forms
   const [modalType, setModalType] = useState(null); // 'addFood' | 'addVoucher' | 'addUser' | 'changeRole'
   const [submitting, setSubmitting] = useState(false);
 
-  // Form add food
-  const [foodForm, setFoodForm] = useState({ ten_mon: '', mo_ta: '', gia_ban: '', ma_danh_muc: '1' });
   // Form add voucher
   const [voucherForm, setVoucherForm] = useState({ 
     ma_code: '', 
@@ -283,14 +327,17 @@ export default function AdminScreen({ navigation }) {
       const storedUser = await AsyncStorage.getItem('user_info');
       if (storedUser) setCurrentUser(JSON.parse(storedUser));
 
-      const [statsRes, foodsRes, ordersRes, vouchersRes, usersRes, landmarkRes, onlineRes] = await Promise.all([
+      const [statsRes, foodsRes, ordersRes, vouchersRes, usersRes, landmarkRes, onlineRes, categoriesRes, optionGroupsRes, ingredientsRes] = await Promise.all([
         fetchDashboardStats().catch(() => null),
         fetchMenuItems().catch(() => null),
         fetchOrders().catch(() => null),
         fetchAdminVouchers().catch(() => null),
         fetchAdminUsers().catch(() => null),
         fetchStoreLandmark().catch(() => null),
-        fetchOnlinePersonnel().catch(() => null)
+        fetchOnlinePersonnel().catch(() => null),
+        fetchCategories().catch(() => null),
+        fetchAdminOptionGroups().catch(() => null),
+        fetchAdminIngredients().catch(() => null)
       ]);
 
       if (statsRes && statsRes.success) setStats(statsRes.data);
@@ -298,6 +345,9 @@ export default function AdminScreen({ navigation }) {
       if (ordersRes && ordersRes.success) setOrders(ordersRes.data || []);
       if (vouchersRes && vouchersRes.success) setVouchers(vouchersRes.data || []);
       if (usersRes && usersRes.success) setUsers(usersRes.data || []);
+      if (categoriesRes && categoriesRes.success) setCategories(categoriesRes.data || []);
+      if (optionGroupsRes && optionGroupsRes.success) setOptionGroups(optionGroupsRes.data || []);
+      if (ingredientsRes && ingredientsRes.success) setIngredients(ingredientsRes.data || []);
       if (onlineRes && onlineRes.success && onlineRes.data) {
         setOnlinePersonnel(onlineRes.data);
       }
@@ -547,7 +597,7 @@ export default function AdminScreen({ navigation }) {
     }
   };
 
-  // 2. Lọc thực đơn theo Search text + Filter Chips
+  // 2. Lọc thực đơn theo Search text + Filter Chips (Hỗ trợ danh mục động)
   const filteredFoods = useMemo(() => {
     return foods.filter(item => {
       const matchSearch = item.ten_mon.toLowerCase().includes(menuSearchText.trim().toLowerCase());
@@ -556,16 +606,10 @@ export default function AdminScreen({ navigation }) {
       if (menuFilterCategory === 'out_of_stock') {
         return item.trang_thai !== 'con_hang';
       }
-      if (menuFilterCategory === 'burgers') {
-        return item.ma_danh_muc === 1 || item.ten_mon.toLowerCase().includes('burger');
+      if (menuFilterCategory === 'all') {
+        return true;
       }
-      if (menuFilterCategory === 'chicken') {
-        return item.ma_danh_muc === 2 || item.ten_mon.toLowerCase().includes('gà');
-      }
-      if (menuFilterCategory === 'drinks') {
-        return item.ma_danh_muc === 3 || item.ten_mon.toLowerCase().includes('pepsi') || item.ten_mon.toLowerCase().includes('trà');
-      }
-      return true;
+      return String(item.ma_danh_muc) === String(menuFilterCategory);
     });
   }, [foods, menuSearchText, menuFilterCategory]);
 
@@ -592,31 +636,291 @@ export default function AdminScreen({ navigation }) {
     };
   }, [orders, orderSearchId, orderStatusFilter]);
 
-  // Thêm món ăn mới
-  const handleAddFood = async () => {
-    if (!foodForm.ten_mon || !foodForm.gia_ban) {
+  // =========================================================================
+  // XỬ LÝ CRUD MÓN ĂN (FOOD ITEMS)
+  // =========================================================================
+  const handleOpenAddFood = () => {
+    setEditingFoodId(null);
+    setFoodModalSubTab('basic');
+    setFoodForm({
+      ten_mon: '',
+      mo_ta: '',
+      gia_ban: '',
+      ma_danh_muc: categories.length > 0 ? String(categories[0].ma_danh_muc) : '1',
+      hinh_anh: '',
+      ma_nhom_list: [],
+      nguyen_lieu_list: []
+    });
+    setModalType('addFood');
+  };
+
+  const handleOpenEditFood = async (item) => {
+    setEditingFoodId(item.ma_mon_an);
+    setFoodModalSubTab('basic');
+    setLoadingFoodDetails(true);
+    setModalType('addFood');
+    try {
+      const res = await fetchItemAdminDetails(item.ma_mon_an);
+      if (res && res.success && res.data) {
+        const d = res.data;
+        setFoodForm({
+          ten_mon: d.ten_mon || '',
+          mo_ta: d.mo_ta || '',
+          gia_ban: String(d.gia_ban || ''),
+          ma_danh_muc: String(d.ma_danh_muc || '1'),
+          hinh_anh: d.hinh_anh || '',
+          ma_nhom_list: d.ma_nhom_list || [],
+          nguyen_lieu_list: (d.nguyen_lieu_list || []).map(nl => ({
+            ma_nguyen_lieu: nl.ma_nguyen_lieu,
+            ten_nguyen_lieu: nl.ten_nguyen_lieu,
+            don_vi_tinh: nl.don_vi_tinh,
+            so_luong_mac_dinh: parseFloat(nl.so_luong_mac_dinh || 1),
+            co_the_tuy_bien: nl.co_the_tuy_bien === 1 || nl.co_the_tuy_bien === true,
+            so_luong_toi_da: parseFloat(nl.so_luong_toi_da || 3),
+            calo: parseFloat(nl.calo || 0),
+            protein: parseFloat(nl.protein || 0),
+            carbs: parseFloat(nl.carbs || 0),
+            fat: parseFloat(nl.fat || 0),
+            don_gia_thay_doi: parseFloat(nl.don_gia_thay_doi || 0)
+          }))
+        });
+      } else {
+        setFoodForm({
+          ten_mon: item.ten_mon,
+          mo_ta: item.mo_ta || '',
+          gia_ban: String(item.gia_ban),
+          ma_danh_muc: String(item.ma_danh_muc || '1'),
+          hinh_anh: item.hinh_anh || '',
+          ma_nhom_list: [],
+          nguyen_lieu_list: []
+        });
+      }
+    } catch (err) {
+      console.log('Lỗi tải chi tiết món ăn:', err.message);
+      setFoodForm({
+        ten_mon: item.ten_mon,
+        mo_ta: item.mo_ta || '',
+        gia_ban: String(item.gia_ban),
+        ma_danh_muc: String(item.ma_danh_muc || '1'),
+        hinh_anh: item.hinh_anh || '',
+        ma_nhom_list: [],
+        nguyen_lieu_list: []
+      });
+    } finally {
+      setLoadingFoodDetails(false);
+    }
+  };
+
+  const handleDeleteFood = (item) => {
+    Alert.alert(
+      'Xóa Món Ăn',
+      `Bạn có chắc chắn muốn xóa món "${item.ten_mon}" khỏi thực đơn?`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa Vĩnh Viễn',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const res = await deleteFoodItem(item.ma_mon_an);
+              if (res.success) {
+                Alert.alert('Thành công', `Đã xóa món "${item.ten_mon}"!`);
+                loadAllAdminData();
+              }
+            } catch (err) {
+              Alert.alert('Lỗi', err.message || 'Không thể xóa món ăn!');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleSaveFood = async () => {
+    if (!foodForm.ten_mon.trim() || !foodForm.gia_ban) {
       Alert.alert('Thiếu thông tin', 'Vui lòng nhập tên món và giá bán!');
       return;
     }
+    const price = parseFloat(foodForm.gia_ban);
+    if (isNaN(price) || price < 0) {
+      Alert.alert('Lỗi', 'Giá bán phải là số hợp lệ >= 0!');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const res = await createFoodItem({
-        ten_mon: foodForm.ten_mon,
-        mo_ta: foodForm.mo_ta,
-        gia_ban: parseFloat(foodForm.gia_ban),
-        ma_danh_muc: parseInt(foodForm.ma_danh_muc),
-      });
-      if (res.success) {
-        Alert.alert('Thành công', 'Đã thêm món mới vào thực đơn!');
-        setModalType(null);
-        setFoodForm({ ten_mon: '', mo_ta: '', gia_ban: '', ma_danh_muc: '1' });
-        loadAllAdminData();
+      const payload = {
+        ten_mon: foodForm.ten_mon.trim(),
+        mo_ta: foodForm.mo_ta.trim(),
+        gia_ban: price,
+        ma_danh_muc: foodForm.ma_danh_muc ? parseInt(foodForm.ma_danh_muc) : null,
+        hinh_anh: foodForm.hinh_anh.trim() || null,
+        ma_nhom_list: foodForm.ma_nhom_list,
+        nguyen_lieu_list: foodForm.nguyen_lieu_list.map(nl => ({
+          ma_nguyen_lieu: nl.ma_nguyen_lieu,
+          so_luong_mac_dinh: nl.so_luong_mac_dinh,
+          co_the_tuy_bien: nl.co_the_tuy_bien ? 1 : 0,
+          so_luong_toi_da: nl.so_luong_toi_da
+        }))
+      };
+
+      if (editingFoodId) {
+        const res = await updateFoodItem(editingFoodId, payload);
+        if (res.success) {
+          Alert.alert('Thành công 🎉', `Đã cập nhật món "${payload.ten_mon}"!`);
+          setModalType(null);
+          setEditingFoodId(null);
+          loadAllAdminData();
+        }
+      } else {
+        const res = await createFoodItem(payload);
+        if (res.success) {
+          Alert.alert('Thành công 🎉', `Đã thêm món "${payload.ten_mon}" vào thực đơn!`);
+          setModalType(null);
+          loadAllAdminData();
+        }
       }
     } catch (err) {
-      Alert.alert('Lỗi', err.message || 'Không thể tạo món!');
+      Alert.alert('Lỗi', err.message || 'Không thể lưu món ăn!');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // =========================================================================
+  // XỬ LÝ CRUD DANH MỤC (CATEGORIES)
+  // =========================================================================
+  const handleOpenCategoryManager = () => {
+    setCategoryForm({ ma_danh_muc: null, ten_danh_muc: '', mo_ta: '' });
+    setShowCategoryModal(true);
+  };
+
+  const handleSaveCategory = async () => {
+    if (!categoryForm.ten_danh_muc.trim()) {
+      Alert.alert('Thiếu thông tin', 'Vui lòng nhập tên danh mục!');
+      return;
+    }
+    setSavingCategory(true);
+    try {
+      if (categoryForm.ma_danh_muc) {
+        const res = await updateAdminCategory(categoryForm.ma_danh_muc, {
+          ten_danh_muc: categoryForm.ten_danh_muc.trim(),
+          mo_ta: categoryForm.mo_ta.trim()
+        });
+        if (res.success) {
+          Alert.alert('Thành công', 'Đã cập nhật danh mục!');
+          setCategoryForm({ ma_danh_muc: null, ten_danh_muc: '', mo_ta: '' });
+          loadAllAdminData();
+        }
+      } else {
+        const res = await createAdminCategory({
+          ten_danh_muc: categoryForm.ten_danh_muc.trim(),
+          mo_ta: categoryForm.mo_ta.trim()
+        });
+        if (res.success) {
+          Alert.alert('Thành công', 'Đã tạo danh mục mới!');
+          setCategoryForm({ ma_danh_muc: null, ten_danh_muc: '', mo_ta: '' });
+          loadAllAdminData();
+        }
+      }
+    } catch (err) {
+      Alert.alert('Lỗi', err.message || 'Không thể lưu danh mục!');
+    } finally {
+      setSavingCategory(false);
+    }
+  };
+
+  const handleDeleteCategory = (cat) => {
+    Alert.alert(
+      'Xóa Danh Mục',
+      `Bạn có chắc muốn xóa danh mục "${cat.ten_danh_muc}"? Các món thuộc danh mục này sẽ được chuyển thành Không phân loại.`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const res = await deleteAdminCategory(cat.ma_danh_muc);
+              if (res.success) {
+                Alert.alert('Thành công', 'Đã xóa danh mục!');
+                loadAllAdminData();
+              }
+            } catch (err) {
+              Alert.alert('Lỗi', err.message || 'Không thể xóa danh mục!');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // =========================================================================
+  // XỬ LÝ CRUD NHÓM TÙY CHỌN (KÍCH CỠ & TÙY CHỌN VỊ)
+  // =========================================================================
+  const handleOpenOptionGroupManager = () => {
+    setOptionGroupForm({ ma_nhom: null, ten_nhom: '', la_bat_buoc: false, chon_toi_da: '1', values: [] });
+    setShowOptionGroupModal(true);
+  };
+
+  const handleSaveOptionGroup = async () => {
+    if (!optionGroupForm.ten_nhom.trim()) {
+      Alert.alert('Thiếu thông tin', 'Vui lòng nhập tên nhóm tùy chọn!');
+      return;
+    }
+    setSavingOptionGroup(true);
+    try {
+      const payload = {
+        ten_nhom: optionGroupForm.ten_nhom.trim(),
+        la_bat_buoc: optionGroupForm.la_bat_buoc ? 1 : 0,
+        chon_toi_da: parseInt(optionGroupForm.chon_toi_da) || 1,
+        values: optionGroupForm.values
+      };
+      if (optionGroupForm.ma_nhom) {
+        const res = await updateAdminOptionGroup(optionGroupForm.ma_nhom, payload);
+        if (res.success) {
+          Alert.alert('Thành công', 'Đã cập nhật nhóm tùy chọn!');
+          setOptionGroupForm({ ma_nhom: null, ten_nhom: '', la_bat_buoc: false, chon_toi_da: '1', values: [] });
+          loadAllAdminData();
+        }
+      } else {
+        const res = await createAdminOptionGroup(payload);
+        if (res.success) {
+          Alert.alert('Thành công', 'Đã tạo nhóm tùy chọn mới!');
+          setOptionGroupForm({ ma_nhom: null, ten_nhom: '', la_bat_buoc: false, chon_toi_da: '1', values: [] });
+          loadAllAdminData();
+        }
+      }
+    } catch (err) {
+      Alert.alert('Lỗi', err.message || 'Không thể lưu nhóm tùy chọn!');
+    } finally {
+      setSavingOptionGroup(false);
+    }
+  };
+
+  const handleDeleteOptionGroup = (grp) => {
+    Alert.alert(
+      'Xóa Nhóm Tùy Chọn',
+      `Bạn có chắc muốn xóa nhóm "${grp.ten_nhom}"? Các lựa chọn kích cỡ/vị liên quan sẽ bị xóa.`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const res = await deleteAdminOptionGroup(grp.ma_nhom);
+              if (res.success) {
+                Alert.alert('Thành công', 'Đã xóa nhóm tùy chọn!');
+                loadAllAdminData();
+              }
+            } catch (err) {
+              Alert.alert('Lỗi', err.message || 'Không thể xóa nhóm tùy chọn!');
+            }
+          }
+        }
+      ]
+    );
   };
 
   // Thêm voucher mới
@@ -879,6 +1183,23 @@ export default function AdminScreen({ navigation }) {
   const renderMenuTab = () => {
     return (
       <View style={styles.tabContentBlock}>
+        {/* THANH CÔNG CỤ QUẢN TRỊ DANH MỤC & NHÓM KÍCH CỠ / VỊ */}
+        <View style={styles.adminToolRow}>
+          <TouchableOpacity 
+            style={styles.adminToolBtn}
+            onPress={handleOpenCategoryManager}
+          >
+            <Text style={styles.adminToolBtnText}>📁 Quản Lý Danh Mục ({categories.length})</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.adminToolBtn, { backgroundColor: '#EDE9FE', borderColor: '#C4B5FD' }]}
+            onPress={handleOpenOptionGroupManager}
+          >
+            <Text style={[styles.adminToolBtnText, { color: '#6D28D9' }]}>⚙️ Kích Cỡ & Vị ({optionGroups.length})</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* THANH TÌM KIẾM CHUẨN CÓ NÚT CLEAR TEXT ('✕') */}
         <View style={styles.searchBarContainer}>
           <Text style={styles.searchPrefixIcon}>🔍</Text>
@@ -899,22 +1220,34 @@ export default function AdminScreen({ navigation }) {
           )}
         </View>
 
-        {/* BỘ LỌC CHIPS (Lọc món hết hàng, món theo danh mục) */}
+        {/* BỘ LỌC CHIPS (Lọc theo danh mục động tải từ database) */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-          {[
-            { key: 'all', label: 'Tất cả món' },
-            { key: 'out_of_stock', label: '⚠️ Tạm Hết Hàng' },
-            { key: 'burgers', label: '🍔 Burgers' },
-            { key: 'chicken', label: '🍗 Gà Rán' },
-            { key: 'drinks', label: '🥤 Nước Uống' },
-          ].map(chip => (
+          <TouchableOpacity
+            style={[styles.chipItem, menuFilterCategory === 'all' && styles.chipItemActive]}
+            onPress={() => setMenuFilterCategory('all')}
+          >
+            <Text style={[styles.chipText, menuFilterCategory === 'all' && styles.chipTextActive]}>
+              Tất cả món
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.chipItem, menuFilterCategory === 'out_of_stock' && styles.chipItemActive]}
+            onPress={() => setMenuFilterCategory('out_of_stock')}
+          >
+            <Text style={[styles.chipText, menuFilterCategory === 'out_of_stock' && styles.chipTextActive]}>
+              ⚠️ Tạm Hết Hàng
+            </Text>
+          </TouchableOpacity>
+
+          {categories.map(cat => (
             <TouchableOpacity
-              key={chip.key}
-              style={[styles.chipItem, menuFilterCategory === chip.key && styles.chipItemActive]}
-              onPress={() => setMenuFilterCategory(chip.key)}
+              key={cat.ma_danh_muc}
+              style={[styles.chipItem, menuFilterCategory === String(cat.ma_danh_muc) && styles.chipItemActive]}
+              onPress={() => setMenuFilterCategory(String(cat.ma_danh_muc))}
             >
-              <Text style={[styles.chipText, menuFilterCategory === chip.key && styles.chipTextActive]}>
-                {chip.label}
+              <Text style={[styles.chipText, menuFilterCategory === String(cat.ma_danh_muc) && styles.chipTextActive]}>
+                🏷️ {cat.ten_danh_muc}
               </Text>
             </TouchableOpacity>
           ))}
@@ -925,16 +1258,17 @@ export default function AdminScreen({ navigation }) {
           <Text style={styles.listSectionCount}>Tìm thấy {filteredFoods.length} món ăn</Text>
           <TouchableOpacity 
             style={styles.addNewItemBtn} 
-            onPress={() => setModalType('addFood')}
+            onPress={handleOpenAddFood}
           >
             <Text style={styles.addNewItemText}>+ Thêm Món Mới</Text>
           </TouchableOpacity>
         </View>
 
-        {/* DANH SÁCH MÓN ĂN VỚI TOGGLE / SWITCH BẬT TẮT HẾT HÀNG NHANH */}
+        {/* DANH SÁCH MÓN ĂN VỚI SỬA, XÓA VÀ SWITCH BẬT TẮT HẾT HÀNG */}
         <View style={styles.foodListWrapper}>
           {filteredFoods.map(item => {
             const isAvailable = item.trang_thai === 'con_hang';
+            const catName = categories.find(c => c.ma_danh_muc === item.ma_danh_muc)?.ten_danh_muc || 'Chưa phân loại';
 
             return (
               <View key={item.ma_mon_an} style={styles.foodItemRowCard}>
@@ -947,11 +1281,33 @@ export default function AdminScreen({ navigation }) {
                       </Text>
                     </View>
                   </View>
-                  <Text style={styles.foodItemDesc} numberOfLines={1}>{item.mo_ta || 'Món ăn fastfood'}</Text>
+
+                  <View style={styles.foodCategoryBadge}>
+                    <Text style={styles.foodCategoryBadgeText}>🏷️ {catName}</Text>
+                  </View>
+
+                  <Text style={styles.foodItemDesc} numberOfLines={2}>{item.mo_ta || 'Món ăn nhanh hấp dẫn'}</Text>
                   <Text style={styles.foodItemPrice}>{parseFloat(item.gia_ban).toLocaleString('vi-VN')} đ</Text>
+
+                  {/* CỤM NÚT SỬA & XÓA MÓN ĂN */}
+                  <View style={styles.foodActionButtonsRow}>
+                    <TouchableOpacity 
+                      style={styles.foodActionEditBtn}
+                      onPress={() => handleOpenEditFood(item)}
+                    >
+                      <Text style={styles.foodActionEditText}>✏️ Sửa Món</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                      style={styles.foodActionDeleteBtn}
+                      onPress={() => handleDeleteFood(item)}
+                    >
+                      <Text style={styles.foodActionDeleteText}>🗑️ Xóa</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
-                {/* CỤM SWITCH/TOGGLE BÊN CẠNH MỖI MÓN THEO YÊU CẦU */}
+                {/* CỤM SWITCH/TOGGLE BÊN CẠNH MỖI MÓN */}
                 <View style={styles.switchControlCol}>
                   <Text style={styles.switchColLabel}>Tồn kho</Text>
                   <Switch
@@ -1493,40 +1849,614 @@ export default function AdminScreen({ navigation }) {
       </View>
 
       {/* ========================================================================= */}
-      {/* MODAL THÊM MÓN ĂN MỚI */}
+      {/* MODAL THÊM / SỬA MÓN ĂN MỚI TOÀN DIỆN (3 TABS: CƠ BẢN, KÍCH CỠ/VỊ, DINH DƯỠNG) */}
       {/* ========================================================================= */}
       <Modal visible={modalType === 'addFood'} animationType="slide" transparent={true}>
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalHeading}>🍔 Thêm Món Ăn Mới</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Tên món ăn (VD: Burger Gà Cay)..."
-              value={foodForm.ten_mon}
-              onChangeText={t => setFoodForm({ ...foodForm, ten_mon: t })}
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Giá bán (VD: 45000)..."
-              keyboardType="numeric"
-              value={foodForm.gia_ban}
-              onChangeText={t => setFoodForm({ ...foodForm, gia_ban: t })}
-            />
-            <TextInput
-              style={[styles.modalInput, { height: 60 }]}
-              placeholder="Mô tả món ăn..."
-              multiline
-              value={foodForm.mo_ta}
-              onChangeText={t => setFoodForm({ ...foodForm, mo_ta: t })}
-            />
+          <View style={[styles.modalCard, { maxHeight: '92%', paddingBottom: 16 }]}>
+            <Text style={styles.modalHeading}>
+              {editingFoodId ? '✏️ Chỉnh Sửa Món Ăn' : '🍔 Thêm Món Ăn Mới'}
+            </Text>
+
+            {/* Sub-tabs chuyển đổi giữa 3 mục */}
+            <View style={styles.foodModalSubTabsRow}>
+              <TouchableOpacity
+                style={[styles.foodModalSubTabBtn, foodModalSubTab === 'basic' && styles.foodModalSubTabBtnActive]}
+                onPress={() => setFoodModalSubTab('basic')}
+              >
+                <Text style={[styles.foodModalSubTabText, foodModalSubTab === 'basic' && styles.foodModalSubTabTextActive]}>
+                  📝 Cơ bản
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.foodModalSubTabBtn, foodModalSubTab === 'options' && styles.foodModalSubTabBtnActive]}
+                onPress={() => setFoodModalSubTab('options')}
+              >
+                <Text style={[styles.foodModalSubTabText, foodModalSubTab === 'options' && styles.foodModalSubTabTextActive]}>
+                  🥤 Kích cỡ & Vị
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.foodModalSubTabBtn, foodModalSubTab === 'nutrition' && styles.foodModalSubTabBtnActive]}
+                onPress={() => setFoodModalSubTab('nutrition')}
+              >
+                <Text style={[styles.foodModalSubTabText, foodModalSubTab === 'nutrition' && styles.foodModalSubTabTextActive]}>
+                  🥗 Dinh dưỡng
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {loadingFoodDetails ? (
+              <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#E11D48" />
+                <Text style={{ marginTop: 10, color: '#64748B' }}>Đang tải cấu hình món ăn...</Text>
+              </View>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+                {/* ------------------------------------------------------------- */}
+                {/* TAB 1: THÔNG TIN CƠ BẢN */}
+                {/* ------------------------------------------------------------- */}
+                {foodModalSubTab === 'basic' && (
+                  <View style={{ paddingTop: 6 }}>
+                    <Text style={styles.formFieldLabel}>Tên món ăn (*):</Text>
+                    <TextInput
+                      style={styles.modalInput}
+                      placeholder="VD: Burger Bò Phô Mai Nướng..."
+                      value={foodForm.ten_mon}
+                      onChangeText={t => setFoodForm({ ...foodForm, ten_mon: t })}
+                    />
+
+                    <Text style={styles.formFieldLabel}>Giá bán VNĐ (*):</Text>
+                    <TextInput
+                      style={styles.modalInput}
+                      placeholder="VD: 55000..."
+                      keyboardType="numeric"
+                      value={foodForm.gia_ban}
+                      onChangeText={t => setFoodForm({ ...foodForm, gia_ban: t })}
+                    />
+
+                    <Text style={styles.formFieldLabel}>Thuộc Danh mục:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                      {categories.map(cat => {
+                        const isSelected = String(foodForm.ma_danh_muc) === String(cat.ma_danh_muc);
+                        return (
+                          <TouchableOpacity
+                            key={cat.ma_danh_muc}
+                            style={[styles.categorySelectChip, isSelected && styles.categorySelectChipActive]}
+                            onPress={() => setFoodForm({ ...foodForm, ma_danh_muc: String(cat.ma_danh_muc) })}
+                          >
+                            <Text style={[styles.categorySelectText, isSelected && styles.categorySelectTextActive]}>
+                              {cat.ten_danh_muc}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+
+                    <Text style={styles.formFieldLabel}>Mô tả món ăn:</Text>
+                    <TextInput
+                      style={[styles.modalInput, { height: 65 }]}
+                      placeholder="Mô tả hương vị, thành phần nguyên liệu..."
+                      multiline
+                      value={foodForm.mo_ta}
+                      onChangeText={t => setFoodForm({ ...foodForm, mo_ta: t })}
+                    />
+
+                    <Text style={styles.formFieldLabel}>Link ảnh món ăn (URL):</Text>
+                    <TextInput
+                      style={styles.modalInput}
+                      placeholder="https://images.unsplash.com/..."
+                      value={foodForm.hinh_anh}
+                      onChangeText={t => setFoodForm({ ...foodForm, hinh_anh: t })}
+                    />
+                  </View>
+                )}
+
+                {/* ------------------------------------------------------------- */}
+                {/* TAB 2: KÍCH CỠ & TÙY CHỌN VỊ (OPTION GROUPS) */}
+                {/* ------------------------------------------------------------- */}
+                {foodModalSubTab === 'options' && (
+                  <View style={{ paddingTop: 6 }}>
+                    <Text style={styles.tabSectionGuide}>
+                      💡 Tick chọn các nhóm kích cỡ hoặc tùy chọn vị áp dụng cho món này:
+                    </Text>
+
+                    {optionGroups.length === 0 ? (
+                      <Text style={{ color: '#94A3B8', fontStyle: 'italic', marginVertical: 15 }}>
+                        Chưa có nhóm tùy chọn nào trong hệ thống.
+                      </Text>
+                    ) : (
+                      optionGroups.map(grp => {
+                        const isChecked = foodForm.ma_nhom_list.includes(grp.ma_nhom);
+                        return (
+                          <View key={grp.ma_nhom} style={[styles.optionGroupCard, isChecked && styles.optionGroupCardActive]}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <View style={{ flex: 1, paddingRight: 10 }}>
+                                <Text style={styles.optionGroupCardTitle}>{grp.ten_nhom}</Text>
+                                <Text style={styles.optionGroupCardSub}>
+                                  {grp.la_bat_buoc ? '⚠️ Bắt buộc chọn' : 'Tùy chọn tự do'} • Tối đa {grp.chon_toi_da} lựa chọn
+                                </Text>
+                              </View>
+                              <Switch
+                                value={isChecked}
+                                trackColor={{ false: '#CBD5E1', true: '#FECDD3' }}
+                                thumbColor={isChecked ? '#E11D48' : '#94A3B8'}
+                                onValueChange={(val) => {
+                                  if (val) {
+                                    setFoodForm({
+                                      ...foodForm,
+                                      ma_nhom_list: [...foodForm.ma_nhom_list, grp.ma_nhom]
+                                    });
+                                  } else {
+                                    setFoodForm({
+                                      ...foodForm,
+                                      ma_nhom_list: foodForm.ma_nhom_list.filter(id => id !== grp.ma_nhom)
+                                    });
+                                  }
+                                }}
+                              />
+                            </View>
+
+                            {/* Danh sách lựa chọn con bên trong nhóm */}
+                            <View style={styles.optionGroupValuesPreview}>
+                              {(grp.values || []).map(val => (
+                                <View key={val.ma_gia_tri} style={styles.optionValueTag}>
+                                  <Text style={styles.optionValueTagText}>
+                                    {val.ten_gia_tri} {parseFloat(val.gia_tang_them) > 0 ? `(+${parseFloat(val.gia_tang_them).toLocaleString('vi-VN')}đ)` : '(+0đ)'}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        );
+                      })
+                    )}
+                  </View>
+                )}
+
+                {/* ------------------------------------------------------------- */}
+                {/* TAB 3: TÙY BIẾN DINH DƯỠNG (NUTRITION RECIPE) */}
+                {/* ------------------------------------------------------------- */}
+                {foodModalSubTab === 'nutrition' && (
+                  <View style={{ paddingTop: 6 }}>
+                    <Text style={styles.tabSectionGuide}>
+                      🥗 Định lượng nguyên liệu và cho phép khách hàng tùy biến tăng/giảm/bỏ khi đặt:
+                    </Text>
+
+                    {/* Tổng quan dinh dưỡng của 1 khẩu phần mặc định */}
+                    {(() => {
+                      const totalCalo = foodForm.nguyen_lieu_list.reduce((s, i) => s + (i.calo || 0) * (i.so_luong_mac_dinh || 0), 0);
+                      const totalProtein = foodForm.nguyen_lieu_list.reduce((s, i) => s + (i.protein || 0) * (i.so_luong_mac_dinh || 0), 0);
+                      const totalCarbs = foodForm.nguyen_lieu_list.reduce((s, i) => s + (i.carbs || 0) * (i.so_luong_mac_dinh || 0), 0);
+                      const totalFat = foodForm.nguyen_lieu_list.reduce((s, i) => s + (i.fat || 0) * (i.so_luong_mac_dinh || 0), 0);
+
+                      return (
+                        <View style={styles.nutritionSummaryBox}>
+                          <Text style={styles.nutritionSummaryTitle}>📊 Ước tính 1 khẩu phần mặc định:</Text>
+                          <View style={styles.nutritionSummaryRow}>
+                            <Text style={styles.nutritionSummaryStat}>🔥 {Math.round(totalCalo)} kcal</Text>
+                            <Text style={styles.nutritionSummaryStat}>🥩 Đạm: {Math.round(totalProtein)}g</Text>
+                            <Text style={styles.nutritionSummaryStat}>🍞 Carb: {Math.round(totalCarbs)}g</Text>
+                            <Text style={styles.nutritionSummaryStat}>🥑 Béo: {Math.round(totalFat)}g</Text>
+                          </View>
+                        </View>
+                      );
+                    })()}
+
+                    {/* Danh sách các nguyên liệu chưa thêm để chọn thêm */}
+                    <Text style={[styles.formFieldLabel, { marginTop: 12 }]}>+ Thêm nguyên liệu vào món:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                      {ingredients
+                        .filter(ing => !foodForm.nguyen_lieu_list.some(item => item.ma_nguyen_lieu === ing.ma_nguyen_lieu))
+                        .map(ing => (
+                          <TouchableOpacity
+                            key={ing.ma_nguyen_lieu}
+                            style={styles.addIngChip}
+                            onPress={() => {
+                              setFoodForm({
+                                ...foodForm,
+                                nguyen_lieu_list: [
+                                  ...foodForm.nguyen_lieu_list,
+                                  {
+                                    ma_nguyen_lieu: ing.ma_nguyen_lieu,
+                                    ten_nguyen_lieu: ing.ten_nguyen_lieu,
+                                    don_vi_tinh: ing.don_vi_tinh,
+                                    so_luong_mac_dinh: 1,
+                                    co_the_tuy_bien: true,
+                                    so_luong_toi_da: 3,
+                                    calo: parseFloat(ing.calo || 0),
+                                    protein: parseFloat(ing.protein || 0),
+                                    carbs: parseFloat(ing.carbs || 0),
+                                    fat: parseFloat(ing.fat || 0),
+                                    don_gia_thay_doi: parseFloat(ing.don_gia_thay_doi || 0)
+                                  }
+                                ]
+                              });
+                            }}
+                          >
+                            <Text style={styles.addIngChipText}>+ {ing.ten_nguyen_lieu}</Text>
+                          </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+
+                    {/* Danh sách nguyên liệu đã cấu hình trong món */}
+                    {foodForm.nguyen_lieu_list.map((nl, idx) => (
+                      <View key={nl.ma_nguyen_lieu} style={styles.ingredientRowCard}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Text style={styles.ingredientCardName}>
+                            🌿 {nl.ten_nguyen_lieu} ({nl.don_vi_tinh})
+                          </Text>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setFoodForm({
+                                ...foodForm,
+                                nguyen_lieu_list: foodForm.nguyen_lieu_list.filter((_, i) => i !== idx)
+                              });
+                            }}
+                          >
+                            <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 13 }}>🗑️ Bỏ</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* Định lượng mặc định */}
+                        <View style={styles.ingControlRow}>
+                          <Text style={styles.ingControlLabel}>Số lượng chuẩn:</Text>
+                          <View style={styles.stepperRow}>
+                            <TouchableOpacity
+                              style={styles.stepperBtn}
+                              onPress={() => {
+                                const nextVal = Math.max(0, nl.so_luong_mac_dinh - 1);
+                                const updated = [...foodForm.nguyen_lieu_list];
+                                updated[idx].so_luong_mac_dinh = nextVal;
+                                setFoodForm({ ...foodForm, nguyen_lieu_list: updated });
+                              }}
+                            >
+                              <Text style={styles.stepperBtnText}>-</Text>
+                            </TouchableOpacity>
+                            <Text style={styles.stepperValText}>{nl.so_luong_mac_dinh}</Text>
+                            <TouchableOpacity
+                              style={styles.stepperBtn}
+                              onPress={() => {
+                                const updated = [...foodForm.nguyen_lieu_list];
+                                updated[idx].so_luong_mac_dinh = nl.so_luong_mac_dinh + 1;
+                                setFoodForm({ ...foodForm, nguyen_lieu_list: updated });
+                              }}
+                            >
+                              <Text style={styles.stepperBtnText}>+</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+
+                        {/* Cho phép khách tùy biến */}
+                        <View style={styles.ingControlRow}>
+                          <Text style={styles.ingControlLabel}>Khách được tùy biến (bỏ/thêm):</Text>
+                          <Switch
+                            value={nl.co_the_tuy_bien}
+                            trackColor={{ false: '#CBD5E1', true: '#A7F3D0' }}
+                            thumbColor={nl.co_the_tuy_bien ? '#10B981' : '#94A3B8'}
+                            onValueChange={(val) => {
+                              const updated = [...foodForm.nguyen_lieu_list];
+                              updated[idx].co_the_tuy_bien = val;
+                              setFoodForm({ ...foodForm, nguyen_lieu_list: updated });
+                            }}
+                          />
+                        </View>
+
+                        {/* Tối đa khách được thêm */}
+                        {nl.co_the_tuy_bien && (
+                          <View style={styles.ingControlRow}>
+                            <Text style={styles.ingControlLabel}>Tối đa khách được tăng:</Text>
+                            <View style={styles.stepperRow}>
+                              <TouchableOpacity
+                                style={styles.stepperBtn}
+                                onPress={() => {
+                                  const nextVal = Math.max(1, nl.so_luong_toi_da - 1);
+                                  const updated = [...foodForm.nguyen_lieu_list];
+                                  updated[idx].so_luong_toi_da = nextVal;
+                                  setFoodForm({ ...foodForm, nguyen_lieu_list: updated });
+                                }}
+                              >
+                                <Text style={styles.stepperBtnText}>-</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.stepperValText}>{nl.so_luong_toi_da}</Text>
+                              <TouchableOpacity
+                                style={styles.stepperBtn}
+                                onPress={() => {
+                                  const updated = [...foodForm.nguyen_lieu_list];
+                                  updated[idx].so_luong_toi_da = nl.so_luong_toi_da + 1;
+                                  setFoodForm({ ...foodForm, nguyen_lieu_list: updated });
+                                }}
+                              >
+                                <Text style={styles.stepperBtnText}>+</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </ScrollView>
+            )}
+
+            {/* Footer Buttons */}
             <View style={styles.modalBtnGroup}>
               <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setModalType(null)}>
                 <Text style={styles.modalCancelText}>Hủy</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSubmitBtn} onPress={handleAddFood} disabled={submitting}>
-                <Text style={styles.modalSubmitText}>Lưu Món</Text>
+              <TouchableOpacity 
+                style={styles.modalSubmitBtn} 
+                onPress={handleSaveFood} 
+                disabled={submitting || loadingFoodDetails}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalSubmitText}>{editingFoodId ? 'Cập Nhật Món' : 'Lưu Món Mới'}</Text>
+                )}
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ========================================================================= */}
+      {/* MODAL QUẢN LÝ DANH MỤC MÓN ĂN (CRUD DANH MỤC) */}
+      {/* ========================================================================= */}
+      <Modal visible={showCategoryModal} animationType="slide" transparent={true}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { maxHeight: '90%' }]}>
+            <Text style={styles.modalHeading}>📁 Quản Lý Danh Mục Món Ăn</Text>
+
+            {/* Form tạo mới hoặc chỉnh sửa danh mục */}
+            <View style={styles.categoryFormBox}>
+              <Text style={styles.formSubHeading}>
+                {categoryForm.ma_danh_muc ? '✏️ Cập Nhật Danh Mục' : '+ Thêm Danh Mục Mới'}
+              </Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Tên danh mục (VD: Burgers, Trà Sữa...)"
+                value={categoryForm.ten_danh_muc}
+                onChangeText={t => setCategoryForm({ ...categoryForm, ten_danh_muc: t })}
+              />
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Mô tả danh mục..."
+                value={categoryForm.mo_ta}
+                onChangeText={t => setCategoryForm({ ...categoryForm, mo_ta: t })}
+              />
+              <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'flex-end' }}>
+                {categoryForm.ma_danh_muc && (
+                  <TouchableOpacity
+                    style={[styles.smallBtn, { backgroundColor: '#F1F5F9' }]}
+                    onPress={() => setCategoryForm({ ma_danh_muc: null, ten_danh_muc: '', mo_ta: '' })}
+                  >
+                    <Text style={{ color: '#475569', fontWeight: 'bold' }}>Hủy sửa</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.smallBtn, { backgroundColor: '#E11D48' }]}
+                  onPress={handleSaveCategory}
+                  disabled={savingCategory}
+                >
+                  {savingCategory ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>
+                      {categoryForm.ma_danh_muc ? '💾 Lưu Sửa' : '+ Tạo Mới'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Danh sách các danh mục hiện có */}
+            <Text style={[styles.formFieldLabel, { marginTop: 12 }]}>
+              Danh sách danh mục hiện có ({categories.length}):
+            </Text>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 260 }}>
+              {categories.map(cat => (
+                <View key={cat.ma_danh_muc} style={styles.categoryItemRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.categoryItemTitle}>📁 {cat.ten_danh_muc}</Text>
+                    <Text style={styles.categoryItemDesc} numberOfLines={1}>
+                      {cat.mo_ta || 'Chưa có mô tả'}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <TouchableOpacity
+                      style={styles.miniActionEditBtn}
+                      onPress={() => setCategoryForm({
+                        ma_danh_muc: cat.ma_danh_muc,
+                        ten_danh_muc: cat.ten_danh_muc,
+                        mo_ta: cat.mo_ta || ''
+                      })}
+                    >
+                      <Text style={styles.miniActionEditText}>Sửa</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.miniActionDeleteBtn}
+                      onPress={() => handleDeleteCategory(cat)}
+                    >
+                      <Text style={styles.miniActionDeleteText}>Xóa</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity 
+              style={[styles.modalCancelBtn, { marginTop: 14, width: '100%' }]}
+              onPress={() => setShowCategoryModal(false)}
+            >
+              <Text style={styles.modalCancelText}>Đóng Cửa Sổ</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ========================================================================= */}
+      {/* MODAL QUẢN LÝ NHÓM TÙY CHỌN (KÍCH CỠ & TÙY CHỌN VỊ) */}
+      {/* ========================================================================= */}
+      <Modal visible={showOptionGroupModal} animationType="slide" transparent={true}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { maxHeight: '92%' }]}>
+            <Text style={styles.modalHeading}>⚙️ Quản Lý Kích Cỡ & Tùy Chọn Vị</Text>
+
+            {/* Form tạo mới hoặc cập nhật nhóm */}
+            <View style={styles.categoryFormBox}>
+              <Text style={styles.formSubHeading}>
+                {optionGroupForm.ma_nhom ? '✏️ Sửa Nhóm Tùy Chọn' : '+ Tạo Nhóm Tùy Chọn Mới'}
+              </Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Tên nhóm (VD: Kích cỡ Size, Vị Gà rán...)"
+                value={optionGroupForm.ten_nhom}
+                onChangeText={t => setOptionGroupForm({ ...optionGroupForm, ten_nhom: t })}
+              />
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={{ fontSize: 13, color: '#334155', fontWeight: '500' }}>Bắt buộc khách phải chọn:</Text>
+                <Switch
+                  value={optionGroupForm.la_bat_buoc}
+                  trackColor={{ false: '#CBD5E1', true: '#FECDD3' }}
+                  thumbColor={optionGroupForm.la_bat_buoc ? '#E11D48' : '#94A3B8'}
+                  onValueChange={v => setOptionGroupForm({ ...optionGroupForm, la_bat_buoc: v })}
+                />
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 10 }}>
+                <Text style={{ fontSize: 13, color: '#334155', fontWeight: '500' }}>Số lượng chọn tối đa:</Text>
+                <TextInput
+                  style={[styles.modalInput, { width: 60, height: 36, marginBottom: 0, textAlign: 'center' }]}
+                  keyboardType="numeric"
+                  value={String(optionGroupForm.chon_toi_da)}
+                  onChangeText={t => setOptionGroupForm({ ...optionGroupForm, chon_toi_da: t })}
+                />
+              </View>
+
+              {/* Danh sách lựa chọn con trong nhóm */}
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#64748B', marginBottom: 6 }}>
+                Các lựa chọn con (Size S/M/L, Vị truyền thống, Sốt cay...):
+              </Text>
+              {(optionGroupForm.values || []).map((val, vIdx) => (
+                <View key={vIdx} style={{ flexDirection: 'row', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+                  <TextInput
+                    style={[styles.modalInput, { flex: 2, height: 36, marginBottom: 0, fontSize: 12 }]}
+                    placeholder="Tên lựa chọn (VD: Cỡ L)"
+                    value={val.ten_gia_tri}
+                    onChangeText={t => {
+                      const updated = [...optionGroupForm.values];
+                      updated[vIdx].ten_gia_tri = t;
+                      setOptionGroupForm({ ...optionGroupForm, values: updated });
+                    }}
+                  />
+                  <TextInput
+                    style={[styles.modalInput, { flex: 1.2, height: 36, marginBottom: 0, fontSize: 12 }]}
+                    placeholder="Phụ thu (VD: 5000)"
+                    keyboardType="numeric"
+                    value={String(val.gia_tang_them || '0')}
+                    onChangeText={t => {
+                      const updated = [...optionGroupForm.values];
+                      updated[vIdx].gia_tang_them = t;
+                      setOptionGroupForm({ ...optionGroupForm, values: updated });
+                    }}
+                  />
+                  <TouchableOpacity
+                    onPress={() => {
+                      setOptionGroupForm({
+                        ...optionGroupForm,
+                        values: optionGroupForm.values.filter((_, i) => i !== vIdx)
+                      });
+                    }}
+                  >
+                    <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 14 }}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              <TouchableOpacity
+                style={{ paddingVertical: 6 }}
+                onPress={() => {
+                  setOptionGroupForm({
+                    ...optionGroupForm,
+                    values: [...optionGroupForm.values, { ten_gia_tri: '', gia_tang_them: 0 }]
+                  });
+                }}
+              >
+                <Text style={{ color: '#E11D48', fontWeight: '700', fontSize: 12 }}>+ Thêm Lựa Chọn Con</Text>
+              </TouchableOpacity>
+
+              <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+                {optionGroupForm.ma_nhom && (
+                  <TouchableOpacity
+                    style={[styles.smallBtn, { backgroundColor: '#F1F5F9' }]}
+                    onPress={() => setOptionGroupForm({ ma_nhom: null, ten_nhom: '', la_bat_buoc: false, chon_toi_da: '1', values: [] })}
+                  >
+                    <Text style={{ color: '#475569', fontWeight: 'bold' }}>Hủy sửa</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.smallBtn, { backgroundColor: '#7C3AED' }]}
+                  onPress={handleSaveOptionGroup}
+                  disabled={savingOptionGroup}
+                >
+                  {savingOptionGroup ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>
+                      {optionGroupForm.ma_nhom ? '💾 Lưu Sửa' : '+ Tạo Nhóm'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Danh sách các nhóm hiện có */}
+            <Text style={[styles.formFieldLabel, { marginTop: 12 }]}>
+              Nhóm tùy chọn hiện có ({optionGroups.length}):
+            </Text>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 200 }}>
+              {optionGroups.map(grp => (
+                <View key={grp.ma_nhom} style={styles.categoryItemRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.categoryItemTitle}>⚙️ {grp.ten_nhom}</Text>
+                    <Text style={styles.categoryItemDesc}>
+                      {grp.la_bat_buoc ? 'Bắt buộc' : 'Tùy chọn'} • Tối đa {grp.chon_toi_da} • {(grp.values || []).length} giá trị
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <TouchableOpacity
+                      style={styles.miniActionEditBtn}
+                      onPress={() => setOptionGroupForm({
+                        ma_nhom: grp.ma_nhom,
+                        ten_nhom: grp.ten_nhom,
+                        la_bat_buoc: grp.la_bat_buoc,
+                        chon_toi_da: String(grp.chon_toi_da),
+                        values: (grp.values || []).map(v => ({ ten_gia_tri: v.ten_gia_tri, gia_tang_them: v.gia_tang_them }))
+                      })}
+                    >
+                      <Text style={styles.miniActionEditText}>Sửa</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.miniActionDeleteBtn}
+                      onPress={() => handleDeleteOptionGroup(grp)}
+                    >
+                      <Text style={styles.miniActionDeleteText}>Xóa</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity 
+              style={[styles.modalCancelBtn, { marginTop: 14, width: '100%' }]}
+              onPress={() => setShowOptionGroupModal(false)}
+            >
+              <Text style={styles.modalCancelText}>Đóng Cửa Sổ</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -3365,5 +4295,338 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontSize: 14,
     fontWeight: '800',
+  },
+
+  // =========================================================================
+  // STYLES QUẢN TRỊ THỰC ĐƠN, DANH MỤC, KÍCH CỠ & DINH DƯỠNG
+  // =========================================================================
+  adminToolRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  adminToolBtn: {
+    flex: 1,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adminToolBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
+  foodCategoryBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginVertical: 4,
+  },
+  foodCategoryBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  foodActionButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  foodActionEditBtn: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  foodActionEditText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#E11D48',
+  },
+  foodActionDeleteBtn: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  foodActionDeleteText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+
+  // Sub-tabs in food modal
+  foodModalSubTabsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 14,
+  },
+  foodModalSubTabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  foodModalSubTabBtnActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  foodModalSubTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  foodModalSubTabTextActive: {
+    color: '#E11D48',
+    fontWeight: '800',
+  },
+
+  // Category select chip inside modal
+  categorySelectChip: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  categorySelectChipActive: {
+    backgroundColor: '#FFE4E6',
+    borderColor: '#E11D48',
+  },
+  categorySelectText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  categorySelectTextActive: {
+    color: '#E11D48',
+    fontWeight: '800',
+  },
+  tabSectionGuide: {
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+
+  // Option group cards in modal
+  optionGroupCard: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+  },
+  optionGroupCardActive: {
+    borderColor: '#FECDD3',
+    backgroundColor: '#FFF1F2',
+  },
+  optionGroupCardTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  optionGroupCardSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  optionGroupValuesPreview: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  optionValueTag: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  optionValueTagText: {
+    fontSize: 11,
+    color: '#334155',
+    fontWeight: '500',
+  },
+
+  // Nutrition summary & recipe builder
+  nutritionSummaryBox: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+  },
+  nutritionSummaryTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#166534',
+    marginBottom: 6,
+  },
+  nutritionSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  nutritionSummaryStat: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#15803D',
+  },
+  addIngChip: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    marginRight: 6,
+  },
+  addIngChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1D4ED8',
+  },
+  ingredientRowCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+  },
+  ingredientCardName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  ingControlRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  ingControlLabel: {
+    fontSize: 12,
+    color: '#475569',
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  stepperBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    backgroundColor: '#F1F5F9',
+  },
+  stepperBtnText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#0F172A',
+  },
+  stepperValText: {
+    paddingHorizontal: 8,
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#0F172A',
+  },
+
+  // Category and Option Group Managers
+  categoryFormBox: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+  },
+  formSubHeading: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 8,
+  },
+  smallBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  categoryItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 6,
+  },
+  categoryItemTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  categoryItemDesc: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  miniActionEditBtn: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  miniActionEditText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
+  miniActionDeleteBtn: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  miniActionDeleteText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#E11D48',
   },
 });

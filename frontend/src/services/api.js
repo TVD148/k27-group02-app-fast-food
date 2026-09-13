@@ -547,6 +547,34 @@ export const fetchOnlinePersonnel = async () => {
   }
 };
 
+// CRUD Danh mục món ăn
+export const createAdminCategory = async (categoryData) => {
+  try {
+    const response = await api.post('/admin/categories', categoryData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể tạo danh mục mới!');
+  }
+};
+
+export const updateAdminCategory = async (categoryId, categoryData) => {
+  try {
+    const response = await api.put(`/admin/categories/${categoryId}`, categoryData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể cập nhật danh mục!');
+  }
+};
+
+export const deleteAdminCategory = async (categoryId) => {
+  try {
+    const response = await api.delete(`/admin/categories/${categoryId}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể xóa danh mục!');
+  }
+};
+
 // CRUD Món ăn
 export const createFoodItem = async (foodData) => {
   try {
@@ -572,6 +600,53 @@ export const deleteFoodItem = async (itemId) => {
     return response.data;
   } catch (error) {
     throw error.response?.data || new Error('Không thể xóa món ăn!');
+  }
+};
+
+// Lấy chi tiết món ăn cho Admin (kèm kích cỡ, tùy chọn vị và công thức dinh dưỡng)
+export const fetchItemAdminDetails = async (itemId) => {
+  try {
+    const response = await api.get(`/admin/items/${itemId}/details`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể lấy chi tiết món ăn!');
+  }
+};
+
+// CRUD Nhóm Tùy Chọn (Kích cỡ Size, Tùy chọn vị, Topping)
+export const fetchAdminOptionGroups = async () => {
+  try {
+    const response = await api.get('/admin/option-groups');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể tải danh sách nhóm tùy chọn!');
+  }
+};
+
+export const createAdminOptionGroup = async (groupData) => {
+  try {
+    const response = await api.post('/admin/option-groups', groupData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể tạo nhóm tùy chọn mới!');
+  }
+};
+
+export const updateAdminOptionGroup = async (groupId, groupData) => {
+  try {
+    const response = await api.put(`/admin/option-groups/${groupId}`, groupData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể cập nhật nhóm tùy chọn!');
+  }
+};
+
+export const deleteAdminOptionGroup = async (groupId) => {
+  try {
+    const response = await api.delete(`/admin/option-groups/${groupId}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể xóa nhóm tùy chọn!');
   }
 };
 

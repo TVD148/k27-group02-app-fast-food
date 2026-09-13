@@ -148,10 +148,44 @@ const createOrder = async (req, res) => {
     if (ma_code) {
       const cleanCode = ma_code.trim().toUpperCase();
       const [vouchers] = await db.query('SELECT * FROM ma_giam_gia WHERE UPPER(ma_code) = ? AND trang_thai = "hoat_dong"', [cleanCode]);
-      if (vouchers.length > 0) {
-        const v = vouchers[0];
-        if (tongTienHang >= parseFloat(v.don_hang_toi_thieu || 0) && v.so_luong_da_dung < v.so_luong_phat_hanh) {
-          maVoucherId = v.ma_voucher;
+      if (vouchers.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Mã giảm giá '${cleanCode}' không tồn tại hoặc đã hết hạn!`
+        });
+      }
+
+      const v = vouchers[0];
+
+      // Kiểm tra mỗi tài khoản chỉ dùng được 1 lần
+      if (userId) {
+        const [usedOrders] = await db.query(
+          'SELECT ma_don_hang FROM don_hang WHERE ma_nguoi_dung = ? AND ma_voucher = ? AND trang_thai_don_hang != "da_huy"',
+          [userId, v.ma_voucher]
+        );
+        if (usedOrders.length > 0) {
+          return res.status(400).json({
+            success: false,
+            message: `Mã giảm giá '${cleanCode}' đã được sử dụng trên tài khoản của bạn! Mỗi tài khoản chỉ được dùng mã này 1 lần.`
+          });
+        }
+      }
+
+      if (v.so_luong_da_dung >= v.so_luong_phat_hanh) {
+        return res.status(400).json({
+          success: false,
+          message: `Mã giảm giá '${cleanCode}' đã hết lượt sử dụng!`
+        });
+      }
+
+      if (tongTienHang < parseFloat(v.don_hang_toi_thieu || 0)) {
+        return res.status(400).json({
+          success: false,
+          message: `Đơn hàng chưa đạt giá trị tối thiểu (${parseFloat(v.don_hang_toi_thieu).toLocaleString('vi-VN')}đ) để áp dụng mã '${cleanCode}'!`
+        });
+      }
+
+      maVoucherId = v.ma_voucher;
           const isFreeship = v.loai_ap_dung === 'phi_ship' || 
                              cleanCode.includes('SHIP') || 
                              (v.ten_voucher && v.ten_voucher.toLowerCase().includes('vận chuyển'));
@@ -186,8 +220,6 @@ const createOrder = async (req, res) => {
 
           // Cập nhật tăng số lượt đã dùng của voucher
           await db.query('UPDATE ma_giam_gia SET so_luong_da_dung = so_luong_da_dung + 1 WHERE ma_voucher = ?', [maVoucherId]);
-        }
-      }
     }
 
     const tongThanhToan = Math.max(0, tongTienHang + phiGiaoHang - soTienGiam);

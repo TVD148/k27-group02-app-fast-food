@@ -124,7 +124,7 @@ const deleteCategory = async (req, res) => {
 // 1. Thêm món ăn mới (POST /api/admin/items)
 const createItem = async (req, res) => {
   try {
-    const { ten_mon, mo_ta, gia_ban, hinh_anh, ma_danh_muc, trang_thai, ma_nhom_list } = req.body;
+    const { ten_mon, mo_ta, gia_ban, hinh_anh, ma_danh_muc, trang_thai, ma_nhom_list, nguyen_lieu_list } = req.body;
 
     // Validation đầu vào
     if (!ten_mon || gia_ban === undefined) {
@@ -168,6 +168,23 @@ const createItem = async (req, res) => {
       await Promise.all(linkQueries);
     }
 
+    // Nếu có truyền kèm danh sách nguyên liệu dinh dưỡng, lưu vào mon_an_nguyen_lieu
+    if (nguyen_lieu_list && Array.isArray(nguyen_lieu_list) && nguyen_lieu_list.length > 0) {
+      const ingQueries = nguyen_lieu_list.map(nl => {
+        return db.query(
+          'INSERT INTO mon_an_nguyen_lieu (ma_mon_an, ma_nguyen_lieu, so_luong_mac_dinh, co_the_tuy_bien, so_luong_toi_da) VALUES (?, ?, ?, ?, ?)',
+          [
+            newId, 
+            nl.ma_nguyen_lieu, 
+            nl.so_luong_mac_dinh !== undefined ? nl.so_luong_mac_dinh : 1, 
+            nl.co_the_tuy_bien ? 1 : 0, 
+            nl.so_luong_toi_da !== undefined ? nl.so_luong_toi_da : 3
+          ]
+        );
+      });
+      await Promise.all(ingQueries);
+    }
+
     return res.status(201).json({
       success: true,
       message: 'Thêm món ăn mới thành công!',
@@ -179,7 +196,8 @@ const createItem = async (req, res) => {
         hinh_anh,
         ma_danh_muc,
         trang_thai,
-        ma_nhom_list
+        ma_nhom_list,
+        nguyen_lieu_list
       }
     });
   } catch (error) {
@@ -195,7 +213,7 @@ const createItem = async (req, res) => {
 const updateItem = async (req, res) => {
   try {
     const itemId = req.params.id;
-    const { ten_mon, mo_ta, gia_ban, hinh_anh, ma_danh_muc, trang_thai, ma_nhom_list } = req.body;
+    const { ten_mon, mo_ta, gia_ban, hinh_anh, ma_danh_muc, trang_thai, ma_nhom_list, nguyen_lieu_list } = req.body;
 
     // Kiểm tra món ăn có tồn tại không
     const [items] = await db.query('SELECT * FROM mon_an WHERE ma_mon_an = ?', [itemId]);
@@ -241,6 +259,29 @@ const updateItem = async (req, res) => {
       }
     }
 
+    // Đồng bộ lại danh sách nguyên liệu dinh dưỡng (nếu có gửi lên)
+    if (nguyen_lieu_list && Array.isArray(nguyen_lieu_list)) {
+      // Xóa công thức cũ
+      await db.query('DELETE FROM mon_an_nguyen_lieu WHERE ma_mon_an = ?', [itemId]);
+
+      // Thêm lại công thức mới
+      if (nguyen_lieu_list.length > 0) {
+        const ingQueries = nguyen_lieu_list.map(nl => {
+          return db.query(
+            'INSERT INTO mon_an_nguyen_lieu (ma_mon_an, ma_nguyen_lieu, so_luong_mac_dinh, co_the_tuy_bien, so_luong_toi_da) VALUES (?, ?, ?, ?, ?)',
+            [
+              itemId, 
+              nl.ma_nguyen_lieu, 
+              nl.so_luong_mac_dinh !== undefined ? nl.so_luong_mac_dinh : 1, 
+              nl.co_the_tuy_bien ? 1 : 0, 
+              nl.so_luong_toi_da !== undefined ? nl.so_luong_toi_da : 3
+            ]
+          );
+        });
+        await Promise.all(ingQueries);
+      }
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Cập nhật món ăn thành công!',
@@ -252,7 +293,8 @@ const updateItem = async (req, res) => {
         hinh_anh,
         ma_danh_muc,
         trang_thai,
-        ma_nhom_list
+        ma_nhom_list,
+        nguyen_lieu_list
       }
     });
   } catch (error) {
@@ -315,6 +357,193 @@ const toggleItemStatus = async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Lỗi đổi trạng thái món.', error: error.message });
+  }
+};
+
+// 5. Lấy chi tiết quản trị món ăn (Kèm nhóm kích cỡ/vị và định lượng dinh dưỡng) (GET /api/admin/items/:id/details)
+const getItemAdminDetails = async (req, res) => {
+  try {
+    const itemId = req.params.id;
+    const [items] = await db.query(
+      `SELECT m.*, d.ten_danh_muc 
+       FROM mon_an m 
+       LEFT JOIN danh_muc d ON m.ma_danh_muc = d.ma_danh_muc 
+       WHERE m.ma_mon_an = ?`,
+      [itemId]
+    );
+    if (items.length === 0) {
+      return res.status(404).json({ success: false, message: 'Món ăn không tồn tại!' });
+    }
+
+    const item = items[0];
+
+    // Lấy danh sách nhóm tùy chọn đã gán cho món này
+    const [assignedGroups] = await db.query(
+      'SELECT ma_nhom FROM tuy_chon_mon_an WHERE ma_mon_an = ?',
+      [itemId]
+    );
+    const ma_nhom_list = assignedGroups.map(g => g.ma_nhom);
+
+    // Lấy công thức nguyên liệu dinh dưỡng cấu thành
+    const [recipe] = await db.query(
+      `SELECT 
+        mnl.ma_mon_an_nguyen_lieu,
+        mnl.ma_nguyen_lieu,
+        nl.ten_nguyen_lieu,
+        nl.don_vi_tinh,
+        nl.calo,
+        nl.protein,
+        nl.carbs,
+        nl.fat,
+        nl.don_gia_thay_doi,
+        mnl.so_luong_mac_dinh,
+        mnl.co_the_tuy_bien,
+        mnl.so_luong_toi_da
+       FROM mon_an_nguyen_lieu mnl
+       JOIN nguyen_lieu nl ON mnl.ma_nguyen_lieu = nl.ma_nguyen_lieu
+       WHERE mnl.ma_mon_an = ?`,
+      [itemId]
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...item,
+        ma_nhom_list,
+        nguyen_lieu_list: recipe
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi lấy chi tiết quản trị món ăn',
+      error: error.message
+    });
+  }
+};
+
+// 6. Lấy danh sách các nhóm tùy chọn (Kích cỡ Size, Vị, Topping) (GET /api/admin/option-groups)
+const getOptionGroups = async (req, res) => {
+  try {
+    const [groups] = await db.query('SELECT * FROM nhom_tuy_chon ORDER BY ma_nhom ASC');
+    const [values] = await db.query('SELECT * FROM gia_tri_tuy_chon ORDER BY ma_nhom ASC, ma_gia_tri ASC');
+
+    const result = groups.map(g => {
+      return {
+        ...g,
+        la_bat_buoc: g.la_bat_buoc === 1,
+        values: values.filter(v => v.ma_nhom === g.ma_nhom)
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi lấy danh sách nhóm tùy chọn',
+      error: error.message
+    });
+  }
+};
+
+// 7. Tạo nhóm tùy chọn mới (POST /api/admin/option-groups)
+const createOptionGroup = async (req, res) => {
+  try {
+    const { ten_nhom, la_bat_buoc = 0, chon_toi_da = 1, values = [] } = req.body;
+    if (!ten_nhom) {
+      return res.status(400).json({ success: false, message: 'Tên nhóm tùy chọn không được để trống!' });
+    }
+
+    const [groupResult] = await db.query(
+      'INSERT INTO nhom_tuy_chon (ten_nhom, la_bat_buoc, chon_toi_da) VALUES (?, ?, ?)',
+      [ten_nhom, la_bat_buoc ? 1 : 0, chon_toi_da || 1]
+    );
+    const newGroupId = groupResult.insertId;
+
+    if (values && Array.isArray(values) && values.length > 0) {
+      for (const val of values) {
+        if (val.ten_gia_tri) {
+          await db.query(
+            'INSERT INTO gia_tri_tuy_chon (ma_nhom, ten_gia_tri, gia_tang_them) VALUES (?, ?, ?)',
+            [newGroupId, val.ten_gia_tri, val.gia_tang_them || 0]
+          );
+        }
+      }
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Tạo nhóm tùy chọn mới thành công!',
+      data: { ma_nhom: newGroupId, ten_nhom }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi tạo nhóm tùy chọn',
+      error: error.message
+    });
+  }
+};
+
+// 8. Cập nhật nhóm tùy chọn (PUT /api/admin/option-groups/:id)
+const updateOptionGroup = async (req, res) => {
+  try {
+    const groupId = req.params.id;
+    const { ten_nhom, la_bat_buoc = 0, chon_toi_da = 1, values = [] } = req.body;
+    if (!ten_nhom) {
+      return res.status(400).json({ success: false, message: 'Tên nhóm tùy chọn không được để trống!' });
+    }
+
+    await db.query(
+      'UPDATE nhom_tuy_chon SET ten_nhom = ?, la_bat_buoc = ?, chon_toi_da = ? WHERE ma_nhom = ?',
+      [ten_nhom, la_bat_buoc ? 1 : 0, chon_toi_da || 1, groupId]
+    );
+
+    if (values && Array.isArray(values)) {
+      await db.query('DELETE FROM gia_tri_tuy_chon WHERE ma_nhom = ?', [groupId]);
+      for (const val of values) {
+        if (val.ten_gia_tri) {
+          await db.query(
+            'INSERT INTO gia_tri_tuy_chon (ma_nhom, ten_gia_tri, gia_tang_them) VALUES (?, ?, ?)',
+            [groupId, val.ten_gia_tri, val.gia_tang_them || 0]
+          );
+        }
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Cập nhật nhóm tùy chọn thành công!'
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi cập nhật nhóm tùy chọn',
+      error: error.message
+    });
+  }
+};
+
+// 9. Xóa nhóm tùy chọn (DELETE /api/admin/option-groups/:id)
+const deleteOptionGroup = async (req, res) => {
+  try {
+    const groupId = req.params.id;
+    await db.query('DELETE FROM gia_tri_tuy_chon WHERE ma_nhom = ?', [groupId]);
+    await db.query('DELETE FROM tuy_chon_mon_an WHERE ma_nhom = ?', [groupId]);
+    await db.query('DELETE FROM nhom_tuy_chon WHERE ma_nhom = ?', [groupId]);
+    return res.status(200).json({
+      success: true,
+      message: 'Xóa nhóm tùy chọn thành công!'
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi xóa nhóm tùy chọn',
+      error: error.message
+    });
   }
 };
 
@@ -752,6 +981,11 @@ module.exports = {
   updateItem,
   deleteItem,
   toggleItemStatus,
+  getItemAdminDetails,
+  getOptionGroups,
+  createOptionGroup,
+  updateOptionGroup,
+  deleteOptionGroup,
   getAdminVouchers,
   createVoucher,
   deleteVoucher,

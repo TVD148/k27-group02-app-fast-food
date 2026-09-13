@@ -424,22 +424,35 @@ export default function CheckoutScreen({ route, navigation }) {
                     const isFs = v.loai_ap_dung === 'phi_ship' || 
                                  (v.ma_code && v.ma_code.toUpperCase().includes('SHIP')) || 
                                  (v.ten_voucher && v.ten_voucher.toLowerCase().includes('vận chuyển'));
+                    const isUsed = !!v.da_su_dung;
                     return (
                       <TouchableOpacity 
                         key={v.ma_voucher}
-                        style={styles.voucherChip}
+                        style={[styles.voucherChip, isUsed && { opacity: 0.65, backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' }]}
                         onPress={() => {
+                          if (isUsed) {
+                            Alert.alert('Đã sử dụng', `Mã giảm giá '${v.ma_code}' đã được sử dụng trên tài khoản của bạn! Mỗi tài khoản chỉ được dùng mã này 1 lần.`);
+                            return;
+                          }
                           setVoucherCode(v.ma_code);
                           handleApplyVoucher(v.ma_code);
                         }}
                       >
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <Text style={styles.voucherChipCode}>{v.ma_code}</Text>
-                          <Text style={[styles.voucherTypeBadge, isFs ? styles.voucherTypeFs : styles.voucherTypeFood]}>
-                            {isFs ? '🚚 Freeship' : '🍔 Giảm món'}
+                          <Text style={[styles.voucherChipCode, isUsed && { color: '#64748B', textDecorationLine: 'line-through' }]}>
+                            {v.ma_code}
                           </Text>
+                          {isUsed ? (
+                            <Text style={[styles.voucherTypeBadge, { backgroundColor: '#E2E8F0', color: '#64748B' }]}>
+                              🔒 Đã sử dụng
+                            </Text>
+                          ) : (
+                            <Text style={[styles.voucherTypeBadge, isFs ? styles.voucherTypeFs : styles.voucherTypeFood]}>
+                              {isFs ? '🚚 Freeship' : '🍔 Giảm món'}
+                            </Text>
+                          )}
                         </View>
-                        <Text style={styles.voucherChipDesc}>{v.ten_voucher}</Text>
+                        <Text style={[styles.voucherChipDesc, isUsed && { color: '#94A3B8' }]}>{v.ten_voucher}</Text>
                       </TouchableOpacity>
                     );
                   })}

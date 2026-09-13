@@ -70,8 +70,33 @@ const isStaffOrAdmin = (req, res, next) => {
   next();
 };
 
+// Middleware xác thực Token tùy chọn (không bắt buộc nhưng nếu có token thì giải mã)
+const optionalVerifyToken = (req, res, next) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      jwt.verify(token, process.env.JWT_SECRET || 'supersecretkeyforfastfoodapp2026', (err, decoded) => {
+        if (!err && decoded) {
+          req.user = {
+            id: decoded.id,
+            email: decoded.email,
+            ma_vai_tro: decoded.ma_vai_tro
+          };
+        }
+        next();
+      });
+    } else {
+      next();
+    }
+  } catch (e) {
+    next();
+  }
+};
+
 module.exports = {
   verifyToken,
+  optionalVerifyToken,
   isAdmin,
   isStaffOrAdmin
 };

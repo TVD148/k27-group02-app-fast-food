@@ -8,7 +8,9 @@ router.use(verifyToken);
 
 // 1. Chức năng chung cho cả Nhân viên và Quản trị viên
 router.put('/items/:id/toggle-status', isStaffOrAdmin, adminController.toggleItemStatus);
+router.get('/items/:id/details', isStaffOrAdmin, adminController.getItemAdminDetails);
 router.get('/ingredients', isStaffOrAdmin, adminController.getIngredients);
+router.get('/option-groups', isStaffOrAdmin, adminController.getOptionGroups);
 
 // 2. Chức năng yêu cầu quyền Quản trị viên (Admin)
 router.use(isAdmin);
@@ -22,6 +24,11 @@ router.delete('/categories/:id', adminController.deleteCategory);
 router.post('/items', adminController.createItem);
 router.put('/items/:id', adminController.updateItem);
 router.delete('/items/:id', adminController.deleteItem);
+
+// Quản lý Nhóm tùy chọn (Kích cỡ, Tùy chọn vị)
+router.post('/option-groups', adminController.createOptionGroup);
+router.put('/option-groups/:id', adminController.updateOptionGroup);
+router.delete('/option-groups/:id', adminController.deleteOptionGroup);
 
 // Quản lý Voucher & Khuyến mãi
 router.get('/vouchers', adminController.getAdminVouchers);
