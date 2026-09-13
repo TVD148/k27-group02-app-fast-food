@@ -204,30 +204,27 @@ export default function ProfileScreen({ navigation }) {
 
             {user ? (
               <View style={styles.userInfoBox}>
-                <View style={styles.userNameHeaderRow}>
-                  <Text style={styles.userName}>{user.ho_ten || 'Khách hàng FastFood'}</Text>
-                  <View style={styles.editProfileTag}>
-                    <Text style={styles.editProfileTagText}>✏️ Đổi thông tin</Text>
-                  </View>
-                </View>
+                <Text style={styles.userName}>{user.ho_ten || 'Khách hàng FastFood'}</Text>
                 <Text style={styles.userSubText}>📞 {user.so_dien_thoai} {user.email ? `• ✉️ ${user.email}` : ''}</Text>
-                <View style={[
-                  styles.memberBadge, 
-                  user.ma_vai_tro === 3 && { backgroundColor: '#EDE7F6' },
-                  (user.ma_vai_tro === 2 || user.ma_vai_tro === 5) && { backgroundColor: '#FBE9E7' },
-                  user.ma_vai_tro === 4 && { backgroundColor: '#E0F2F1' },
-                ]}>
-                  <Text style={[
-                    styles.memberBadgeText,
-                    user.ma_vai_tro === 3 && { color: '#6A1B9A' },
-                    (user.ma_vai_tro === 2 || user.ma_vai_tro === 5) && { color: '#D84315' },
-                    user.ma_vai_tro === 4 && { color: '#00897B' },
+                {user.ma_vai_tro && user.ma_vai_tro !== 1 && (
+                  <View style={[
+                    styles.memberBadge, 
+                    user.ma_vai_tro === 3 && { backgroundColor: '#EDE7F6' },
+                    (user.ma_vai_tro === 2 || user.ma_vai_tro === 5) && { backgroundColor: '#FBE9E7' },
+                    user.ma_vai_tro === 4 && { backgroundColor: '#E0F2F1' },
                   ]}>
-                    {user.ma_vai_tro === 3 ? '👑 Quản Trị Viên (Admin)' :
-                     (user.ma_vai_tro === 2 || user.ma_vai_tro === 5) ? '🧑‍🍳 Nhân Viên Bếp / Quán' :
-                     user.ma_vai_tro === 4 ? '🛵 Tài Xế Shipper' : '⭐ Khách Hàng Thân Thiết'}
-                  </Text>
-                </View>
+                    <Text style={[
+                      styles.memberBadgeText,
+                      user.ma_vai_tro === 3 && { color: '#6A1B9A' },
+                      (user.ma_vai_tro === 2 || user.ma_vai_tro === 5) && { color: '#D84315' },
+                      user.ma_vai_tro === 4 && { color: '#00897B' },
+                    ]}>
+                      {user.ma_vai_tro === 3 ? '👑 Quản Trị Viên (Admin)' :
+                       (user.ma_vai_tro === 2 || user.ma_vai_tro === 5) ? '🧑‍🍳 Nhân Viên Bếp / Quán' :
+                       user.ma_vai_tro === 4 ? '🛵 Tài Xế Shipper' : ''}
+                    </Text>
+                  </View>
+                )}
               </View>
             ) : (
               <View style={styles.userInfoBox}>

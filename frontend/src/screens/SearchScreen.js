@@ -129,9 +129,6 @@ export default function SearchScreen({ navigation, route }) {
           <Text style={styles.foodPrice}>
             {parseFloat(item.gia_ban).toLocaleString('vi-VN')} đ
           </Text>
-          <View style={styles.ratingBadge}>
-            <Text style={styles.ratingText}>⭐ 4.8</Text>
-          </View>
         </View>
       </View>
     </TouchableOpacity>

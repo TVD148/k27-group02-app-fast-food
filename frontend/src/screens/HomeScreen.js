@@ -177,9 +177,6 @@ export default function HomeScreen({ navigation }) {
     >
       <View style={styles.foodImageContainer}>
         <Text style={styles.foodEmoji}>🍔</Text>
-        <View style={styles.ratingTag}>
-          <Text style={styles.ratingText}>⭐ 4.9 (210)</Text>
-        </View>
       </View>
       
       <View style={styles.foodInfo}>
