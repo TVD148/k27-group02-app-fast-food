@@ -353,7 +353,8 @@ const toggleItemStatus = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: `Đã đổi trạng thái món '${items[0].ten_mon}' thành '${newStatus === 'con_hang' ? 'Còn hàng' : 'Hết hàng'}'!`,
-      data: { ma_mon_an: parseInt(itemId), trang_thai: newStatus }
+      trang_thai_moi: newStatus,
+      data: { ma_mon_an: parseInt(itemId), trang_thai: newStatus, trang_thai_moi: newStatus }
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Lỗi đổi trạng thái món.', error: error.message });
@@ -861,9 +862,38 @@ const getDashboardStats = async (req, res) => {
         )
     `);
 
-    // Tổng số nhân viên / shipper đăng ký trong hệ thống
     const [usersStaffTotal] = await db.query('SELECT COUNT(*) as total_staff FROM nguoi_dung WHERE ma_vai_tro = 2');
     const [usersShipperTotal] = await db.query('SELECT COUNT(*) as total_shipper FROM nguoi_dung WHERE ma_vai_tro = 4');
+
+    // Thống kê doanh thu theo các khung giờ (08h - 22h)
+    const [hourlyRows] = await db.query(`
+      SELECT 
+        HOUR(ngay_dat) as gio,
+        COALESCE(SUM(tong_thanh_toan), 0) as doanh_thu,
+        COUNT(*) as so_don
+      FROM don_hang
+      WHERE trang_thai_don_hang = 'da_giao'
+      GROUP BY HOUR(ngay_dat)
+      ORDER BY gio ASC
+    `);
+
+    // Chuẩn bị 8 mốc giờ trong ngày để vẽ biểu đồ (bao quát cả ngày 24h)
+    const defaultHours = [8, 10, 12, 14, 16, 18, 20, 22];
+    const hourlyData = defaultHours.map((targetH, idx) => {
+      const minH = idx === 0 ? 0 : defaultHours[idx - 1] + 1;
+      const maxH = idx === defaultHours.length - 1 ? 23 : targetH;
+      const matched = hourlyRows.filter(r => {
+        const g = parseInt(r.gio);
+        return g >= minH && g <= maxH;
+      });
+      const amount = matched.reduce((sum, r) => sum + parseFloat(r.doanh_thu || 0), 0);
+      const orders = matched.reduce((sum, r) => sum + parseInt(r.so_don || 0), 0);
+      return {
+        hour: `${String(targetH).padStart(2, '0')}:00`,
+        amount,
+        orders
+      };
+    });
 
     return res.status(200).json({
       success: true,
@@ -873,6 +903,8 @@ const getDashboardStats = async (req, res) => {
         pending_orders: ordersPending[0].pending_orders || 0,
         delivered_orders: ordersDelivered[0].delivered_orders || 0,
         total_foods: foodsCount[0].total_foods || 0,
+        // Dữ liệu biểu đồ theo giờ thực tế
+        hourly_revenue: hourlyData,
         // Nhân sự thực sự trực tuyến
         online_staff_count: onlineStaffRows[0].total_online_staff || 0,
         online_shipper_count: onlineShipperRows[0].total_online_shipper || 0,

@@ -74,8 +74,8 @@ function RevenueLineChart({ hourlyData = [] }) {
   ];
 
   const data = (hourlyData && hourlyData.length > 0) ? hourlyData : defaultZeroHours;
-  const maxAmount = Math.max(...data.map(d => d.amount), 100000);
-  const chartHeight = 160;
+  const maxAmount = Math.max(...data.map(d => d.amount), 50000);
+  const chartHeight = 170;
 
   return (
     <View style={styles.chartWrapper}>
@@ -85,10 +85,11 @@ function RevenueLineChart({ hourlyData = [] }) {
           <View style={styles.tooltipBadge}>
             <Text style={styles.tooltipText}>
               {selectedPoint.hour}: {selectedPoint.amount.toLocaleString('vi-VN')} đ
+              {selectedPoint.orders ? ` (${selectedPoint.orders} đơn)` : ''}
             </Text>
           </View>
         ) : (
-          <Text style={styles.chartHint}>Chạm vào điểm để xem</Text>
+          <Text style={styles.chartHint}>Chạm vào cột để xem chi tiết</Text>
         )}
       </View>
 
@@ -102,7 +103,10 @@ function RevenueLineChart({ hourlyData = [] }) {
         {/* Các cột mốc điểm dữ liệu kết nối */}
         <View style={styles.pointsRow}>
           {data.map((item, index) => {
-            const pointHeight = Math.max(12, (item.amount / maxAmount) * (chartHeight - 30));
+            const hasRevenue = item.amount > 0;
+            const pointHeight = hasRevenue
+              ? Math.max(34, (item.amount / maxAmount) * (chartHeight - 48))
+              : 8;
             const isSelected = selectedPoint?.hour === item.hour;
 
             return (
@@ -112,17 +116,34 @@ function RevenueLineChart({ hourlyData = [] }) {
                 onPress={() => setSelectedPoint(item)}
                 style={styles.pointCol}
               >
+                {/* Badge số tiền nổi bật trên đỉnh cột */}
+                {hasRevenue && (
+                  <View style={styles.miniValTag}>
+                    <Text style={styles.miniValText}>
+                      {item.amount >= 1000 ? `${Math.round(item.amount / 1000)}k` : item.amount}
+                    </Text>
+                  </View>
+                )}
+
                 <View style={styles.verticalTrack}>
-                  <View style={[styles.verticalFillBar, { height: pointHeight }]} />
+                  <View
+                    style={[
+                      styles.verticalFillBar,
+                      { height: pointHeight },
+                      hasRevenue && styles.verticalFillBarActive,
+                      isSelected && styles.verticalFillBarSelected,
+                    ]}
+                  />
                   <View
                     style={[
                       styles.chartDot,
                       { bottom: pointHeight - 6 },
+                      hasRevenue && styles.chartDotActive,
                       isSelected && styles.chartDotSelected,
                     ]}
                   />
                 </View>
-                <Text style={[styles.hourLabel, isSelected && styles.hourLabelSelected]}>
+                <Text style={[styles.hourLabel, hasRevenue && styles.hourLabelHasData, isSelected && styles.hourLabelSelected]}>
                   {item.hour.split(':')[0]}h
                 </Text>
               </TouchableOpacity>
@@ -148,6 +169,7 @@ export default function AdminScreen({ navigation }) {
   const [vouchers, setVouchers] = useState([]);
   const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
+  const [expandedSettingSection, setExpandedSettingSection] = useState('store');
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({
@@ -617,9 +639,10 @@ export default function AdminScreen({ navigation }) {
   const handleToggleFoodStock = async (foodId, currentStatus, foodName) => {
     try {
       const res = await toggleItemStatus(foodId);
-      if (res.success) {
-        setFoods(prev => prev.map(f => f.ma_mon_an === foodId ? { ...f, trang_thai: res.trang_thai_moi } : f));
-        Alert.alert('Đã cập nhật', `${foodName}: ${res.trang_thai_moi === 'con_hang' ? 'Đã chuyển sang CÒN HÀNG ✅' : 'Đã chuyển sang HẾT HÀNG ❌'}`);
+      if (res && res.success) {
+        const newStatus = res.trang_thai_moi || res.data?.trang_thai || (currentStatus === 'con_hang' ? 'het_hang' : 'con_hang');
+        setFoods(prev => prev.map(f => f.ma_mon_an === foodId ? { ...f, trang_thai: newStatus } : f));
+        Alert.alert('Đã cập nhật', `${foodName}: ${newStatus === 'con_hang' ? 'Đã chuyển sang CÒN HÀNG ✅' : 'Đã chuyển sang HẾT HÀNG ❌'}`);
       }
     } catch (err) {
       Alert.alert('Lỗi', err.message || 'Không thể đổi trạng thái món!');
@@ -1258,7 +1281,7 @@ export default function AdminScreen({ navigation }) {
         </View>
 
         {/* 1. BIỂU ĐỒ ĐƯỜNG DOANH THU */}
-        <RevenueLineChart />
+        <RevenueLineChart hourlyData={stats?.hourly_revenue || []} />
 
         {/* 2. HIỂN THỊ SỐ LƯỢNG SHIPPER / BẾP ĐANG ONLINE THẬT SỰ (KHÔNG DÙNG DỮ LIỆU GIẢ) */}
         <View style={styles.onlinePersonnelSection}>
@@ -1351,10 +1374,10 @@ export default function AdminScreen({ navigation }) {
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={[styles.quickActionButton, { backgroundColor: '#D84315' }]}
-            onPress={() => setActiveBottomTab('orders')}
+            style={[styles.quickActionButton, { backgroundColor: '#0284C7' }]}
+            onPress={() => setActiveBottomTab('users')}
           >
-            <Text style={styles.quickActionBtnText}>📋 Quản Lý Đơn Hàng</Text>
+            <Text style={styles.quickActionBtnText}>👥 Quản Lý Tài Khoản</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1612,186 +1635,10 @@ export default function AdminScreen({ navigation }) {
   };
 
   // =========================================================================
-  // TAB 4: CÀI ĐẶT & HỆ THỐNG (SETTINGS) - VOUCHERS, NHÂN SỰ & MỐC QUÁN
+  // TAB 2: QUẢN LÝ TÀI KHOẢN & PHÂN QUYỀN (USERS & ROLES)
   // =========================================================================
-  const renderSettingsTab = () => (
+  const renderUsersTab = () => (
     <View style={styles.tabContentBlock}>
-      {/* Khối Cấu Hình Mốc Quán & Bán Kính Giao Hàng (Lấy địa chỉ quán làm mốc) */}
-      <View style={styles.settingsGroupCard}>
-        <View style={styles.groupHeaderRow}>
-          <Text style={styles.groupHeaderTitle}>🏬 Địa Chỉ Mốc Quán (Cột Mốc)</Text>
-          <View style={styles.landmarkTag}>
-            <Text style={styles.landmarkTagText}>Bán kính: {storeLandmark.ban_kinh_phuc_vu_km}km</Text>
-          </View>
-        </View>
-
-        <Text style={styles.landmarkDesc}>
-          Cột mốc quán được dùng để giới hạn khách đặt hàng trong 3km, giới hạn shipper nhận đơn trong 3km, và tính phí ship 5.000đ/1km.
-        </Text>
-
-        {/* NÚT BẬT GPS LẤY VỊ TRÍ CHÍNH XÁC CỦA QUÁN */}
-        <TouchableOpacity
-          style={styles.gpsBannerBtn}
-          onPress={handleGetStoreGPSLocation}
-          disabled={locatingGPS}
-          activeOpacity={0.8}
-        >
-          {locatingGPS ? (
-            <View style={styles.gpsLocatingWrap}>
-              <ActivityIndicator color="#6A1B9A" size="small" />
-              <Text style={styles.gpsLocatingText}>Đang kết nối vệ tinh GPS & định vị địa chỉ quán...</Text>
-            </View>
-          ) : (
-            <View style={styles.gpsBannerInner}>
-              <Text style={styles.gpsBannerIcon}>📡</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.gpsBannerTitle}>Bật GPS Lấy Vị Trí Quán Hiện Tại</Text>
-                <Text style={styles.gpsBannerSub}>Tự động nhận diện tọa độ GPS và tên địa chỉ chính xác của quán</Text>
-              </View>
-              <View style={styles.gpsActionPill}>
-                <Text style={styles.gpsActionPillText}>Định vị</Text>
-              </View>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        <Text style={styles.landmarkFieldLabel}>Tên quán / Nhà hàng:</Text>
-        <TextInput
-          style={styles.landmarkInput}
-          value={storeLandmark.ten_quan}
-          onChangeText={t => setStoreLandmark({ ...storeLandmark, ten_quan: t })}
-          placeholder="Tên quán..."
-        />
-
-        <Text style={styles.landmarkFieldLabel}>Địa chỉ mốc quán:</Text>
-        <TextInput
-          style={[styles.landmarkInput, { height: 54 }]}
-          multiline
-          value={storeLandmark.dia_chi_quan}
-          onChangeText={t => setStoreLandmark({ ...storeLandmark, dia_chi_quan: t })}
-          placeholder="504 Đại lộ Bình Dương..."
-        />
-
-        <View style={styles.landmarkCoordsRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.landmarkFieldLabel}>Vĩ độ (Latitude):</Text>
-            <TextInput
-              style={styles.landmarkInput}
-              value={String(storeLandmark.vi_do)}
-              keyboardType="numeric"
-              onChangeText={t => setStoreLandmark({ ...storeLandmark, vi_do: t })}
-            />
-          </View>
-          <View style={{ width: 10 }} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.landmarkFieldLabel}>Kinh độ (Longitude):</Text>
-            <TextInput
-              style={styles.landmarkInput}
-              value={String(storeLandmark.kinh_do)}
-              keyboardType="numeric"
-              onChangeText={t => setStoreLandmark({ ...storeLandmark, kinh_do: t })}
-            />
-          </View>
-        </View>
-
-        <View style={styles.landmarkCoordsRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.landmarkFieldLabel}>Bán kính phục vụ (km):</Text>
-            <TextInput
-              style={styles.landmarkInput}
-              value={String(storeLandmark.ban_kinh_phuc_vu_km)}
-              keyboardType="numeric"
-              onChangeText={t => setStoreLandmark({ ...storeLandmark, ban_kinh_phuc_vu_km: t })}
-            />
-          </View>
-          <View style={{ width: 10 }} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.landmarkFieldLabel}>Đơn giá ship/km (đ):</Text>
-            <TextInput
-              style={styles.landmarkInput}
-              value={String(storeLandmark.gia_ship_moi_km)}
-              keyboardType="numeric"
-              onChangeText={t => setStoreLandmark({ ...storeLandmark, gia_ship_moi_km: t })}
-            />
-          </View>
-        </View>
-
-        <TouchableOpacity 
-          style={styles.saveLandmarkBtn}
-          onPress={handleSaveStoreLandmark}
-          disabled={savingLandmark}
-        >
-          {savingLandmark ? (
-            <ActivityIndicator color="#FFF" size="small" />
-          ) : (
-            <Text style={styles.saveLandmarkBtnText}>💾 Lưu Địa Chỉ & Mốc Quán</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Khối quản lý Voucher */}
-      <View style={styles.settingsGroupCard}>
-        <View style={styles.groupHeaderRow}>
-          <Text style={styles.groupHeaderTitle}>🎟️ Quản Lý Mã Khuyến Mãi (Voucher)</Text>
-          <TouchableOpacity 
-            style={styles.groupActionAddBtn}
-            onPress={() => setModalType('addVoucher')}
-          >
-            <Text style={styles.groupActionAddText}>+ Tạo Mã</Text>
-          </TouchableOpacity>
-        </View>
-
-        {vouchers.map(v => {
-          const isFs = v.loai_ap_dung === 'phi_ship' || 
-                       (v.ma_code && v.ma_code.toUpperCase().includes('SHIP')) || 
-                       (v.ten_voucher && v.ten_voucher.toLowerCase().includes('vận chuyển'));
-          const isPercent = v.loai_giam_gia === 'phan_tram';
-          const discountDesc = isPercent
-            ? `Giảm ${parseFloat(v.gia_tri_giam)}%${v.giam_toi_da ? ` (Tối đa ${parseFloat(v.giam_toi_da).toLocaleString('vi-VN')} đ)` : ''}`
-            : `Giảm ${parseFloat(v.gia_tri_giam).toLocaleString('vi-VN')} đ`;
-          const minOrderText = `Đơn từ ${parseFloat(v.don_hang_toi_thieu || 0).toLocaleString('vi-VN')} đ`;
-          const usageText = `Đã dùng: ${v.so_luong_da_dung || 0}/${v.so_luong_phat_hanh || 100}`;
-
-          return (
-            <View key={v.ma_voucher} style={styles.voucherRowCard}>
-              <View style={styles.voucherRowLeft}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                  <Text style={styles.voucherCodeText}>{v.ma_code}</Text>
-                  <View style={[styles.voucherTypeBadgeAdmin, isFs ? styles.voucherTypeBadgeFs : styles.voucherTypeBadgeFood]}>
-                    <Text style={[styles.voucherTypeBadgeAdminText, isFs ? styles.voucherTypeFsText : styles.voucherTypeFoodText]}>
-                      {isFs ? '🚚 Giảm phí ship' : '🍔 Giảm tiền món'}
-                    </Text>
-                  </View>
-                </View>
-                <Text style={styles.voucherNameTextAdmin}>{v.ten_voucher}</Text>
-                <Text style={styles.voucherDescTextAdmin}>
-                  {discountDesc} • {minOrderText} • {usageText}
-                </Text>
-              </View>
-
-              <View style={styles.voucherRowActions}>
-                <TouchableOpacity 
-                  style={[styles.voucherStatusPillBtn, v.trang_thai === 'hoat_dong' ? styles.statusPillActive : styles.statusPillInactive]}
-                  onPress={() => handleToggleVoucher(v.ma_voucher)}
-                >
-                  <Text style={[styles.voucherStatusPillText, v.trang_thai === 'hoat_dong' ? styles.statusTextActive : styles.statusTextInactive]}>
-                    {v.trang_thai === 'hoat_dong' ? 'Bật' : 'Tắt'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={styles.voucherDeleteBtn}
-                  onPress={() => handleDeleteVoucher(v.ma_voucher, v.ma_code)}
-                >
-                  <Text style={styles.voucherDeleteIcon}>🗑️</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          );
-        })}
-      </View>
-
-      {/* Khối Quản Lý Tài Khoản Toàn Bộ Người Dùng & Điều Chỉnh Quyền */}
       <View style={styles.settingsGroupCard}>
         <View style={styles.groupHeaderRow}>
           <Text style={styles.groupHeaderTitle}>👥 Quản Lý Người Dùng & Phân Quyền</Text>
@@ -1920,8 +1767,15 @@ export default function AdminScreen({ navigation }) {
           })
         )}
       </View>
+    </View>
+  );
 
-      {/* KHỐI HỒ SƠ QUẢN TRỊ VIÊN & ĐĂNG XUẤT TRỰC TIẾP */}
+  // =========================================================================
+  // TAB 4: CÀI ĐẶT & HỆ THỐNG (SETTINGS) - TÀI KHOẢN, MỐC QUÁN & VOUCHERS
+  // =========================================================================
+  const renderSettingsTab = () => (
+    <View style={styles.tabContentBlock}>
+      {/* 1. KHỐI HỒ SƠ QUẢN TRỊ VIÊN ĐƯỢC ĐƯA LÊN ĐẦU TIÊN */}
       <View style={styles.adminProfileCard}>
         <View style={styles.adminProfileHeaderRow}>
           <TouchableOpacity 
@@ -1946,6 +1800,183 @@ export default function AdminScreen({ navigation }) {
           <Text style={styles.adminInfoRowText}>📞 SĐT đăng nhập: <Text style={{ fontWeight: '700', color: '#1F2937' }}>{currentUser?.so_dien_thoai || 'Chưa cập nhật'}</Text></Text>
           <Text style={styles.adminInfoRowText}>📧 Email liên hệ: <Text style={{ fontWeight: '700', color: '#1F2937' }}>{currentUser?.email || 'Chưa cập nhật'}</Text></Text>
         </View>
+      </View>
+
+      {/* 2. MỤC ĐỊA CHỈ MỐC QUÁN (CỘT MỐC) - BẤM VÀO MỚI XỔ XUỐNG */}
+      <View style={styles.settingsGroupCard}>
+        <TouchableOpacity
+          style={styles.accordionHeaderBtn}
+          onPress={() => setExpandedSettingSection(expandedSettingSection === 'store' ? null : 'store')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.accordionTitleWrap}>
+            <Text style={styles.groupHeaderTitle}>🏬 Địa Chỉ Mốc Quán (Cột Mốc)</Text>
+            <View style={styles.landmarkTag}>
+              <Text style={styles.landmarkTagText}>Bán kính: {storeLandmark.ban_kinh_phuc_vu_km}km</Text>
+            </View>
+          </View>
+          <Text style={styles.accordionChevron}>{expandedSettingSection === 'store' ? '▲' : '▼'}</Text>
+        </TouchableOpacity>
+
+        {expandedSettingSection === 'store' && (
+          <View style={{ marginTop: 14 }}>
+            {/* NÚT BẬT GPS LẤY VỊ TRÍ CHÍNH XÁC CỦA QUÁN */}
+            <TouchableOpacity
+              style={styles.gpsBannerBtn}
+              onPress={handleGetStoreGPSLocation}
+              disabled={locatingGPS}
+              activeOpacity={0.8}
+            >
+              {locatingGPS ? (
+                <View style={styles.gpsLocatingWrap}>
+                  <ActivityIndicator color="#6A1B9A" size="small" />
+                  <Text style={styles.gpsLocatingText}>Đang kết nối vệ tinh GPS & định vị địa chỉ quán...</Text>
+                </View>
+              ) : (
+                <View style={styles.gpsBannerInner}>
+                  <Text style={styles.gpsBannerIcon}>📡</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.gpsBannerTitle}>Bật GPS Lấy Vị Trí Quán Hiện Tại</Text>
+                    <Text style={styles.gpsBannerSub}>Tự động nhận diện tọa độ GPS và tên địa chỉ chính xác của quán</Text>
+                  </View>
+                  <View style={styles.gpsActionPill}>
+                    <Text style={styles.gpsActionPillText}>Định vị</Text>
+                  </View>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <Text style={styles.landmarkFieldLabel}>Tên quán / Nhà hàng:</Text>
+            <TextInput
+              style={styles.landmarkInput}
+              value={storeLandmark.ten_quan}
+              onChangeText={t => setStoreLandmark({ ...storeLandmark, ten_quan: t })}
+              placeholder="Tên quán..."
+            />
+
+            <Text style={styles.landmarkFieldLabel}>Địa chỉ mốc quán:</Text>
+            <TextInput
+              style={[styles.landmarkInput, { height: 54 }]}
+              multiline
+              value={storeLandmark.dia_chi_quan}
+              onChangeText={t => setStoreLandmark({ ...storeLandmark, dia_chi_quan: t })}
+              placeholder="504 Đại lộ Bình Dương..."
+            />
+
+            <View style={styles.landmarkCoordsRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.landmarkFieldLabel}>Bán kính phục vụ (km):</Text>
+                <TextInput
+                  style={styles.landmarkInput}
+                  value={String(storeLandmark.ban_kinh_phuc_vu_km)}
+                  keyboardType="numeric"
+                  onChangeText={t => setStoreLandmark({ ...storeLandmark, ban_kinh_phuc_vu_km: t })}
+                />
+              </View>
+              <View style={{ width: 10 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.landmarkFieldLabel}>Đơn giá ship/km (đ):</Text>
+                <TextInput
+                  style={styles.landmarkInput}
+                  value={String(storeLandmark.gia_ship_moi_km)}
+                  keyboardType="numeric"
+                  onChangeText={t => setStoreLandmark({ ...storeLandmark, gia_ship_moi_km: t })}
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity 
+              style={styles.saveLandmarkBtn}
+              onPress={handleSaveStoreLandmark}
+              disabled={savingLandmark}
+            >
+              {savingLandmark ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <Text style={styles.saveLandmarkBtnText}>💾 Lưu Địa Chỉ & Mốc Quán</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* 3. MỤC MÃ KHUYẾN MÃI (VOUCHER) - BẤM VÀO MỚI XỔ XUỐNG */}
+      <View style={styles.settingsGroupCard}>
+        <TouchableOpacity
+          style={styles.accordionHeaderBtn}
+          onPress={() => setExpandedSettingSection(expandedSettingSection === 'voucher' ? null : 'voucher')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.accordionTitleWrap}>
+            <Text style={styles.groupHeaderTitle}>🎟️ Quản Lý Mã Khuyến Mãi (Voucher)</Text>
+            <View style={[styles.landmarkTag, { backgroundColor: '#EDE9FE' }]}>
+              <Text style={[styles.landmarkTagText, { color: '#6D28D9' }]}>{vouchers.length} mã</Text>
+            </View>
+          </View>
+          <Text style={styles.accordionChevron}>{expandedSettingSection === 'voucher' ? '▲' : '▼'}</Text>
+        </TouchableOpacity>
+
+        {expandedSettingSection === 'voucher' && (
+          <View style={{ marginTop: 14 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 10 }}>
+              <TouchableOpacity 
+                style={styles.groupActionAddBtn}
+                onPress={() => setModalType('addVoucher')}
+              >
+                <Text style={styles.groupActionAddText}>+ Tạo Mã Mới</Text>
+              </TouchableOpacity>
+            </View>
+
+            {vouchers.map(v => {
+              const isFs = v.loai_ap_dung === 'phi_ship' || 
+                           (v.ma_code && v.ma_code.toUpperCase().includes('SHIP')) || 
+                           (v.ten_voucher && v.ten_voucher.toLowerCase().includes('vận chuyển'));
+              const isPercent = v.loai_giam_gia === 'phan_tram';
+              const discountDesc = isPercent
+                ? `Giảm ${parseFloat(v.gia_tri_giam)}%${v.giam_toi_da ? ` (Tối đa ${parseFloat(v.giam_toi_da).toLocaleString('vi-VN')} đ)` : ''}`
+                : `Giảm ${parseFloat(v.gia_tri_giam).toLocaleString('vi-VN')} đ`;
+              const minOrderText = `Đơn từ ${parseFloat(v.don_hang_toi_thieu || 0).toLocaleString('vi-VN')} đ`;
+              const usageText = `Đã dùng: ${v.so_luong_da_dung || 0}/${v.so_luong_phat_hanh || 100}`;
+
+              return (
+                <View key={v.ma_voucher} style={styles.voucherRowCard}>
+                  <View style={styles.voucherRowLeft}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <Text style={styles.voucherCodeText}>{v.ma_code}</Text>
+                      <View style={[styles.voucherTypeBadgeAdmin, isFs ? styles.voucherTypeBadgeFs : styles.voucherTypeBadgeFood]}>
+                        <Text style={[styles.voucherTypeBadgeAdminText, isFs ? styles.voucherTypeFsText : styles.voucherTypeFoodText]}>
+                          {isFs ? '🚚 Giảm phí ship' : '🍔 Giảm tiền món'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.voucherNameTextAdmin}>{v.ten_voucher}</Text>
+                    <Text style={styles.voucherDescTextAdmin}>
+                      {discountDesc} • {minOrderText} • {usageText}
+                    </Text>
+                  </View>
+
+                  <View style={styles.voucherRowActions}>
+                    <TouchableOpacity 
+                      style={[styles.voucherStatusPillBtn, v.trang_thai === 'hoat_dong' ? styles.statusPillActive : styles.statusPillInactive]}
+                      onPress={() => handleToggleVoucher(v.ma_voucher)}
+                    >
+                      <Text style={[styles.voucherStatusPillText, v.trang_thai === 'hoat_dong' ? styles.statusTextActive : styles.statusTextInactive]}>
+                        {v.trang_thai === 'hoat_dong' ? 'Bật' : 'Tắt'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                      style={styles.voucherDeleteBtn}
+                      onPress={() => handleDeleteVoucher(v.ma_voucher, v.ma_code)}
+                    >
+                      <Text style={styles.voucherDeleteIcon}>🗑️</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -1979,15 +2010,15 @@ export default function AdminScreen({ navigation }) {
             contentContainerStyle={styles.scrollContainer}
           >
             {activeBottomTab === 'dashboard' && renderDashboardTab()}
+            {activeBottomTab === 'users' && renderUsersTab()}
             {activeBottomTab === 'menu' && renderMenuTab()}
-            {activeBottomTab === 'orders' && renderOrdersTab()}
             {activeBottomTab === 'settings' && renderSettingsTab()}
           </ScrollView>
         )}
       </View>
 
       {/* ========================================================================= */}
-      {/* 4 BOTTOM TABS CHUẨN UX: Tổng quan, Đơn hàng, Thực đơn, Cài đặt */}
+      {/* 4 BOTTOM TABS CHUẨN UX: Tổng quan, Tài khoản, Thực đơn, Cài đặt */}
       {/* ========================================================================= */}
       <View style={styles.bottomNavContainer}>
         <TouchableOpacity
@@ -2001,12 +2032,12 @@ export default function AdminScreen({ navigation }) {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.bottomTabItem, activeBottomTab === 'orders' && styles.bottomTabActive]}
-          onPress={() => setActiveBottomTab('orders')}
+          style={[styles.bottomTabItem, activeBottomTab === 'users' && styles.bottomTabActive]}
+          onPress={() => setActiveBottomTab('users')}
         >
-          <Text style={styles.bottomIcon}>📋</Text>
-          <Text style={[styles.bottomTabLabel, activeBottomTab === 'orders' && styles.bottomTabLabelActive]}>
-            Đơn hàng
+          <Text style={styles.bottomIcon}>👥</Text>
+          <Text style={[styles.bottomTabLabel, activeBottomTab === 'users' && styles.bottomTabLabelActive]}>
+            Tài khoản
           </Text>
         </TouchableOpacity>
 
@@ -3537,6 +3568,19 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'flex-end',
   },
+  miniValTag: {
+    marginBottom: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 5,
+    backgroundColor: '#7C3AED',
+    alignItems: 'center',
+  },
+  miniValText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
   verticalTrack: {
     width: 20,
     height: '80%',
@@ -3549,6 +3593,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#E9D5FF',
     borderRadius: 4,
   },
+  verticalFillBarActive: {
+    backgroundColor: '#8B5CF6',
+  },
+  verticalFillBarSelected: {
+    backgroundColor: '#6A1B9A',
+  },
   chartDot: {
     position: 'absolute',
     width: 14,
@@ -3557,6 +3607,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#9333EA',
     borderWidth: 2,
     borderColor: '#FFFFFF',
+  },
+  chartDotActive: {
+    backgroundColor: '#6D28D9',
+    borderColor: '#FFFFFF',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
   },
   chartDotSelected: {
     width: 18,
@@ -3569,6 +3626,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748B',
     marginTop: 6,
+  },
+  hourLabelHasData: {
+    color: '#7C3AED',
+    fontWeight: '800',
   },
   hourLabelSelected: {
     color: '#6A1B9A',
@@ -3897,6 +3958,24 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
     paddingBottom: 8,
+  },
+  accordionHeaderBtn: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  accordionTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    paddingRight: 8,
+  },
+  accordionChevron: {
+    fontSize: 14,
+    color: '#6A1B9A',
+    fontWeight: '800',
   },
   groupHeaderTitle: {
     fontSize: 14,
