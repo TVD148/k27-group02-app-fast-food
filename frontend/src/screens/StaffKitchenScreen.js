@@ -185,13 +185,15 @@ export default function StaffKitchenScreen({ navigation }) {
     }));
   };
 
-  // Cập nhật trạng thái đơn hàng
   const handleUpdateStatus = async (orderId, newStatus, actionTitle) => {
     setUpdatingOrderId(orderId);
     try {
       const res = await updateOrderStatus(orderId, newStatus, `Bếp: ${actionTitle}`);
       if (res.success) {
-        Alert.alert('Thành công 🎉', res.message);
+        const successMsg = newStatus === 'dang_che_bien' 
+          ? 'Đã nhận đơn và chuyển sang trạng thái đang nấu thành công! 🍳'
+          : (res.message || 'Cập nhật trạng thái thành công!');
+        Alert.alert('Thành công 🎉', successMsg);
         if (selectedOrder && selectedOrder.ma_don_hang === orderId) {
           setSelectedOrder(null);
         }
@@ -284,13 +286,34 @@ export default function StaffKitchenScreen({ navigation }) {
 
               {/* Trích xuất nhanh món ăn */}
               <View style={styles.quickItemList}>
-                <Text style={styles.quickItemLabel}>Món cần chuẩn bị ({order.tong_so_mon || 1} món):</Text>
-                <Text style={styles.quickItemText} numberOfLines={2}>
-                  {order.dia_chi_giao ? `📍 Giao: ${order.dia_chi_giao}` : 'Đơn đặt tại quán'}
-                </Text>
+                <Text style={styles.quickItemLabel}>Món cần chuẩn bị ({order.tong_so_mon || (order.danh_sach_mon ? order.danh_sach_mon.length : 1)} món):</Text>
+                {Array.isArray(order.danh_sach_mon) && order.danh_sach_mon.length > 0 ? (
+                  <View style={styles.cardDishesContainer}>
+                    {order.danh_sach_mon.map((dish, dIdx) => {
+                      const hasCustom = !!dish.dinh_duong_tuy_bien;
+                      return (
+                        <View key={dish.ma_chi_tiet || dIdx} style={styles.cardDishRow}>
+                          <Text style={styles.cardDishName}>
+                            • <Text style={{ fontWeight: '800', color: '#0F172A' }}>{dish.so_luong}x</Text> {dish.ten_mon}
+                          </Text>
+                          {hasCustom && (
+                            <View style={styles.cardCustomTag}>
+                              <Text style={styles.cardCustomTagText}>⚡ Có tùy biến</Text>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <Text style={styles.quickItemText} numberOfLines={2}>
+                    {order.dia_chi_giao ? `📍 Giao: ${order.dia_chi_giao}` : 'Đơn đặt tại quán'}
+                  </Text>
+                )}
                 {order.ghi_chu ? (
                   <View style={styles.cardNoteBox}>
-                    <Text style={styles.cardNoteText}>⚠️ {order.ghi_chu}</Text>
+                    <Text style={styles.cardNoteLabel}>💬 Lời nhắn của khách:</Text>
+                    <Text style={styles.cardNoteText}>"{order.ghi_chu}"</Text>
                   </View>
                 ) : null}
               </View>
@@ -360,7 +383,6 @@ export default function StaffKitchenScreen({ navigation }) {
             <Text style={styles.avatarEditPencilIcon}>✏️</Text>
           </View>
         </TouchableOpacity>
-        <Text style={styles.avatarHintTap}>Chạm avatar để sửa thông tin & đăng xuất</Text>
 
         <Text style={styles.kitchenStaffName}>{currentUser?.ho_ten || 'Đầu Bếp Trưởng'}</Text>
         <View style={styles.staffRoleBadge}>
@@ -533,58 +555,96 @@ export default function StaffKitchenScreen({ navigation }) {
               </View>
             ) : null}
 
-            {/* KILLER FEATURE: CHECKBOX LIST NGUYÊN LIỆU SIÊU TO, IN ĐẬM */}
+            {/* BẢNG TÙY BIẾN CÔNG THỨC & NGUYÊN LIỆU THỰC TẾ THEO TỪNG MÓN ĐƠN HÀNG */}
             <View style={styles.killerFeatureCard}>
               <View style={styles.killerHeaderRow}>
-                <Text style={styles.killerHeaderTitle}>🥗 TÙY CHỌN NGUYÊN LIỆU & CÔNG ĐOẠN</Text>
-                <Text style={styles.killerHeaderSub}>Chạm để tick hoàn tất từng mục</Text>
+                <Text style={styles.killerHeaderTitle}>🥗 TÙY CHỌN NGUYÊN LIỆU & CÔNG THỨC NẤU</Text>
+                <Text style={styles.killerHeaderSub}>Kiểm tra chi tiết từng món trước khi chế biến</Text>
               </View>
 
-              {/* Danh sách các bước chế biến demo trực quan cực to */}
-              {[
-                { key: 'beef', label: '🥩 2 MIẾNG THỊT BÒ NƯỚNG (MEDIUM WELL)', bold: true },
-                { key: 'cheese', label: '🧀 THÊM 2 LÁT PHÔ MAI CHEDDAR', bold: true },
-                { key: 'no_onion', label: '🚫 KHÔNG HÀNH TÂY', bold: true, alert: true },
-                { key: 'sauce', label: '🥫 RƯỚI SỐT BBQ ĐẬM ĐÀ', bold: true },
-                { key: 'fries', label: '🍟 CHIÊN 1 PHẦN KHOAI TÂY GIÒN NÓNG', bold: false },
-                { key: 'drink', label: '🥤 1 PEPSI LON ƯỚP LẠNH (KHÔNG ĐÁ)', bold: false },
-              ].map((step) => {
-                const isChecked = !!checkedItems[step.key];
-                return (
-                  <TouchableOpacity
-                    key={step.key}
-                    activeOpacity={0.7}
-                    onPress={() => toggleCheckStep(step.key)}
-                    style={[
-                      styles.stepCheckboxRow,
-                      isChecked && styles.stepCheckboxRowDone,
-                      step.alert && !isChecked && styles.stepAlertBorder
-                    ]}
-                  >
-                    <View style={[styles.largeCheckboxBox, isChecked && styles.largeCheckboxBoxDone]}>
-                      {isChecked ? (
-                        <Text style={styles.checkmarkIcon}>✓</Text>
-                      ) : (
-                        <View style={styles.emptyCheckboxHole} />
-                      )}
-                    </View>
+              {Array.isArray(selectedOrder?.danh_sach_mon) && selectedOrder.danh_sach_mon.length > 0 ? (
+                selectedOrder.danh_sach_mon.map((dish, dishIdx) => {
+                  const hasCustom = !!dish.dinh_duong_tuy_bien;
+                  const customNutri = dish.dinh_duong_tuy_bien || {};
+                  const adjustedLabels = Array.isArray(customNutri.adjusted_labels)
+                    ? customNutri.adjusted_labels
+                    : (Array.isArray(customNutri.tuy_bien_labels) ? customNutri.tuy_bien_labels : []);
+                  const stepKey = `dish_${dish.ma_chi_tiet || dishIdx}`;
+                  const isChecked = !!checkedItems[stepKey];
 
-                    <View style={styles.stepTextContainer}>
-                      <Text style={[
-                        styles.stepLabelText,
-                        step.bold && styles.stepTextBold,
-                        step.alert && styles.stepTextAlert,
-                        isChecked && styles.stepLabelDone
-                      ]}>
-                        {step.label}
-                      </Text>
-                      <Text style={styles.stepHintText}>
-                        {isChecked ? 'Đã hoàn thành chuẩn bị' : 'Chạm để xác nhận đã cho vào phần ăn'}
-                      </Text>
+                  return (
+                    <View key={stepKey} style={styles.dishSectionBlock}>
+                      {/* Tiêu đề món */}
+                      <TouchableOpacity
+                        activeOpacity={0.75}
+                        onPress={() => toggleCheckStep(stepKey)}
+                        style={[
+                          styles.dishHeaderRow,
+                          isChecked && styles.stepCheckboxRowDone
+                        ]}
+                      >
+                        <View style={[styles.largeCheckboxBox, isChecked && styles.largeCheckboxBoxDone]}>
+                          {isChecked ? (
+                            <Text style={styles.checkmarkIcon}>✓</Text>
+                          ) : (
+                            <View style={styles.emptyCheckboxHole} />
+                          )}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.dishItemNameHeading, isChecked && styles.stepLabelDone]}>
+                            {dish.so_luong}x {dish.ten_mon}
+                          </Text>
+                          <Text style={styles.dishItemStatusHint}>
+                            {isChecked ? 'Đã hoàn thành món này' : 'Chạm vào ô để đánh dấu đã nấu xong món'}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+
+                      {/* Nội dung Tùy Biến Hoặc Làm Bình Thường */}
+                      <View style={styles.dishCustomizationBody}>
+                        {hasCustom ? (
+                          <View style={styles.customizedNoticeCard}>
+                            <View style={styles.customizedBadgeHeader}>
+                              <Text style={styles.customizedBadgeTitle}>🔥 CÓ TÙY BIẾN THEO YÊU CẦU CỦA KHÁCH:</Text>
+                              {customNutri.calo ? (
+                                <Text style={styles.customizedCaloText}>Tổng calo: {customNutri.calo} kcal</Text>
+                              ) : null}
+                            </View>
+
+                            {adjustedLabels.length > 0 ? (
+                              <View style={styles.adjustedLabelsList}>
+                                {adjustedLabels.map((lbl, lIdx) => (
+                                  <View key={lIdx} style={styles.adjustedLabelItem}>
+                                    <Text style={styles.adjustedLabelText}>👉 {lbl}</Text>
+                                  </View>
+                                ))}
+                              </View>
+                            ) : (
+                              <Text style={styles.customizedFallbackText}>
+                                Khách đã điều chỉnh lượng nguyên liệu riêng cho món này (xem chi tiết calo).
+                              </Text>
+                            )}
+                          </View>
+                        ) : (
+                          <View style={styles.standardNoticeCard}>
+                            <Text style={styles.standardNoticeIcon}>✅</Text>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.standardNoticeTitle}>Món làm bình thường (Không có tùy biến)</Text>
+                              <Text style={styles.standardNoticeDesc}>
+                                Món này là "{dish.ten_mon}", đầu bếp làm theo định lượng và công thức chuẩn của quán.
+                              </Text>
+                            </View>
+                          </View>
+                        )}
+                      </View>
                     </View>
-                  </TouchableOpacity>
-                );
-              })}
+                  );
+                })
+              ) : (
+                <View style={styles.standardNoticeCard}>
+                  <Text style={styles.standardNoticeTitle}>Món làm bình thường theo thực đơn của quán.</Text>
+                </View>
+              )}
             </View>
           </ScrollView>
 
@@ -599,7 +659,7 @@ export default function StaffKitchenScreen({ navigation }) {
                 {updatingOrderId === selectedOrder?.ma_don_hang ? (
                   <ActivityIndicator color="#FFF" />
                 ) : (
-                  <Text style={styles.fullWidthCtaText}>🍳 BẮT ĐẦU CHẾ BIẾN NGAY</Text>
+                  <Text style={styles.fullWidthCtaText}>🍳 NHẬN & NẤU NGAY</Text>
                 )}
               </TouchableOpacity>
             ) : (
@@ -629,9 +689,13 @@ export default function StaffKitchenScreen({ navigation }) {
         <View style={styles.modalOverlay}>
           <View style={styles.editProfileCard}>
             <View style={styles.editProfileHeader}>
-              <Text style={styles.editProfileTitle}>👤 Tài Khoản & Thông Tin Nhân Viên</Text>
-              <TouchableOpacity onPress={() => setShowEditProfileModal(false)}>
-                <Text style={styles.editProfileCloseText}>✕ Đóng</Text>
+              <Text numberOfLines={1} style={styles.editProfileTitle}>👤 Thông Tin Nhân Viên</Text>
+              <TouchableOpacity 
+                style={styles.modalCircleCloseBtn}
+                onPress={() => setShowEditProfileModal(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.modalCircleCloseText}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -709,7 +773,8 @@ const styles = StyleSheet.create({
   topHeader: {
     backgroundColor: '#DC2626',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 12 : 14,
+    paddingBottom: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -857,18 +922,245 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginTop: 2,
   },
-  cardNoteBox: {
-    backgroundColor: '#FEF3C7',
-    padding: 8,
-    borderRadius: 8,
+  cardDishesContainer: {
     marginTop: 6,
+    gap: 4,
+  },
+  cardDishRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 3,
+  },
+  cardDishName: {
+    fontSize: 14,
+    color: '#334155',
+    flex: 1,
+  },
+  cardCustomTag: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: '#FDE68A',
+  },
+  cardCustomTagText: {
+    color: '#B45309',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  cardNoteBox: {
+    backgroundColor: '#FEF3C7',
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  cardNoteLabel: {
+    color: '#92400E',
+    fontWeight: '800',
+    fontSize: 12,
+    marginBottom: 2,
   },
   cardNoteText: {
     color: '#B45309',
     fontWeight: '700',
     fontSize: 13,
+  },
+  dishSectionBlock: {
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 14,
+  },
+  dishHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  dishItemNameHeading: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#0F172A',
+  },
+  dishItemStatusHint: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  dishCustomizationBody: {
+    marginTop: 8,
+    paddingLeft: 4,
+  },
+  customizedNoticeCard: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1.5,
+    borderColor: '#FCD34D',
+    borderRadius: 10,
+    padding: 12,
+  },
+  customizedBadgeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  customizedBadgeTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#B45309',
+  },
+  customizedCaloText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#EA580C',
+    backgroundColor: '#FFEDD5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  adjustedLabelsList: {
+    gap: 6,
+  },
+  adjustedLabelItem: {
+    backgroundColor: '#FEF3C7',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  adjustedLabelText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  customizedFallbackText: {
+    fontSize: 13,
+    color: '#78350F',
+    fontWeight: '600',
+  },
+  standardNoticeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 10,
+    padding: 10,
+  },
+  standardNoticeIcon: {
+    fontSize: 18,
+  },
+  standardNoticeTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#166534',
+  },
+  standardNoticeDesc: {
+    fontSize: 12,
+    color: '#15803D',
+    marginTop: 2,
+  },
+  modalCircleCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCircleCloseText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#64748B',
+  },
+  editProfileCard: {
+    backgroundColor: '#FFFFFF',
+    width: '90%',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  editProfileHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEEEEE',
+  },
+  editProfileTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1F2937',
+    flex: 1,
+    marginRight: 10,
+  },
+  editProfileCloseText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#9CA3AF',
+  },
+  inputFieldLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#374151',
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  profileTextInput: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#1F2937',
+  },
+  editProfileActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 18,
+  },
+  editProfileCancelBtn: {
+    flex: 1,
+    height: 46,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editProfileCancelText: {
+    color: '#4B5563',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  editProfileSubmitBtn: {
+    flex: 1,
+    height: 46,
+    backgroundColor: '#DC2626',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editProfileSubmitText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 14,
   },
   cardActionsRow: {
     flexDirection: 'row',
@@ -1435,106 +1727,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-  },
-  editProfileCard: {
-    backgroundColor: '#FFFFFF',
-    width: '90%',
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  editProfileHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
-  },
-  editProfileTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#1F2937',
-  },
-  editProfileCloseText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#9CA3AF',
-  },
-  inputFieldLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#374151',
-    marginTop: 10,
-    marginBottom: 6,
-  },
-  profileTextInput: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#1F2937',
-  },
-  editProfileActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 18,
-  },
-  editProfileCancelBtn: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  editProfileCancelText: {
-    color: '#4B5563',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  editProfileSubmitBtn: {
-    flex: 1,
-    backgroundColor: '#DC2626',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editProfileSubmitText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 14,
-  },
-  avatarEditPencilBadge: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    backgroundColor: '#DC2626',
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  avatarEditPencilIcon: {
-    fontSize: 12,
-  },
-  avatarHintTap: {
-    fontSize: 12,
-    color: '#94A3B8',
-    fontWeight: '600',
-    marginTop: 6,
-    marginBottom: 4,
-    textAlign: 'center',
   },
   modalLogoutDivider: {
     height: 1,

@@ -134,13 +134,24 @@ export default function CustomNutritionScreen({ route, navigation }) {
     setAdding(true);
     try {
       // Đóng gói cấu hình dinh dưỡng tùy biến và giá sau tùy biến
+      const adjusted_labels = [];
+      ingredients.forEach(ing => {
+        const qty = quantities[ing.ma_nguyen_lieu] !== undefined ? quantities[ing.ma_nguyen_lieu] : 1;
+        if (qty > 1) {
+          adjusted_labels.push(`Tăng ${ing.ten_nguyen_lieu} (x${qty})`);
+        } else if (qty < 1) {
+          adjusted_labels.push(`Bớt ${ing.ten_nguyen_lieu} (x${qty})`);
+        }
+      });
+
       const customNutritionPayload = {
         calo: nutrition.calo,
         protein: nutrition.protein,
         carbs: nutrition.carbs,
         fat: nutrition.fat,
         gia_sau_tuy_bien: nutrition.gia_sau_tuy_bien,
-        chi_tiet_nguyen_lieu: quantities
+        chi_tiet_nguyen_lieu: quantities,
+        adjusted_labels
       };
 
       if (cartItemId) {

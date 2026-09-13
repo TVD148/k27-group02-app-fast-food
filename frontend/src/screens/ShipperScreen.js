@@ -962,7 +962,6 @@ export default function ShipperScreen({ navigation }) {
               <Text style={styles.avatarEditPencilIcon}>✏️</Text>
             </View>
           </TouchableOpacity>
-          <Text style={styles.avatarHintTap}>Chạm avatar để sửa thông tin & đăng xuất</Text>
 
           <Text style={styles.shipperName}>{currentUser?.ho_ten || 'Tài Xế FastFood'}</Text>
           <Text style={styles.shipperPhone}>{currentUser?.so_dien_thoai || 'Chưa cập nhật SĐT'}</Text>
@@ -1434,9 +1433,13 @@ export default function ShipperScreen({ navigation }) {
         <View style={styles.modalOverlay}>
           <View style={styles.editProfileCard}>
             <View style={styles.editProfileHeader}>
-              <Text style={styles.editProfileTitle}>👤 Tài Khoản & Thông Tin Shipper</Text>
-              <TouchableOpacity onPress={() => setShowEditProfileModal(false)}>
-                <Text style={styles.editProfileCloseText}>✕ Đóng</Text>
+              <Text numberOfLines={1} style={styles.editProfileTitle}>👤 Thông Tin Shipper</Text>
+              <TouchableOpacity 
+                style={styles.modalCircleCloseBtn}
+                onPress={() => setShowEditProfileModal(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.modalCircleCloseText}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -1514,7 +1517,8 @@ const styles = StyleSheet.create({
   topHeader: {
     backgroundColor: '#00897B',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 12 : 12,
+    paddingBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -3169,6 +3173,19 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 10,
   },
+  modalCircleCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCircleCloseText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#64748B',
+  },
   editProfileHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -3179,9 +3196,11 @@ const styles = StyleSheet.create({
     borderBottomColor: '#EEEEEE',
   },
   editProfileTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
     color: '#1F2937',
+    flex: 1,
+    marginRight: 10,
   },
   editProfileCloseText: {
     fontSize: 14,
@@ -3212,10 +3231,11 @@ const styles = StyleSheet.create({
   },
   editProfileCancelBtn: {
     flex: 1,
+    height: 46,
     backgroundColor: '#F3F4F6',
-    paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   editProfileCancelText: {
     color: '#4B5563',
@@ -3224,8 +3244,8 @@ const styles = StyleSheet.create({
   },
   editProfileSubmitBtn: {
     flex: 1,
+    height: 46,
     backgroundColor: '#00897B',
-    paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',

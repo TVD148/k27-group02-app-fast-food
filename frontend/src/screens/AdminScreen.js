@@ -1939,7 +1939,6 @@ export default function AdminScreen({ navigation }) {
             <View style={styles.adminRoleBadge}>
               <Text style={styles.adminRoleBadgeText}>👑 QUẢN TRỊ VIÊN CẤP CAO (ADMIN)</Text>
             </View>
-            <Text style={styles.avatarHintTap}>Chạm avatar để sửa thông tin & đăng xuất</Text>
           </View>
         </View>
 
@@ -3402,7 +3401,8 @@ const styles = StyleSheet.create({
   topHeader: {
     backgroundColor: '#6A1B9A',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 12 : 12,
+    paddingBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -4156,21 +4156,23 @@ const styles = StyleSheet.create({
   },
   modalCancelBtn: {
     flex: 1,
+    height: 46,
     backgroundColor: '#F1F5F9',
-    paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   modalCancelText: {
     color: '#64748B',
     fontWeight: '700',
   },
   modalSubmitBtn: {
-    flex: 2,
+    flex: 1,
+    height: 46,
     backgroundColor: '#6A1B9A',
-    paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   modalSubmitText: {
     color: '#FFFFFF',

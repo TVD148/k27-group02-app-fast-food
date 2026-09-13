@@ -8,7 +8,9 @@ import {
   ActivityIndicator, 
   Alert,
   SafeAreaView,
-  FlatList
+  FlatList,
+  Platform,
+  StatusBar
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchCart, updateCartItem, removeCartItem, clearCart } from '../services/api';
@@ -216,8 +218,7 @@ export default function CartScreen({ navigation }) {
   }
 
   const items = cartData?.items || [];
-  const shippingFee = items.length > 0 ? 15000 : 0;
-  const grandTotal = (cartData?.tong_tien || 0) + shippingFee;
+  const grandTotal = cartData?.tong_tien || 0;
   const totalCartCalo = cartData?.tong_calo || items.reduce((acc, i) => acc + ((i.calo || 350) * i.so_luong), 0);
 
   return (
@@ -270,8 +271,8 @@ export default function CartScreen({ navigation }) {
             </View>
             
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Phí giao hàng cố định:</Text>
-              <Text style={styles.summaryValue}>{shippingFee.toLocaleString('vi-VN')} đ</Text>
+              <Text style={styles.summaryLabel}>Phí giao hàng:</Text>
+              <Text style={[styles.summaryValue, { color: '#00A896', fontStyle: 'italic', fontSize: 13 }]}>Tính theo km khi đặt hàng</Text>
             </View>
 
             <View style={styles.divider} />
@@ -304,7 +305,8 @@ const styles = StyleSheet.create({
   },
   topHeaderBar: {
     backgroundColor: '#00A896',
-    paddingVertical: 14,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 10 : 14,
+    paddingBottom: 14,
     paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',

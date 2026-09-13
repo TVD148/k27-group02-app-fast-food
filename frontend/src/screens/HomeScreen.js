@@ -11,7 +11,9 @@ import {
   Alert,
   SafeAreaView,
   Image,
-  Dimensions
+  Dimensions,
+  Platform,
+  StatusBar
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchCategories, fetchItems, logoutUser } from '../services/api';
@@ -354,7 +356,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 10 : 16,
     paddingBottom: 18,
     zIndex: 100,
     elevation: 6,
