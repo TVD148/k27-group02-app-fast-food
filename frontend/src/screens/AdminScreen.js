@@ -80,16 +80,15 @@ function RevenueLineChart({ hourlyData = [] }) {
   return (
     <View style={styles.chartWrapper}>
       <View style={styles.chartHeaderRow}>
-        <Text style={styles.chartTitle}>📈 Biểu Đồ Doanh Thu Theo Giờ Trong Ngày</Text>
+        <Text style={styles.chartTitle}>📈 Biểu Đồ Hoạt Động Theo Giờ</Text>
         {selectedPoint ? (
           <View style={styles.tooltipBadge}>
             <Text style={styles.tooltipText}>
-              {selectedPoint.hour}: {selectedPoint.amount.toLocaleString('vi-VN')} đ
-              {selectedPoint.orders ? ` (${selectedPoint.orders} đơn)` : ''}
+              {selectedPoint.hour}: {selectedPoint.orders ? `${selectedPoint.orders} đơn hàng` : 'Hoạt động'}
             </Text>
           </View>
         ) : (
-          <Text style={styles.chartHint}>Chạm vào cột để xem chi tiết</Text>
+          <Text style={styles.chartHint}>Chạm vào cột để xem giờ</Text>
         )}
       </View>
 
@@ -116,15 +115,6 @@ function RevenueLineChart({ hourlyData = [] }) {
                 onPress={() => setSelectedPoint(item)}
                 style={styles.pointCol}
               >
-                {/* Badge số tiền nổi bật trên đỉnh cột */}
-                {hasRevenue && (
-                  <View style={styles.miniValTag}>
-                    <Text style={styles.miniValText}>
-                      {item.amount >= 1000 ? `${Math.round(item.amount / 1000)}k` : item.amount}
-                    </Text>
-                  </View>
-                )}
-
                 <View style={styles.verticalTrack}>
                   <View
                     style={[
@@ -1657,17 +1647,20 @@ export default function AdminScreen({ navigation }) {
     <View style={styles.tabContentBlock}>
       <View style={styles.settingsGroupCard}>
         <View style={styles.groupHeaderRow}>
-          <Text style={styles.groupHeaderTitle}>👥 Quản Lý Người Dùng & Phân Quyền</Text>
+          <Text style={[styles.groupHeaderTitle, { flex: 1, marginRight: 8 }]} numberOfLines={1}>
+            👥 Phân Quyền Tài Khoản
+          </Text>
           <TouchableOpacity 
             style={styles.groupActionAddBtn}
             onPress={() => setModalType('addUser')}
+            activeOpacity={0.8}
           >
-            <Text style={styles.groupActionAddText}>+ Thêm Tài Khoản</Text>
+            <Text style={styles.groupActionAddText}>+ Thêm</Text>
           </TouchableOpacity>
         </View>
 
         <Text style={styles.landmarkDesc}>
-          Quản lý toàn bộ {users.length} tài khoản trong hệ thống. Bạn có thể điều chỉnh vai trò sang Khách hàng, Bếp & Quán, hoặc Shipper.
+          Danh sách tài khoản ({users.length})
         </Text>
 
         {/* Ô tìm kiếm tài khoản */}
@@ -1818,20 +1811,19 @@ export default function AdminScreen({ navigation }) {
         </View>
       </View>
 
-      {/* 2. MỤC ĐỊA CHỈ MỐC QUÁN (CỘT MỐC) - BẤM VÀO MỚI XỔ XUỐNG */}
+      {/* 2. MỤC ĐỊA CHỈ MỐC QUÁN - BẤM VÀO MỚI XỔ XUỐNG */}
       <View style={styles.settingsGroupCard}>
         <TouchableOpacity
           style={styles.accordionHeaderBtn}
           onPress={() => setExpandedSettingSection(expandedSettingSection === 'store' ? null : 'store')}
           activeOpacity={0.7}
         >
-          <View style={styles.accordionTitleWrap}>
-            <Text style={styles.groupHeaderTitle}>🏬 Địa Chỉ Mốc Quán (Cột Mốc)</Text>
-            <View style={styles.landmarkTag}>
-              <Text style={styles.landmarkTagText}>Bán kính: {storeLandmark.ban_kinh_phuc_vu_km}km</Text>
-            </View>
+          <Text style={styles.accordionTitleText}>🏬 Địa Chỉ Quán</Text>
+          <View style={styles.accordionExpandBadge}>
+            <Text style={styles.accordionExpandIcon}>
+              {expandedSettingSection === 'store' ? '▲' : '▼'}
+            </Text>
           </View>
-          <Text style={styles.accordionChevron}>{expandedSettingSection === 'store' ? '▲' : '▼'}</Text>
         </TouchableOpacity>
 
         {expandedSettingSection === 'store' && (
@@ -1916,20 +1908,19 @@ export default function AdminScreen({ navigation }) {
         )}
       </View>
 
-      {/* 3. MỤC MÃ KHUYẾN MÃI (VOUCHER) - BẤM VÀO MỚI XỔ XUỐNG */}
+      {/* 3. MỤC MÃ KHUYẾN MÃI - BẤM VÀO MỚI XỔ XUỐNG */}
       <View style={styles.settingsGroupCard}>
         <TouchableOpacity
           style={styles.accordionHeaderBtn}
           onPress={() => setExpandedSettingSection(expandedSettingSection === 'voucher' ? null : 'voucher')}
           activeOpacity={0.7}
         >
-          <View style={styles.accordionTitleWrap}>
-            <Text style={styles.groupHeaderTitle}>🎟️ Quản Lý Mã Khuyến Mãi (Voucher)</Text>
-            <View style={[styles.landmarkTag, { backgroundColor: '#EDE9FE' }]}>
-              <Text style={[styles.landmarkTagText, { color: '#6D28D9' }]}>{vouchers.length} mã</Text>
-            </View>
+          <Text style={styles.accordionTitleText}>🎟️ Mã Khuyến Mãi</Text>
+          <View style={styles.accordionExpandBadge}>
+            <Text style={styles.accordionExpandIcon}>
+              {expandedSettingSection === 'voucher' ? '▲' : '▼'}
+            </Text>
           </View>
-          <Text style={styles.accordionChevron}>{expandedSettingSection === 'voucher' ? '▲' : '▼'}</Text>
         </TouchableOpacity>
 
         {expandedSettingSection === 'voucher' && (
@@ -3979,7 +3970,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: 6,
+  },
+  accordionTitleText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+    flex: 1,
+  },
+  accordionExpandBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#EDE7F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    flexShrink: 0,
+  },
+  accordionExpandIcon: {
+    fontSize: 12,
+    color: '#6A1B9A',
+    fontWeight: '900',
   },
   accordionTitleWrap: {
     flexDirection: 'row',
@@ -4000,9 +4012,10 @@ const styles = StyleSheet.create({
   },
   groupActionAddBtn: {
     backgroundColor: '#EDE7F6',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    flexShrink: 0,
   },
   groupActionAddText: {
     color: '#6A1B9A',
