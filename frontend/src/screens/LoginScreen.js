@@ -235,40 +235,6 @@ export default function LoginScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            {/* ⚡ Cụm Đăng Nhập Nhanh Demo Roles */}
-            <View style={styles.quickLoginContainer}>
-              <Text style={styles.quickLoginTitle}>⚡ Đăng nhập nhanh tài khoản thử nghiệm:</Text>
-              <View style={styles.quickLoginGrid}>
-                <TouchableOpacity 
-                  style={[styles.quickRoleBtn, { backgroundColor: '#EDE7F6' }]}
-                  onPress={() => handleQuickLogin('0912345678', '123456')}
-                >
-                  <Text style={[styles.quickRoleText, { color: '#6A1B9A' }]}>👑 Admin</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={[styles.quickRoleBtn, { backgroundColor: '#FBE9E7' }]}
-                  onPress={() => handleQuickLogin('0934567890', '123456')}
-                >
-                  <Text style={[styles.quickRoleText, { color: '#D84315' }]}>🧑‍🍳 Bếp</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={[styles.quickRoleBtn, { backgroundColor: '#E0F2F1' }]}
-                  onPress={() => handleQuickLogin('0945678901', '123456')}
-                >
-                  <Text style={[styles.quickRoleText, { color: '#00897B' }]}>🛵 Shipper</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={[styles.quickRoleBtn, { backgroundColor: '#E8F5E9' }]}
-                  onPress={() => handleQuickLogin('0923456789', '123456')}
-                >
-                  <Text style={[styles.quickRoleText, { color: '#2E7D32' }]}>🛍️ Khách</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
             {/* Link chuyển sang trang Đăng Ký */}
             <View style={styles.registerFooterRow}>
               <Text style={styles.footerNormalText}>Chưa có tài khoản? </Text>

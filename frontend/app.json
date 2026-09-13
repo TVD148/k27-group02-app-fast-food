@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "FastFood App",
+    "name": "DH2FOOD",
     "slug": "app-fast-food",
     "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon_dh2food.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
@@ -13,10 +13,8 @@
       "package": "com.fastfood.app",
       "versionCode": 2,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#FF5722",
+        "foregroundImage": "./assets/icon_dh2food.png"
       }
     },
     "web": {

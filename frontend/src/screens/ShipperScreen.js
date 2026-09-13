@@ -60,7 +60,7 @@ function calculateShippingFee(distanceKm) {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function ShipperScreen({ navigation }) {
-  // 5 Bottom Tabs: 'available' (Chờ nhận), 'delivering' (Đang giao), 'history' (Đã giao), 'earnings' (Thu nhập), 'profile' (Hồ sơ)
+  // 4 Bottom Tabs: 'available' (Chờ nhận), 'delivering' (Đang giao), 'history' (Đã giao), 'profile' (Hồ sơ)
   const [activeBottomTab, setActiveBottomTab] = useState('available');
 
   const [orders, setOrders] = useState([]);
@@ -641,8 +641,13 @@ export default function ShipperScreen({ navigation }) {
               <View style={styles.customerActionBox}>
                 <View style={styles.customerDetailCol}>
                   <Text style={styles.activeCustomerName}>👤 {order.ten_khach_hang || 'Khách hàng FastFood'}</Text>
+                  {(order.so_dien_thoai_nhan || order.so_dien_thoai) ? (
+                    <Text style={styles.activeCustomerAddress}>📞 {order.so_dien_thoai_nhan || order.so_dien_thoai}</Text>
+                  ) : null}
                   <Text style={styles.activeCustomerAddress}>📍 {order.dia_chi_giao || '123 Đường Số 5, Thủ Dầu Một'}</Text>
-                  <Text style={styles.activeCodText}>💵 Thu hộ COD: {parseFloat(order.tong_tien).toLocaleString('vi-VN')} đ</Text>
+                  {(order.phuong_thuc_thanh_toan === 'tien_mat' || !order.phuong_thuc_thanh_toan) ? (
+                    <Text style={styles.activeCodText}>💵 Thu COD: {parseFloat(order.tong_tien || 0).toLocaleString('vi-VN')} đ</Text>
+                  ) : null}
                 </View>
 
                 {/* Hai nút Gọi điện & Nhắn tin có Touch Area >= 48x48pt */}
@@ -1251,7 +1256,6 @@ export default function ShipperScreen({ navigation }) {
             {activeBottomTab === 'available' && renderAvailableOrdersTab()}
             {activeBottomTab === 'delivering' && renderDeliveringTab()}
             {activeBottomTab === 'history' && renderHistoryTab()}
-            {activeBottomTab === 'earnings' && renderEarningsTab()}
             {activeBottomTab === 'profile' && renderProfileTab()}
           </ScrollView>
         )}
@@ -1301,24 +1305,9 @@ export default function ShipperScreen({ navigation }) {
         >
           <View style={styles.badgeWrap}>
             <Text style={styles.bottomIcon}>📜</Text>
-            {deliveredOrders.length > 0 && (
-              <View style={[styles.tabBadge, { backgroundColor: '#16A34A' }]}>
-                <Text style={styles.tabBadgeText}>{deliveredOrders.length}</Text>
-              </View>
-            )}
           </View>
           <Text style={[styles.bottomTabLabel, activeBottomTab === 'history' && styles.bottomTabLabelActive]}>
             Đã giao
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.bottomTabItem, activeBottomTab === 'earnings' && styles.bottomTabActive]}
-          onPress={() => setActiveBottomTab('earnings')}
-        >
-          <Text style={styles.bottomIcon}>💰</Text>
-          <Text style={[styles.bottomTabLabel, activeBottomTab === 'earnings' && styles.bottomTabLabelActive]}>
-            Thu nhập
           </Text>
         </TouchableOpacity>
 
