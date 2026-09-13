@@ -42,19 +42,19 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 function RevenueLineChart({ hourlyData = [] }) {
   const [selectedPoint, setSelectedPoint] = useState(null);
 
-  const defaultData = [
-    { hour: '08:00', amount: 350000 },
-    { hour: '10:00', amount: 720000 },
-    { hour: '12:00', amount: 1850000 },
-    { hour: '14:00', amount: 950000 },
-    { hour: '16:00', amount: 1200000 },
-    { hour: '18:00', amount: 2400000 },
-    { hour: '20:00', amount: 2890000 },
-    { hour: '22:00', amount: 1100000 },
+  const defaultZeroHours = [
+    { hour: '08:00', amount: 0 },
+    { hour: '10:00', amount: 0 },
+    { hour: '12:00', amount: 0 },
+    { hour: '14:00', amount: 0 },
+    { hour: '16:00', amount: 0 },
+    { hour: '18:00', amount: 0 },
+    { hour: '20:00', amount: 0 },
+    { hour: '22:00', amount: 0 },
   ];
 
-  const data = hourlyData.length > 0 ? hourlyData : defaultData;
-  const maxAmount = Math.max(...data.map(d => d.amount), 1000000);
+  const data = (hourlyData && hourlyData.length > 0) ? hourlyData : defaultZeroHours;
+  const maxAmount = Math.max(...data.map(d => d.amount), 100000);
   const chartHeight = 160;
 
   return (

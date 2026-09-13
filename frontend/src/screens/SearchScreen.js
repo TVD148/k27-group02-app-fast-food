@@ -25,7 +25,7 @@ const POPULAR_KEYWORDS = [
 
 export default function SearchScreen({ navigation, route }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [recentSearches, setRecentSearches] = useState(['Burger Bò', 'Gà Rán Giòn', 'Khoai Tây Chiên']);
+  const [recentSearches, setRecentSearches] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);

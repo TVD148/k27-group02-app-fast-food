@@ -111,34 +111,27 @@ export default function CheckoutScreen({ route, navigation }) {
       }
 
       // 1. Kiểm tra địa chỉ mặc định đã chọn trong default_address
-      const storedDefault = await AsyncStorage.getItem('default_address');
+      const userKey = user ? (user.ma_nguoi_dung || user.id || user.so_dien_thoai) : null;
+      const storedDefault = (userKey ? await AsyncStorage.getItem(`default_address_${userKey}`) : null) || await AsyncStorage.getItem('default_address');
       if (storedDefault) {
         const parsed = JSON.parse(storedDefault);
-        const isMockSample = parsed.address && (parsed.address.includes('Lê Duẩn') || (parsed.name === 'Trần Văn Đình' && user?.so_dien_thoai !== '0378876126'));
-        if (isMockSample) {
-          await AsyncStorage.removeItem('default_address');
-        } else {
-          setDefaultAddress(parsed);
-          setAddress(parsed.address || '');
-          setPhone(parsed.phone || user?.so_dien_thoai || '');
-          return;
-        }
+        setDefaultAddress(parsed);
+        setAddress(parsed.address || '');
+        setPhone(parsed.phone || user?.so_dien_thoai || '');
+        return;
       }
 
       // 2. Lấy từ danh sách sổ địa chỉ saved_addresses
-      const savedList = await AsyncStorage.getItem('saved_addresses');
+      const savedList = (userKey ? await AsyncStorage.getItem(`saved_addresses_${userKey}`) : null) || await AsyncStorage.getItem('saved_addresses');
       if (savedList) {
         let list = JSON.parse(savedList);
         if (Array.isArray(list) && list.length > 0) {
-          list = list.filter(item => !(item.name === 'Trần Văn Đình' && user?.so_dien_thoai !== '0378876126'));
-          if (list.length > 0) {
-            const def = list.find(a => a.isDefault) || list[0];
-            setDefaultAddress(def);
-            setAddress(def.address || '');
-            setPhone(def.phone || user?.so_dien_thoai || '');
-            await AsyncStorage.setItem('default_address', JSON.stringify(def));
-            return;
-          }
+          const def = list.find(a => a.isDefault) || list[0];
+          setDefaultAddress(def);
+          setAddress(def.address || '');
+          setPhone(def.phone || user?.so_dien_thoai || '');
+          await AsyncStorage.setItem('default_address', JSON.stringify(def));
+          return;
         }
       }
 

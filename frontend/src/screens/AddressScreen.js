@@ -91,12 +91,6 @@ export default function AddressScreen({ navigation, route }) {
       if (stored) {
         let parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          // Lọc bỏ địa chỉ mock mẫu thử nghiệm nếu không đúng tài khoản
-          parsed = parsed.filter(item => {
-            const isMockOld = item.address && (item.address.includes('Lê Duẩn') || (item.name === 'Trần Văn Đình' && user.so_dien_thoai !== '0378876126'));
-            return !isMockOld;
-          });
-
           setAddresses(parsed);
           if (userKey) {
             await AsyncStorage.setItem(userKey, JSON.stringify(parsed));
