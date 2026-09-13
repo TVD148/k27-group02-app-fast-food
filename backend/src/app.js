@@ -20,6 +20,7 @@ const nutritionRoutes = require('./routes/nutritionRoutes');
 const voucherRoutes = require('./routes/voucherRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const storeRoutes = require('./routes/storeRoutes');
+const addressRoutes = require('./routes/addressRoutes');
 
 // Log mọi request gửi đến server để dễ dàng kiểm tra kết nối
 app.use((req, res, next) => {
@@ -30,6 +31,9 @@ app.use((req, res, next) => {
 // Khai báo các đường dẫn API gốc (Hỗ trợ cả tiền tố /api/ và không có /api/)
 app.use('/api/auth', authRoutes);
 app.use('/auth', authRoutes);
+
+app.use('/api/address', addressRoutes);
+app.use('/address', addressRoutes);
 
 app.use('/api/menu', menuRoutes);
 app.use('/menu', menuRoutes);

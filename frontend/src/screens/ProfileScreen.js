@@ -15,7 +15,7 @@ import {
   KeyboardAvoidingView
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { updateUserProfile } from '../services/api';
+import { updateUserProfile, fetchUserAddresses } from '../services/api';
 import BottomTabBar from '../components/BottomTabBar';
 
 export default function ProfileScreen({ navigation }) {
@@ -47,8 +47,32 @@ export default function ProfileScreen({ navigation }) {
       const stored = await AsyncStorage.getItem('user_info');
       const token = await AsyncStorage.getItem('user_token');
       if (stored && token) {
-        const userObj = JSON.parse(stored);
+        let userObj = JSON.parse(stored);
         setUser(userObj);
+
+        // Lấy địa chỉ mặc định từ Database MySQL
+        try {
+          const addrRes = await fetchUserAddresses();
+          if (addrRes && addrRes.success && Array.isArray(addrRes.data)) {
+            const list = addrRes.data;
+            if (list.length > 0) {
+              const def = list.find(a => a.isDefault) || list[0];
+              setCurrentAddress(def);
+              if (def && def.address && userObj.dia_chi !== def.address) {
+                userObj = { ...userObj, dia_chi: def.address };
+                setUser(userObj);
+                await AsyncStorage.setItem('user_info', JSON.stringify(userObj));
+              }
+              return;
+            } else {
+              setCurrentAddress(null);
+              return;
+            }
+          }
+        } catch (dbErr) {
+          console.log('Chưa tải địa chỉ DB trong Profile:', dbErr.message);
+        }
+
         const userKey = userObj.ma_nguoi_dung || userObj.id || userObj.so_dien_thoai;
         const storedAddr = (userKey ? await AsyncStorage.getItem(`default_address_${userKey}`) : null) || await AsyncStorage.getItem('default_address');
         if (storedAddr) {

@@ -133,6 +133,65 @@ export const logoutUser = async () => {
 };
 
 // ============================================================================
+// I.b. CÁC API SỔ ĐỊA CHỈ (ADDRESS BOOK TRONG DATABASE)
+// ============================================================================
+
+// Lấy danh sách địa chỉ từ database
+export const fetchUserAddresses = async () => {
+  try {
+    const response = await api.get('/address');
+    return response.data;
+  } catch (error) {
+    const errorMsg = error.response?.data?.message || error.message || 'Lỗi lấy sổ địa chỉ!';
+    throw new Error(errorMsg);
+  }
+};
+
+// Thêm địa chỉ mới vào database
+export const addUserAddress = async (addressData) => {
+  try {
+    const response = await api.post('/address', addressData);
+    return response.data;
+  } catch (error) {
+    const errorMsg = error.response?.data?.message || error.message || 'Lỗi thêm địa chỉ!';
+    throw new Error(errorMsg);
+  }
+};
+
+// Cập nhật địa chỉ trong database
+export const updateUserAddress = async (id, addressData) => {
+  try {
+    const response = await api.put(`/address/${id}`, addressData);
+    return response.data;
+  } catch (error) {
+    const errorMsg = error.response?.data?.message || error.message || 'Lỗi cập nhật địa chỉ!';
+    throw new Error(errorMsg);
+  }
+};
+
+// Đặt làm địa chỉ mặc định trong database
+export const setDefaultUserAddress = async (id) => {
+  try {
+    const response = await api.put(`/address/${id}/default`);
+    return response.data;
+  } catch (error) {
+    const errorMsg = error.response?.data?.message || error.message || 'Lỗi chọn địa chỉ mặc định!';
+    throw new Error(errorMsg);
+  }
+};
+
+// Xóa địa chỉ khỏi database
+export const deleteUserAddress = async (id) => {
+  try {
+    const response = await api.delete(`/address/${id}`);
+    return response.data;
+  } catch (error) {
+    const errorMsg = error.response?.data?.message || error.message || 'Lỗi xóa địa chỉ!';
+    throw new Error(errorMsg);
+  }
+};
+
+// ============================================================================
 // II. CÁC API THỰC ĐƠN (MENU)
 // ============================================================================
 

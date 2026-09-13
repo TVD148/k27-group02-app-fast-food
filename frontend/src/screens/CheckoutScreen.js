@@ -14,7 +14,15 @@ import {
   SafeAreaView 
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createOrder, applyVoucher, fetchVouchers, generateVietQR, confirmPayment, fetchStoreLandmark } from '../services/api';
+import { 
+  createOrder, 
+  applyVoucher, 
+  fetchVouchers, 
+  generateVietQR, 
+  confirmPayment, 
+  fetchStoreLandmark,
+  fetchUserAddresses 
+} from '../services/api';
 
 function calculateHaversine(lat1, lon1, lat2, lon2) {
   if (!lat1 || !lon1 || !lat2 || !lon2) return null;
@@ -118,7 +126,29 @@ export default function CheckoutScreen({ route, navigation }) {
         return;
       }
 
-      // 2. Lấy danh sách địa chỉ đã lưu trong sổ địa chỉ của riêng tài khoản này
+      // 2. Lấy trực tiếp từ Database MySQL
+      try {
+        const res = await fetchUserAddresses();
+        if (res && res.success && Array.isArray(res.data)) {
+          const list = res.data;
+          if (list.length > 0) {
+            const chosen = list.find(a => a.isDefault) || list[0];
+            setDefaultAddress(chosen);
+            setAddress(chosen.address || '');
+            setPhone(chosen.phone || user?.so_dien_thoai || '');
+            return;
+          } else {
+            // Danh sách rỗng trong Database -> Không có địa chỉ mặc định
+            setDefaultAddress(null);
+            setAddress('');
+            return;
+          }
+        }
+      } catch (dbErr) {
+        console.log('Chưa lấy được địa chỉ từ database, thử bộ nhớ máy:', dbErr.message);
+      }
+
+      // 3. Fallback lấy danh sách địa chỉ từ AsyncStorage nếu offline
       const savedListStr = await AsyncStorage.getItem(`saved_addresses_${userKey}`);
       if (savedListStr) {
         const list = JSON.parse(savedListStr);
@@ -139,7 +169,7 @@ export default function CheckoutScreen({ route, navigation }) {
         }
       }
 
-      // 3. Nếu tài khoản chưa từng lưu địa chỉ nào trong sổ địa chỉ: để trống hoàn toàn
+      // 4. Nếu tài khoản chưa từng lưu địa chỉ nào trong sổ địa chỉ: để trống hoàn toàn
       setDefaultAddress(null);
       setAddress('');
     } catch (e) {

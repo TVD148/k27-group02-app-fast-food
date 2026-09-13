@@ -11,6 +11,13 @@ import {
   SafeAreaView 
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { 
+  fetchUserAddresses, 
+  addUserAddress, 
+  updateUserAddress, 
+  setDefaultUserAddress, 
+  deleteUserAddress 
+} from '../services/api';
 import MapLocationPicker from '../components/MapLocationPicker';
 
 export default function AddressScreen({ navigation, route }) {
@@ -62,7 +69,7 @@ export default function AddressScreen({ navigation, route }) {
       setCurrentUser(user);
 
       if (!user) {
-        // Chưa đăng nhập -> Danh sách rỗng, không hiển thị địa chỉ của tài khoản khác
+        // Chưa đăng nhập -> Danh sách rỗng
         setAddresses([]);
         await AsyncStorage.removeItem('default_address');
         setLoading(false);
@@ -70,43 +77,55 @@ export default function AddressScreen({ navigation, route }) {
       }
 
       const userKey = getUserAddressKey(user);
-      let stored = await AsyncStorage.getItem(userKey);
 
-      // Nếu chưa có danh sách theo userKey, kiểm tra dữ liệu cũ để chuyển dịch mượt mà
-      if (!stored) {
-        const legacyStored = await AsyncStorage.getItem('saved_addresses');
-        if (legacyStored) {
-          try {
-            const legacyList = JSON.parse(legacyStored);
-            if (Array.isArray(legacyList) && legacyList.length > 0) {
-              stored = legacyStored;
-              if (userKey) {
-                await AsyncStorage.setItem(userKey, stored);
-              }
+      // 1. LẤY TRỰC TIẾP TỪ DATABASE MYSQL
+      try {
+        const response = await fetchUserAddresses();
+        if (response && response.success && Array.isArray(response.data)) {
+          const list = response.data;
+          setAddresses(list);
+          if (userKey) {
+            await AsyncStorage.setItem(userKey, JSON.stringify(list));
+          }
+          await AsyncStorage.setItem('saved_addresses', JSON.stringify(list));
+
+          if (list.length > 0) {
+            const def = list.find(a => a.isDefault) || list[0];
+            await AsyncStorage.setItem('default_address', JSON.stringify(def));
+            if (userKey) {
+              await AsyncStorage.setItem(`default_address_${userKey}`, JSON.stringify(def));
             }
-          } catch (e) {}
+            // Đồng bộ luôn trường dia_chi trong user_info trên máy
+            if (def && def.address) {
+              const updatedUser = { ...user, dia_chi: def.address };
+              setCurrentUser(updatedUser);
+              await AsyncStorage.setItem('user_info', JSON.stringify(updatedUser));
+            }
+          } else {
+            await AsyncStorage.removeItem('default_address');
+            if (userKey) await AsyncStorage.removeItem(`default_address_${userKey}`);
+          }
+          setLoading(false);
+          return;
         }
+      } catch (apiErr) {
+        console.log('Lỗi gọi API địa chỉ, dùng fallback bộ nhớ máy:', apiErr.message);
       }
 
+      // 2. Fallback AsyncStorage nếu mất mạng
+      let stored = userKey ? await AsyncStorage.getItem(userKey) : null;
       if (stored) {
         let parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
           setAddresses(parsed);
-          if (userKey) {
-            await AsyncStorage.setItem(userKey, JSON.stringify(parsed));
-          }
-          await AsyncStorage.setItem('saved_addresses', JSON.stringify(parsed));
-          if (parsed.length > 0) {
-            const def = parsed.find(a => a.isDefault) || parsed[0];
+          const def = parsed.find(a => a.isDefault) || parsed[0];
+          if (def) {
             await AsyncStorage.setItem('default_address', JSON.stringify(def));
-          } else {
-            await AsyncStorage.removeItem('default_address');
           }
         } else {
           setAddresses([]);
         }
       } else {
-        // Lần đầu mở tài khoản: Chưa có địa chỉ nào -> Danh sách rỗng
         setAddresses([]);
         await AsyncStorage.removeItem('default_address');
       }
@@ -117,23 +136,39 @@ export default function AddressScreen({ navigation, route }) {
     }
   };
 
-  // Chọn một địa chỉ làm địa chỉ mặc định giao hàng
+  // Chọn một địa chỉ làm địa chỉ mặc định giao hàng (Lưu Database & cập nhật nguoi_dung.dia_chi)
   const handleSelectAddress = async (selectedItem) => {
     const isAuth = await checkAuth('chọn địa chỉ giao hàng');
     if (!isAuth) return;
 
-    const userKey = getUserAddressKey(currentUser);
-    const updated = addresses.map(item => ({
-      ...item,
-      isDefault: item.id === selectedItem.id
-    }));
-    setAddresses(updated);
     try {
+      const targetId = selectedItem.ma_dia_chi || selectedItem.id;
+      // Gọi API cập nhật Database MySQL
+      if (targetId) {
+        await setDefaultUserAddress(targetId);
+      }
+
+      const userKey = getUserAddressKey(currentUser);
+      const updated = addresses.map(item => ({
+        ...item,
+        isDefault: (item.ma_dia_chi || item.id) === targetId
+      }));
+      setAddresses(updated);
+
       if (userKey) {
         await AsyncStorage.setItem(userKey, JSON.stringify(updated));
+        await AsyncStorage.setItem(`default_address_${userKey}`, JSON.stringify({ ...selectedItem, isDefault: true }));
       }
       await AsyncStorage.setItem('saved_addresses', JSON.stringify(updated));
       await AsyncStorage.setItem('default_address', JSON.stringify({ ...selectedItem, isDefault: true }));
+
+      // Đồng bộ vào user_info cục bộ
+      if (currentUser) {
+        const updatedUser = { ...currentUser, dia_chi: selectedItem.address };
+        setCurrentUser(updatedUser);
+        await AsyncStorage.setItem('user_info', JSON.stringify(updatedUser));
+      }
+
       Alert.alert(
         'Đã đổi địa chỉ giao hàng 📍',
         `Giao tới: ${selectedItem.label} - ${selectedItem.address}`,
@@ -151,14 +186,14 @@ export default function AddressScreen({ navigation, route }) {
         ]
       );
     } catch (e) {
-      console.log('Lỗi lưu địa chỉ mặc định');
+      Alert.alert('Thông báo', e.message || 'Lỗi khi đặt địa chỉ mặc định');
     }
   };
 
-  // Xóa địa chỉ
+  // Xóa địa chỉ (Xóa trong Database MySQL)
   const handleDeleteAddress = (id) => {
     Alert.alert(
-      'Xóa địa chỉ',
+      'Xóa địa chỉ 🗑️',
       'Bạn có chắc muốn xóa địa chỉ này khỏi danh bạ?',
       [
         { text: 'Hủy', style: 'cancel' },
@@ -166,20 +201,12 @@ export default function AddressScreen({ navigation, route }) {
           text: 'Xóa', 
           style: 'destructive',
           onPress: async () => {
-            const userKey = getUserAddressKey(currentUser);
-            const updated = addresses.filter(a => a.id !== id);
-            // Nếu xóa trúng địa chỉ mặc định thì chọn cái đầu tiên
-            if (updated.length > 0 && !updated.some(a => a.isDefault)) {
-              updated[0].isDefault = true;
-              await AsyncStorage.setItem('default_address', JSON.stringify(updated[0]));
-            } else if (updated.length === 0) {
-              await AsyncStorage.removeItem('default_address');
+            try {
+              await deleteUserAddress(id);
+              await loadSavedAddresses();
+            } catch (err) {
+              Alert.alert('Lỗi xóa', err.message || 'Không thể xóa địa chỉ!');
             }
-            setAddresses(updated);
-            if (userKey) {
-              await AsyncStorage.setItem(userKey, JSON.stringify(updated));
-            }
-            await AsyncStorage.setItem('saved_addresses', JSON.stringify(updated));
           }
         }
       ]
@@ -220,45 +247,31 @@ export default function AddressScreen({ navigation, route }) {
       return;
     }
 
-    const userKey = getUserAddressKey(user);
-    let updated = [...addresses];
-    
-    if (editingAddress) {
-      updated = updated.map(item => {
-        if (item.id === editingAddress.id) {
-          return {
-            ...item,
-            ...newLocation,
-            id: editingAddress.id,
-            isDefault: newLocation.isDefault !== undefined ? newLocation.isDefault : item.isDefault,
-          };
-        }
-        return newLocation.isDefault ? { ...item, isDefault: false } : item;
-      });
-    } else {
-      if (newLocation.isDefault || addresses.length === 0) {
-        updated = updated.map(item => ({ ...item, isDefault: false }));
-        updated.unshift({ ...newLocation, isDefault: true });
-      } else {
-        updated.unshift(newLocation);
-      }
-    }
-
-    setAddresses(updated);
     try {
-      if (userKey) {
-        await AsyncStorage.setItem(userKey, JSON.stringify(updated));
-      }
-      await AsyncStorage.setItem('saved_addresses', JSON.stringify(updated));
-      const defaultAddr = updated.find(a => a.isDefault) || updated[0];
-      await AsyncStorage.setItem('default_address', JSON.stringify(defaultAddr));
-    } catch (e) {
-      console.log('Lỗi lưu địa chỉ:', e);
-    }
+      const payload = {
+        name: newLocation.name,
+        phone: newLocation.phone,
+        label: newLocation.label,
+        address: newLocation.address,
+        detail: newLocation.detail || '',
+        coords: newLocation.coords,
+        isDefault: newLocation.isDefault !== undefined ? newLocation.isDefault : (addresses.length === 0)
+      };
 
-    setModalVisible(false);
-    setEditingAddress(null);
-    Alert.alert('Thành công 🎉', `Đã lưu địa chỉ nhận hàng:\n📍 ${newLocation.address}`);
+      if (editingAddress) {
+        const targetId = editingAddress.ma_dia_chi || editingAddress.id;
+        await updateUserAddress(targetId, payload);
+      } else {
+        await addUserAddress(payload);
+      }
+
+      await loadSavedAddresses();
+      setModalVisible(false);
+      setEditingAddress(null);
+      Alert.alert('Thành công 🎉', `Đã lưu địa chỉ nhận hàng vào sổ địa chỉ:\n📍 ${newLocation.address}`);
+    } catch (saveErr) {
+      Alert.alert('Lỗi lưu địa chỉ ⚠️', saveErr.message || 'Không thể lưu địa chỉ vào cơ sở dữ liệu!');
+    }
   };
 
   return (
