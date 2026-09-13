@@ -104,6 +104,7 @@ export const getUserProfile = async () => {
 export const logoutUser = async () => {
   await AsyncStorage.removeItem('user_token');
   await AsyncStorage.removeItem('user_info');
+  await AsyncStorage.removeItem('default_address');
 };
 
 // ============================================================================

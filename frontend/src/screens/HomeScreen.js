@@ -46,36 +46,40 @@ export default function HomeScreen({ navigation }) {
       const storedUser = await AsyncStorage.getItem('user_info');
       const token = await AsyncStorage.getItem('user_token');
       if (storedUser && token) {
-        setUserInfo(JSON.parse(storedUser));
-      } else {
-        setUserInfo(null);
-      }
+        const user = JSON.parse(storedUser);
+        setUserInfo(user);
 
-      // Tải địa chỉ mặc định đã chọn
-      const storedAddr = await AsyncStorage.getItem('default_address');
-      if (storedAddr) {
-        const parsed = JSON.parse(storedAddr);
-        // Dọn dẹp dữ liệu mock cũ nếu còn sót lại từ bản thử nghiệm
-        const isMockSample = parsed.address && (parsed.address.includes('Lê Duẩn') || (parsed.name === 'Trần Văn Đình' && (!storedUser || JSON.parse(storedUser).so_dien_thoai !== '0378876126')));
-        if (isMockSample) {
-          await AsyncStorage.removeItem('default_address');
-          setDefaultAddress(null);
+        // Tải địa chỉ mặc định của tài khoản hiện tại
+        const userKey = user.ma_nguoi_dung || user.id || user.so_dien_thoai;
+        let storedAddr = (userKey ? await AsyncStorage.getItem(`default_address_${userKey}`) : null) || await AsyncStorage.getItem('default_address');
+        if (storedAddr) {
+          const parsed = JSON.parse(storedAddr);
+          const isMockSample = parsed.address && (parsed.address.includes('Lê Duẩn') || (parsed.name === 'Trần Văn Đình' && user.so_dien_thoai !== '0378876126'));
+          if (isMockSample) {
+            await AsyncStorage.removeItem('default_address');
+            if (userKey) await AsyncStorage.removeItem(`default_address_${userKey}`);
+            setDefaultAddress(null);
+          } else {
+            setDefaultAddress(parsed);
+          }
         } else {
-          setDefaultAddress(parsed);
-        }
-      } else {
-        const savedList = await AsyncStorage.getItem('saved_addresses');
-        if (savedList) {
-          const list = JSON.parse(savedList);
-          if (Array.isArray(list) && list.length > 0) {
-            const def = list.find(a => a.isDefault) || list[0];
-            setDefaultAddress(def);
+          const savedList = (userKey ? await AsyncStorage.getItem(`saved_addresses_${userKey}`) : null) || await AsyncStorage.getItem('saved_addresses');
+          if (savedList) {
+            const list = JSON.parse(savedList);
+            if (Array.isArray(list) && list.length > 0) {
+              const def = list.find(a => a.isDefault) || list[0];
+              setDefaultAddress(def);
+            } else {
+              setDefaultAddress(null);
+            }
           } else {
             setDefaultAddress(null);
           }
-        } else {
-          setDefaultAddress(null);
         }
+      } else {
+        // Chưa đăng nhập -> KHÔNG hiển thị địa chỉ của tài khoản khác
+        setUserInfo(null);
+        setDefaultAddress(null);
       }
     } catch (e) {
       console.log('Lỗi tải dữ liệu người dùng & địa chỉ');
@@ -185,7 +189,9 @@ export default function HomeScreen({ navigation }) {
           text: 'Đăng xuất', 
           onPress: async () => {
             await logoutUser();
+            await AsyncStorage.removeItem('default_address');
             setUserInfo(null);
+            setDefaultAddress(null);
             Alert.alert('Thông báo', 'Đã đăng xuất tài khoản.');
           } 
         }

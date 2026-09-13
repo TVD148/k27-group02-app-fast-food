@@ -35,17 +35,22 @@ export default function ProfileScreen({ navigation }) {
       const stored = await AsyncStorage.getItem('user_info');
       const token = await AsyncStorage.getItem('user_token');
       if (stored && token) {
-        setUser(JSON.parse(stored));
+        const userObj = JSON.parse(stored);
+        setUser(userObj);
+        const userKey = userObj.ma_nguoi_dung || userObj.id || userObj.so_dien_thoai;
+        const storedAddr = (userKey ? await AsyncStorage.getItem(`default_address_${userKey}`) : null) || await AsyncStorage.getItem('default_address');
+        if (storedAddr) {
+          setCurrentAddress(JSON.parse(storedAddr));
+        } else {
+          setCurrentAddress(null);
+        }
       } else {
         setUser(null);
-      }
-
-      const storedAddr = await AsyncStorage.getItem('default_address');
-      if (storedAddr) {
-        setCurrentAddress(JSON.parse(storedAddr));
+        setCurrentAddress(null);
       }
     } catch (e) {
       setUser(null);
+      setCurrentAddress(null);
     }
   };
 
@@ -61,7 +66,9 @@ export default function ProfileScreen({ navigation }) {
           onPress: async () => {
             await AsyncStorage.removeItem('user_token');
             await AsyncStorage.removeItem('user_info');
+            await AsyncStorage.removeItem('default_address');
             setUser(null);
+            setCurrentAddress(null);
             Alert.alert('Thành công', 'Đã đăng xuất khỏi tài khoản.');
             navigation.navigate('Home');
           }

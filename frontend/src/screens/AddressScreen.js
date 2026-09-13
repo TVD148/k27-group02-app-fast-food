@@ -23,27 +23,84 @@ export default function AddressScreen({ navigation, route }) {
   const [editingAddress, setEditingAddress] = useState(null);
 
   useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadSavedAddresses();
+    });
     loadSavedAddresses();
-  }, []);
+    return unsubscribe;
+  }, [navigation]);
+
+  const getUserAddressKey = (user) => {
+    if (!user) return null;
+    const uid = user.ma_nguoi_dung || user.id || user.so_dien_thoai;
+    return uid ? `saved_addresses_${uid}` : null;
+  };
+
+  const checkAuth = async (actionDesc = 'thêm và quản lý địa chỉ nhận hàng') => {
+    const storedUser = await AsyncStorage.getItem('user_info');
+    const token = await AsyncStorage.getItem('user_token');
+    if (!token || !storedUser) {
+      Alert.alert(
+        'Yêu cầu đăng nhập 🔒',
+        `Bạn cần đăng nhập tài khoản để ${actionDesc}!`,
+        [
+          { text: 'Đăng nhập ngay', onPress: () => navigation.navigate('Login') },
+          { text: 'Để sau', style: 'cancel' }
+        ]
+      );
+      return false;
+    }
+    return true;
+  };
 
   const loadSavedAddresses = async () => {
     setLoading(true);
     try {
       const storedUser = await AsyncStorage.getItem('user_info');
-      const user = storedUser ? JSON.parse(storedUser) : null;
+      const token = await AsyncStorage.getItem('user_token');
+      const user = (storedUser && token) ? JSON.parse(storedUser) : null;
       setCurrentUser(user);
 
-      const stored = await AsyncStorage.getItem('saved_addresses');
+      if (!user) {
+        // Chưa đăng nhập -> Danh sách rỗng, không hiển thị địa chỉ của tài khoản khác
+        setAddresses([]);
+        await AsyncStorage.removeItem('default_address');
+        setLoading(false);
+        return;
+      }
+
+      const userKey = getUserAddressKey(user);
+      let stored = await AsyncStorage.getItem(userKey);
+
+      // Nếu chưa có danh sách theo userKey, kiểm tra dữ liệu cũ để chuyển dịch mượt mà
+      if (!stored) {
+        const legacyStored = await AsyncStorage.getItem('saved_addresses');
+        if (legacyStored) {
+          try {
+            const legacyList = JSON.parse(legacyStored);
+            if (Array.isArray(legacyList) && legacyList.length > 0) {
+              stored = legacyStored;
+              if (userKey) {
+                await AsyncStorage.setItem(userKey, stored);
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
       if (stored) {
         let parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          // Lọc bỏ địa chỉ mock mẫu thử nghiệm của Trần Văn Đình nếu người dùng hiện tại chưa phải tài khoản đó
+          // Lọc bỏ địa chỉ mock mẫu thử nghiệm nếu không đúng tài khoản
           parsed = parsed.filter(item => {
-            const isMockOld = item.address && (item.address.includes('Lê Duẩn') || (item.name === 'Trần Văn Đình' && user?.so_dien_thoai !== '0378876126'));
+            const isMockOld = item.address && (item.address.includes('Lê Duẩn') || (item.name === 'Trần Văn Đình' && user.so_dien_thoai !== '0378876126'));
             return !isMockOld;
           });
 
           setAddresses(parsed);
+          if (userKey) {
+            await AsyncStorage.setItem(userKey, JSON.stringify(parsed));
+          }
           await AsyncStorage.setItem('saved_addresses', JSON.stringify(parsed));
           if (parsed.length > 0) {
             const def = parsed.find(a => a.isDefault) || parsed[0];
@@ -55,7 +112,7 @@ export default function AddressScreen({ navigation, route }) {
           setAddresses([]);
         }
       } else {
-        // Lần đầu mở app: Chưa có địa chỉ nào -> Danh sách rỗng chuẩn UX
+        // Lần đầu mở tài khoản: Chưa có địa chỉ nào -> Danh sách rỗng
         setAddresses([]);
         await AsyncStorage.removeItem('default_address');
       }
@@ -68,12 +125,19 @@ export default function AddressScreen({ navigation, route }) {
 
   // Chọn một địa chỉ làm địa chỉ mặc định giao hàng
   const handleSelectAddress = async (selectedItem) => {
+    const isAuth = await checkAuth('chọn địa chỉ giao hàng');
+    if (!isAuth) return;
+
+    const userKey = getUserAddressKey(currentUser);
     const updated = addresses.map(item => ({
       ...item,
       isDefault: item.id === selectedItem.id
     }));
     setAddresses(updated);
     try {
+      if (userKey) {
+        await AsyncStorage.setItem(userKey, JSON.stringify(updated));
+      }
       await AsyncStorage.setItem('saved_addresses', JSON.stringify(updated));
       await AsyncStorage.setItem('default_address', JSON.stringify({ ...selectedItem, isDefault: true }));
       Alert.alert(
@@ -108,13 +172,19 @@ export default function AddressScreen({ navigation, route }) {
           text: 'Xóa', 
           style: 'destructive',
           onPress: async () => {
+            const userKey = getUserAddressKey(currentUser);
             const updated = addresses.filter(a => a.id !== id);
             // Nếu xóa trúng địa chỉ mặc định thì chọn cái đầu tiên
             if (updated.length > 0 && !updated.some(a => a.isDefault)) {
               updated[0].isDefault = true;
               await AsyncStorage.setItem('default_address', JSON.stringify(updated[0]));
+            } else if (updated.length === 0) {
+              await AsyncStorage.removeItem('default_address');
             }
             setAddresses(updated);
+            if (userKey) {
+              await AsyncStorage.setItem(userKey, JSON.stringify(updated));
+            }
             await AsyncStorage.setItem('saved_addresses', JSON.stringify(updated));
           }
         }
@@ -122,18 +192,41 @@ export default function AddressScreen({ navigation, route }) {
     );
   };
 
-  const openAddModal = () => {
+  const openAddModal = async () => {
+    const isAuth = await checkAuth('thêm địa chỉ nhận hàng');
+    if (!isAuth) return;
     setEditingAddress(null);
     setModalVisible(true);
   };
 
-  const openEditModal = (item) => {
+  const openEditModal = async (item) => {
+    const isAuth = await checkAuth('chỉnh sửa địa chỉ');
+    if (!isAuth) return;
     setEditingAddress(item);
     setModalVisible(true);
   };
 
   // Xác nhận vị trí từ MapLocationPicker
   const handleConfirmMapLocation = async (newLocation) => {
+    const storedUser = await AsyncStorage.getItem('user_info');
+    const token = await AsyncStorage.getItem('user_token');
+    const user = (storedUser && token) ? JSON.parse(storedUser) : null;
+
+    if (!user) {
+      setModalVisible(false);
+      setEditingAddress(null);
+      Alert.alert(
+        'Yêu cầu đăng nhập 🔒',
+        'Vui lòng đăng nhập tài khoản để lưu địa chỉ nhận hàng!',
+        [
+          { text: 'Đăng nhập ngay', onPress: () => navigation.navigate('Login') },
+          { text: 'Để sau', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
+    const userKey = getUserAddressKey(user);
     let updated = [...addresses];
     
     if (editingAddress) {
@@ -159,6 +252,9 @@ export default function AddressScreen({ navigation, route }) {
 
     setAddresses(updated);
     try {
+      if (userKey) {
+        await AsyncStorage.setItem(userKey, JSON.stringify(updated));
+      }
       await AsyncStorage.setItem('saved_addresses', JSON.stringify(updated));
       const defaultAddr = updated.find(a => a.isDefault) || updated[0];
       await AsyncStorage.setItem('default_address', JSON.stringify(defaultAddr));
@@ -204,6 +300,28 @@ export default function AddressScreen({ navigation, route }) {
             <Text style={styles.gpsArrow}>➔</Text>
           </TouchableOpacity>
 
+          {/* Banner thông báo nếu chưa đăng nhập */}
+          {!currentUser && (
+            <View style={styles.loginBannerCard}>
+              <View style={styles.loginBannerHeader}>
+                <Text style={styles.loginBannerIcon}>🔒</Text>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.loginBannerTitle}>Yêu cầu đăng nhập</Text>
+                  <Text style={styles.loginBannerSubtitle}>
+                    Vui lòng đăng nhập để lưu, đổi và quản lý địa chỉ nhận hàng của bạn.
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity 
+                style={styles.loginBannerBtn}
+                activeOpacity={0.85}
+                onPress={() => navigation.navigate('Login')}
+              >
+                <Text style={styles.loginBannerBtnText}>🔑 Đăng nhập ngay</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Danh sách các địa chỉ đã lưu */}
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Địa chỉ đã lưu ({addresses.length})</Text>
@@ -214,10 +332,23 @@ export default function AddressScreen({ navigation, route }) {
 
           {loading ? (
             <ActivityIndicator size="large" color="#00A896" style={{ marginTop: 30 }} />
+          ) : !currentUser ? (
+            <View style={styles.emptyAddressBox}>
+              <Text style={styles.emptyIcon}>🔒</Text>
+              <Text style={styles.emptyTitle}>Bạn chưa đăng nhập</Text>
+              <Text style={styles.emptyText}>Đăng nhập để thêm mới và lưu địa chỉ nhận hàng của bạn.</Text>
+              <TouchableOpacity 
+                style={[styles.emptyAddBtn, { backgroundColor: '#FF6B00' }]} 
+                onPress={() => navigation.navigate('Login')}
+              >
+                <Text style={styles.emptyAddBtnText}>🔑 Đăng nhập ngay</Text>
+              </TouchableOpacity>
+            </View>
           ) : addresses.length === 0 ? (
             <View style={styles.emptyAddressBox}>
               <Text style={styles.emptyIcon}>📍</Text>
-              <Text style={styles.emptyText}>Chưa có địa chỉ nào được lưu!</Text>
+              <Text style={styles.emptyTitle}>Chưa có địa chỉ nào được lưu</Text>
+              <Text style={styles.emptyText}>Thêm địa chỉ nhà riêng hoặc nơi làm việc để nhận món ăn nhanh chóng!</Text>
               <TouchableOpacity style={styles.emptyAddBtn} onPress={openAddModal}>
                 <Text style={styles.emptyAddBtnText}>+ Thêm địa chỉ nhận hàng</Text>
               </TouchableOpacity>
@@ -277,8 +408,14 @@ export default function AddressScreen({ navigation, route }) {
 
         {/* Nút Thêm Địa Chỉ ở Đáy */}
         <View style={styles.bottomBar}>
-          <TouchableOpacity style={styles.addNewBtn} onPress={openAddModal} activeOpacity={0.85}>
-            <Text style={styles.addNewBtnText}>+ Thêm địa chỉ nhận hàng mới</Text>
+          <TouchableOpacity 
+            style={[styles.addNewBtn, !currentUser && { backgroundColor: '#FF6B00' }]} 
+            onPress={openAddModal} 
+            activeOpacity={0.85}
+          >
+            <Text style={styles.addNewBtnText}>
+              {currentUser ? '+ Thêm địa chỉ nhận hàng mới' : '🔑 Đăng nhập để thêm địa chỉ'}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -392,6 +529,49 @@ const styles = StyleSheet.create({
     color: '#00A896',
     fontWeight: 'bold',
   },
+  loginBannerCard: {
+    backgroundColor: '#FFF7ED',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  loginBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  loginBannerIcon: {
+    fontSize: 24,
+  },
+  loginBannerTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#9A3412',
+    marginBottom: 4,
+  },
+  loginBannerSubtitle: {
+    fontSize: 12,
+    color: '#7C2D12',
+    lineHeight: 17,
+  },
+  loginBannerBtn: {
+    marginTop: 10,
+    backgroundColor: '#FF6B00',
+    paddingVertical: 9,
+    borderRadius: 20,
+    alignItems: 'center',
+    shadowColor: '#FF6B00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  loginBannerBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 13,
+  },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -419,9 +599,17 @@ const styles = StyleSheet.create({
     fontSize: 48,
     marginBottom: 10,
   },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1E293B',
+    marginBottom: 6,
+  },
   emptyText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
     marginBottom: 16,
   },
   emptyAddBtn: {
