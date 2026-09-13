@@ -292,6 +292,8 @@ export default function MapLocationPicker({
     } finally {
       setLocating(false);
     }
+  };
+
   // 4. XÁC NHẬN VÀ LƯU ĐỊA CHỈ (BẮT BUỘC NHẬP TÊN, SĐT, ĐỊA CHỈ)
   const handleConfirm = () => {
     const cleanName = (recipientName || '').trim();
