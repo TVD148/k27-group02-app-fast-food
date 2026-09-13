@@ -18,75 +18,38 @@ export default function OrderTrackingScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [canceling, setCanceling] = useState(false);
-  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   useEffect(() => {
     loadOrderDetails();
+
+    // Tự động kiểm tra trạng thái đơn mỗi 4 giây để cập nhật ngay khi shipper giao tới hoàn thành
+    const timer = setInterval(() => {
+      fetchOrderDetail(orderId)
+        .then(res => {
+          if (res && res.success && res.data) {
+            setOrder(res.data);
+          }
+        })
+        .catch(() => {});
+    }, 4000);
+
+    return () => clearInterval(timer);
   }, [orderId]);
 
-  const loadOrderDetails = async () => {
-    setLoading(true);
+  const loadOrderDetails = async (isManual = false) => {
+    if (!isManual) setLoading(true);
     try {
       const response = await fetchOrderDetail(orderId);
       if (response.success) {
         setOrder(response.data);
       }
     } catch (error) {
-      Alert.alert('Lỗi', error.message || 'Không thể lấy thông tin tiến trình đơn hàng!');
+      if (isManual) {
+        Alert.alert('Lỗi', error.message || 'Không thể lấy thông tin tiến trình đơn hàng!');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
-    }
-  };
-
-  // Cập nhật tuần tự tiến trình đơn hàng:
-  // 1. Chờ nhận (cho_xac_nhan)
-  // 2. Bếp nhận nấu: Hiện Đang làm (dang_che_bien)
-  // 3. Shipper nhận: Hiện Đang giao (dang_giao)
-  // 4. Shipper giao tới: Hiện Hoàn thành (da_giao)
-  const handleAdvanceOrderStatus = async () => {
-    if (!order) return;
-
-    if (order.trang_thai_don_hang === 'da_giao') {
-      Alert.alert('Hoàn tất 🎉', 'Đơn hàng này đã hoàn thành!');
-      return;
-    }
-    if (order.trang_thai_don_hang === 'da_huy') {
-      Alert.alert('Đã hủy ❌', 'Đơn hàng này đã bị hủy, không thể cập nhật thêm!');
-      return;
-    }
-
-    let nextStatus = '';
-    let statusText = '';
-    let note = '';
-
-    if (order.trang_thai_don_hang === 'cho_xac_nhan') {
-      nextStatus = 'dang_che_bien';
-      statusText = 'Bếp nhận nấu: Hiện Đang làm';
-      note = 'Bếp đã nhận nấu và hiện đang làm món';
-    } else if (order.trang_thai_don_hang === 'dang_che_bien' || order.trang_thai_don_hang === 'san_sang_giao') {
-      nextStatus = 'dang_giao';
-      statusText = 'Shipper nhận: Hiện Đang giao';
-      note = 'Shipper đã nhận đơn và hiện đang giao hàng';
-    } else if (order.trang_thai_don_hang === 'dang_giao') {
-      nextStatus = 'da_giao';
-      statusText = 'Shipper giao tới: Hiện Hoàn thành';
-      note = 'Shipper đã giao tới tận tay, hoàn tất đơn hàng';
-    }
-
-    setUpdatingStatus(true);
-    try {
-      const response = await updateOrderStatus(orderId, nextStatus, note);
-      if (response.success) {
-        await loadOrderDetails();
-        Alert.alert('Cập nhật tiến trình ✅', `Đơn hàng đã chuyển sang: "${statusText}"!`);
-      } else {
-        Alert.alert('Lỗi', response.message || 'Không thể cập nhật trạng thái!');
-      }
-    } catch (error) {
-      Alert.alert('Lỗi', error.message || 'Không thể cập nhật trạng thái đơn hàng!');
-    } finally {
-      setUpdatingStatus(false);
     }
   };
 
@@ -209,15 +172,11 @@ export default function OrderTrackingScreen({ route, navigation }) {
           <View style={styles.headerTop}>
             <Text style={styles.orderIdText}>Đơn hàng #{order.ma_don_hang}</Text>
             <TouchableOpacity 
-              style={[styles.refreshBtn, updatingStatus && styles.btnDisabled]} 
-              onPress={handleAdvanceOrderStatus}
-              disabled={updatingStatus}
+              style={styles.refreshBtn} 
+              onPress={() => loadOrderDetails(true)}
+              activeOpacity={0.8}
             >
-              {updatingStatus ? (
-                <ActivityIndicator size="small" color="#00A896" />
-              ) : (
-                <Text style={styles.refreshBtnText}>🔄 Cập nhật</Text>
-              )}
+              <Text style={styles.refreshBtnText}>🔄 Làm mới</Text>
             </TouchableOpacity>
           </View>
           <Text style={styles.orderTimeText}>
@@ -260,26 +219,6 @@ export default function OrderTrackingScreen({ route, navigation }) {
             ))}
           </View>
         </View>
-
-        {/* Nút bấm Cập nhật tiến trình tuần tự: Chờ nhận ➔ Đang làm ➔ Đang giao ➔ Hoàn thành */}
-        {order.trang_thai_don_hang !== 'da_giao' && order.trang_thai_don_hang !== 'da_huy' && (
-          <TouchableOpacity 
-            style={[styles.stepActionBtn, updatingStatus && styles.btnDisabled]}
-            onPress={handleAdvanceOrderStatus}
-            disabled={updatingStatus}
-            activeOpacity={0.85}
-          >
-            {updatingStatus ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <Text style={styles.stepActionBtnText}>
-                {order.trang_thai_don_hang === 'cho_xac_nhan' && '👨‍🍳 Bấm cập nhật: Bếp nhận nấu ➔ Đang làm'}
-                {(order.trang_thai_don_hang === 'dang_che_bien' || order.trang_thai_don_hang === 'san_sang_giao') && '🛵 Bấm cập nhật: Shipper nhận ➔ Đang giao'}
-                {order.trang_thai_don_hang === 'dang_giao' && '🎉 Bấm cập nhật: Shipper giao tới ➔ Hoàn thành'}
-              </Text>
-            )}
-          </TouchableOpacity>
-        )}
 
         {/* Mascot / Graphic Card theo chuẩn Mockup */}
         <View style={styles.mascotCard}>

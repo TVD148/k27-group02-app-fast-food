@@ -384,6 +384,32 @@ export default function ShipperScreen({ navigation }) {
     }
   };
 
+  // Hoàn tất đơn hàng trực tiếp khi shipper giao tới nơi và nhận tiền COD
+  const handleDirectCompleteDelivery = (order) => {
+    const codAmount = parseFloat(order.tong_tien || order.tong_thanh_toan || 0);
+    Alert.alert(
+      'Xác nhận hoàn thành đơn 🛵',
+      `Bạn đã giao tận tay khách hàng đơn #${order.ma_don_hang} và thu tiền COD: ${codAmount.toLocaleString('vi-VN')} đ?\n\n(Sau khi bấm xác nhận, màn hình của khách hàng sẽ tự động chuyển sang trạng thái "Hoàn thành")`,
+      [
+        { text: 'Kiểm tra lại', style: 'cancel' },
+        {
+          text: 'Đã nhận tiền & Hoàn thành ✅',
+          onPress: async () => {
+            try {
+              const res = await updateOrderStatus(order.ma_don_hang, 'da_giao', 'Shipper đã giao tới nơi thành công và nhận tiền COD');
+              if (res.success) {
+                Alert.alert('Giao hàng hoàn tất 🎉', `Đã ghi nhận giao thành công đơn #${order.ma_don_hang}! Màn hình khách đặt đơn đã chuyển sang trạng thái Hoàn thành.`);
+                loadShipperData();
+              }
+            } catch (err) {
+              Alert.alert('Lỗi', err.message || 'Không thể hoàn tất đơn hàng!');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   // 2. Contextual Camera Permission: Bước 2 hoàn thành giao -> Xin quyền Camera để chụp minh chứng
   const handleInitiateDeliveryCompletion = (order) => {
     setOrderToDeliver(order);
@@ -682,26 +708,48 @@ export default function ShipperScreen({ navigation }) {
                 </View>
               </View>
 
-              {/* 3. NÚT CTA ĐA BƯỚC (STEPPER) VUỐT ĐỂ XÁC NHẬN (SWIPE TO CONFIRM) */}
+              {/* 3. NÚT CTA ĐA BƯỚC (STEPPER) VUỐT ĐỂ XÁC NHẬN (SWIPE TO CONFIRM) HOẶC BẤM TRỰC TIẾP */}
               <View style={styles.stepperSection}>
                 <Text style={styles.stepperHeading}>
-                  {isAtRestaurant ? 'BƯỚC 1: LẤY ĐỒ ĂN TẠI QUÁN' : 'BƯỚC 2: TRAO TẬN TAY KHÁCH HÀNG'}
+                  {isAtRestaurant ? 'BƯỚC 1: LẤY ĐỒ ĂN TẠI QUÁN' : 'BƯỚC 2: TRAO TẬN TAY KHÁCH HÀNG & THU TIỀN'}
                 </Text>
 
                 {isAtRestaurant ? (
-                  <SwipeToConfirmButton
-                    color="#EA580C"
-                    icon="👉"
-                    title="Vuốt để xác nhận: ĐÃ LẤY HÀNG TẠI QUÁN"
-                    onConfirm={() => handleConfirmPickedUp(order.ma_don_hang)}
-                  />
+                  <View style={{ gap: 10, width: '100%' }}>
+                    <TouchableOpacity 
+                      style={styles.directPickUpBtn}
+                      onPress={() => handleConfirmPickedUp(order.ma_don_hang)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.directPickUpBtnText}>
+                        📦 ĐÃ LẤY HÀNG TẠI QUÁN (BẮT ĐẦU GIAO)
+                      </Text>
+                    </TouchableOpacity>
+                    <SwipeToConfirmButton
+                      color="#EA580C"
+                      icon="👉"
+                      title="Hoặc vuốt: ĐÃ LẤY HÀNG TẠI QUÁN"
+                      onConfirm={() => handleConfirmPickedUp(order.ma_don_hang)}
+                    />
+                  </View>
                 ) : (
-                  <SwipeToConfirmButton
-                    color="#00897B"
-                    icon="📸"
-                    title="Vuốt để: HOÀN THÀNH & CHỤP MINH CHỨNG"
-                    onConfirm={() => handleInitiateDeliveryCompletion(order)}
-                  />
+                  <View style={{ gap: 10, width: '100%' }}>
+                    <TouchableOpacity 
+                      style={styles.directCompleteDeliveryBtn}
+                      onPress={() => handleDirectCompleteDelivery(order)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.directCompleteDeliveryBtnText}>
+                        💰 ĐÃ GIAO TỚI NƠI • NHẬN TIỀN & BẤM HOÀN THÀNH ĐƠN
+                      </Text>
+                    </TouchableOpacity>
+                    <SwipeToConfirmButton
+                      color="#00897B"
+                      icon="📸"
+                      title="Hoặc vuốt: HOÀN THÀNH & CHỤP MINH CHỨNG"
+                      onConfirm={() => handleInitiateDeliveryCompletion(order)}
+                    />
+                  </View>
                 )}
               </View>
             </View>
@@ -2223,5 +2271,41 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: '#DC2626',
+  },
+  directCompleteDeliveryBtn: {
+    backgroundColor: '#16A34A',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    shadowColor: '#16A34A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  directCompleteDeliveryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  directPickUpBtn: {
+    backgroundColor: '#EA580C',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    shadowColor: '#EA580C',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  directPickUpBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'center',
   },
 });
