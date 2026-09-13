@@ -787,6 +787,9 @@ export default function AdminScreen({ navigation }) {
     }
   };
 
+  // Alias để tương thích an toàn nếu có component/cache gọi handleAddFood cũ
+  const handleAddFood = handleSaveFood;
+
   // =========================================================================
   // XỬ LÝ CRUD DANH MỤC (CATEGORIES)
   // =========================================================================
