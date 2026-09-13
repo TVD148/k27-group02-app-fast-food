@@ -525,15 +525,12 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
-    // Khách hàng (role 1) chỉ có quyền tự hủy đơn khi đơn vẫn ở trạng thái 'cho_xac_nhan'
+    // Kiểm tra quyền: Cho phép cập nhật tiến trình đơn hàng tuần tự
     if (userRole === 1) {
       if (order.ma_nguoi_dung !== userId) {
         return res.status(403).json({ success: false, message: 'Bạn không có quyền chỉnh sửa đơn hàng này!' });
       }
-      if (trang_thai_moi !== 'da_huy') {
-        return res.status(403).json({ success: false, message: 'Khách hàng chỉ có thể hủy đơn hàng!' });
-      }
-      if (trangThaiCu !== 'cho_xac_nhan') {
+      if (trang_thai_moi === 'da_huy' && trangThaiCu !== 'cho_xac_nhan') {
         return res.status(400).json({ success: false, message: 'Đơn hàng đã được tiếp nhận chế biến, không thể hủy!' });
       }
     }
@@ -556,8 +553,15 @@ const updateOrderStatus = async (req, res) => {
       updateFields += ', trang_thai_thanh_toan = "da_thanh_toan"';
     }
 
-    // Gắn shipper nếu có truyền lên hoặc nếu Shipper tự nhận đơn
-    const shipperIdToAssign = ma_shipper || (userRole === 4 ? userId : null);
+    // Gắn shipper nếu có truyền lên hoặc nếu chuyển sang dang_giao mà chưa có shipper
+    let shipperIdToAssign = ma_shipper || (userRole === 4 ? userId : null);
+    if (!shipperIdToAssign && trang_thai_moi === 'dang_giao' && !order.ma_shipper) {
+      const [shippers] = await db.query('SELECT ma_nguoi_dung FROM nguoi_dung WHERE ma_vai_tro = 4 LIMIT 1');
+      if (shippers.length > 0) {
+        shipperIdToAssign = shippers[0].ma_nguoi_dung;
+      }
+    }
+
     if (shipperIdToAssign) {
       updateFields += ', ma_shipper = ?';
       queryParams.push(shipperIdToAssign);

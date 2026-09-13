@@ -18,6 +18,7 @@ export default function OrderTrackingScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [canceling, setCanceling] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   useEffect(() => {
     loadOrderDetails();
@@ -35,6 +36,57 @@ export default function OrderTrackingScreen({ route, navigation }) {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  // Cập nhật tuần tự tiến trình đơn hàng:
+  // 1. Chờ nhận (cho_xac_nhan)
+  // 2. Bếp nhận nấu: Hiện Đang làm (dang_che_bien)
+  // 3. Shipper nhận: Hiện Đang giao (dang_giao)
+  // 4. Shipper giao tới: Hiện Hoàn thành (da_giao)
+  const handleAdvanceOrderStatus = async () => {
+    if (!order) return;
+
+    if (order.trang_thai_don_hang === 'da_giao') {
+      Alert.alert('Hoàn tất 🎉', 'Đơn hàng này đã hoàn thành!');
+      return;
+    }
+    if (order.trang_thai_don_hang === 'da_huy') {
+      Alert.alert('Đã hủy ❌', 'Đơn hàng này đã bị hủy, không thể cập nhật thêm!');
+      return;
+    }
+
+    let nextStatus = '';
+    let statusText = '';
+    let note = '';
+
+    if (order.trang_thai_don_hang === 'cho_xac_nhan') {
+      nextStatus = 'dang_che_bien';
+      statusText = 'Bếp nhận nấu: Hiện Đang làm';
+      note = 'Bếp đã nhận nấu và hiện đang làm món';
+    } else if (order.trang_thai_don_hang === 'dang_che_bien' || order.trang_thai_don_hang === 'san_sang_giao') {
+      nextStatus = 'dang_giao';
+      statusText = 'Shipper nhận: Hiện Đang giao';
+      note = 'Shipper đã nhận đơn và hiện đang giao hàng';
+    } else if (order.trang_thai_don_hang === 'dang_giao') {
+      nextStatus = 'da_giao';
+      statusText = 'Shipper giao tới: Hiện Hoàn thành';
+      note = 'Shipper đã giao tới tận tay, hoàn tất đơn hàng';
+    }
+
+    setUpdatingStatus(true);
+    try {
+      const response = await updateOrderStatus(orderId, nextStatus, note);
+      if (response.success) {
+        await loadOrderDetails();
+        Alert.alert('Cập nhật tiến trình ✅', `Đơn hàng đã chuyển sang: "${statusText}"!`);
+      } else {
+        Alert.alert('Lỗi', response.message || 'Không thể cập nhật trạng thái!');
+      }
+    } catch (error) {
+      Alert.alert('Lỗi', error.message || 'Không thể cập nhật trạng thái đơn hàng!');
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
@@ -67,48 +119,50 @@ export default function OrderTrackingScreen({ route, navigation }) {
   };
 
   const steps = [
-    { key: 'cho_xac_nhan', title: 'Chờ xác nhận', desc: 'Đơn hàng vừa nằm trong danh sách ưu tiên', icon: '⏳' },
-    { key: 'dang_che_bien', title: 'Đang chế biến', desc: 'Đầu bếp đang cắt thái và chế biến siêu ngon', icon: '👨‍🍳' },
-    { key: 'dang_giao', title: 'Đang giao hàng', desc: 'Shipper đang trên đường tới bạn', icon: '🛵' },
-    { key: 'da_giao', title: 'Đã hoàn thành', desc: 'Đã giao thành công. Chúc ngon miệng!', icon: '🎉' },
+    { key: 'cho_xac_nhan', title: 'Chờ nhận', desc: 'Đơn hàng đang chờ cửa hàng tiếp nhận', icon: '⏳' },
+    { key: 'dang_che_bien', title: 'Đang làm', desc: 'Bếp nhận nấu, hiện đang làm món', icon: '👨‍🍳' },
+    { key: 'dang_giao', title: 'Đang giao', desc: 'Shipper nhận đơn, hiện đang giao hàng', icon: '🛵' },
+    { key: 'da_giao', title: 'Hoàn thành', desc: 'Shipper đã giao tới. Đơn hàng hoàn tất!', icon: '🎉' },
   ];
 
   const getStepStatusIndex = (currentStatus) => {
     switch (currentStatus) {
       case 'cho_xac_nhan': return 0;
-      case 'dang_che_bien': return 1;
+      case 'dang_che_bien': 
+      case 'san_sang_giao': return 1;
       case 'dang_giao': return 2;
       case 'da_giao': return 3;
       default: return -1;
     }
   };
 
-  // Các thông điệp vui vẻ kiểu thiết kế Mockup Sloth Mascot
+  // Các thông điệp tiến trình vui vẻ
   const getStatusMascotMessage = (currentStatus) => {
     switch (currentStatus) {
       case 'cho_xac_nhan':
         return {
-          emoji: '📱🦥',
-          title: 'Đơn hàng đã được tiếp nhận!',
-          desc: 'Your order just made it to the top of our chill list. No stress. No rush. Just vibes. 😎🍿'
+          emoji: '⏳📱',
+          title: 'Đơn hàng: Chờ nhận',
+          desc: 'Đơn hàng đã được tiếp nhận và đang chờ nhà bếp nấu món!'
         };
       case 'dang_che_bien':
+      case 'san_sang_giao':
         return {
           emoji: '👨‍🍳🔥',
-          title: 'Nhà bếp đang bận rộn chế biến!',
-          desc: "Your order's in the works! The squad's slicing, dicing, and Zlurping it into greatness. 😋🔥"
+          title: 'Bếp nhận nấu: Hiện đang làm',
+          desc: 'Bếp đã nhận đơn và hiện đang làm các món ăn nóng giòn cho bạn!'
         };
       case 'dang_giao':
         return {
           emoji: '🛵💨',
-          title: 'Shipper đang giao tới!',
-          desc: 'Our speedy driver is on the move. Hot & fresh fast food is coming right up! 🚀'
+          title: 'Shipper nhận: Hiện đang giao',
+          desc: 'Tài xế đã nhận đơn từ quán và đang trên đường giao tới bạn!'
         };
       case 'da_giao':
         return {
           emoji: '🎉🍔',
-          title: 'Giao hàng thành công!',
-          desc: 'Delivered with love! Enjoy your delicious meal & see you next time! ❤️'
+          title: 'Shipper giao tới: Hoàn thành',
+          desc: 'Đơn hàng đã được giao tận tay thành công. Chúc bạn ngon miệng!'
         };
       case 'da_huy':
         return {
@@ -154,8 +208,16 @@ export default function OrderTrackingScreen({ route, navigation }) {
         <View style={styles.headerCard}>
           <View style={styles.headerTop}>
             <Text style={styles.orderIdText}>Đơn hàng #{order.ma_don_hang}</Text>
-            <TouchableOpacity style={styles.refreshBtn} onPress={loadOrderDetails}>
-              <Text style={styles.refreshBtnText}>🔄 Cập nhật</Text>
+            <TouchableOpacity 
+              style={[styles.refreshBtn, updatingStatus && styles.btnDisabled]} 
+              onPress={handleAdvanceOrderStatus}
+              disabled={updatingStatus}
+            >
+              {updatingStatus ? (
+                <ActivityIndicator size="small" color="#00A896" />
+              ) : (
+                <Text style={styles.refreshBtnText}>🔄 Cập nhật</Text>
+              )}
             </TouchableOpacity>
           </View>
           <Text style={styles.orderTimeText}>
@@ -163,7 +225,7 @@ export default function OrderTrackingScreen({ route, navigation }) {
           </Text>
         </View>
 
-        {/* Top Stepper Indicator (4 Dấu Chấm Tiến Trình) */}
+        {/* Top Stepper Indicator (4 Dấu Chấm & Nhãn Tiến Trình) */}
         <View style={styles.topStepperCard}>
           <View style={styles.dotsRow}>
             {steps.map((step, idx) => {
@@ -183,7 +245,41 @@ export default function OrderTrackingScreen({ route, navigation }) {
               );
             })}
           </View>
+          <View style={styles.stepsLabelsRow}>
+            {steps.map((step, idx) => (
+              <Text 
+                key={step.key} 
+                style={[
+                  styles.stepLabelText,
+                  idx <= activeIndex && styles.stepLabelTextActive,
+                  idx === activeIndex && styles.stepLabelTextCurrent
+                ]}
+              >
+                {step.title}
+              </Text>
+            ))}
+          </View>
         </View>
+
+        {/* Nút bấm Cập nhật tiến trình tuần tự: Chờ nhận ➔ Đang làm ➔ Đang giao ➔ Hoàn thành */}
+        {order.trang_thai_don_hang !== 'da_giao' && order.trang_thai_don_hang !== 'da_huy' && (
+          <TouchableOpacity 
+            style={[styles.stepActionBtn, updatingStatus && styles.btnDisabled]}
+            onPress={handleAdvanceOrderStatus}
+            disabled={updatingStatus}
+            activeOpacity={0.85}
+          >
+            {updatingStatus ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={styles.stepActionBtnText}>
+                {order.trang_thai_don_hang === 'cho_xac_nhan' && '👨‍🍳 Bấm cập nhật: Bếp nhận nấu ➔ Đang làm'}
+                {(order.trang_thai_don_hang === 'dang_che_bien' || order.trang_thai_don_hang === 'san_sang_giao') && '🛵 Bấm cập nhật: Shipper nhận ➔ Đang giao'}
+                {order.trang_thai_don_hang === 'dang_giao' && '🎉 Bấm cập nhật: Shipper giao tới ➔ Hoàn thành'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
 
         {/* Mascot / Graphic Card theo chuẩn Mockup */}
         <View style={styles.mascotCard}>
@@ -497,5 +593,44 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  stepsLabelsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 10,
+  },
+  stepLabelText: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '600',
+    textAlign: 'center',
+    width: '25%',
+  },
+  stepLabelTextActive: {
+    color: '#475569',
+    fontWeight: '700',
+  },
+  stepLabelTextCurrent: {
+    color: '#FF5722',
+    fontWeight: '900',
+  },
+  stepActionBtn: {
+    backgroundColor: '#FF5722',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+    shadowColor: '#FF5722',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  stepActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

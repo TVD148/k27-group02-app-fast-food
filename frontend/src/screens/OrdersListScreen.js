@@ -71,11 +71,13 @@ export default function OrdersListScreen({ navigation }) {
     loadOrders();
   };
 
-  // 1. Danh mục Tab chuẩn ShopeeFood
+  // 1. Danh mục Tab: Chờ nhận, Đang làm, Đang giao, Hoàn thành, Đã hủy
   const tabs = [
     { key: '', label: 'Tất cả' },
-    { key: 'dang_den', label: 'Đang đến' },
-    { key: 'lich_su', label: 'Lịch sử' },
+    { key: 'cho_xac_nhan', label: 'Chờ nhận' },
+    { key: 'dang_lam', label: 'Đang làm' },
+    { key: 'dang_giao', label: 'Đang giao' },
+    { key: 'da_giao', label: 'Hoàn thành' },
     { key: 'da_huy', label: 'Đã hủy' },
   ];
 
@@ -83,18 +85,16 @@ export default function OrdersListScreen({ navigation }) {
   const filteredOrders = useMemo(() => {
     return allOrders.filter(order => {
       // Lọc theo Tab danh mục
-      if (selectedTab === 'dang_den') {
-        if (!['cho_xac_nhan', 'dang_che_bien', 'dang_giao', 'san_sang_giao'].includes(order.trang_thai_don_hang)) {
-          return false;
-        }
-      } else if (selectedTab === 'lich_su') {
-        if (order.trang_thai_don_hang !== 'da_giao') {
-          return false;
-        }
+      if (selectedTab === 'cho_xac_nhan') {
+        if (order.trang_thai_don_hang !== 'cho_xac_nhan') return false;
+      } else if (selectedTab === 'dang_lam') {
+        if (!['dang_che_bien', 'san_sang_giao'].includes(order.trang_thai_don_hang)) return false;
+      } else if (selectedTab === 'dang_giao') {
+        if (order.trang_thai_don_hang !== 'dang_giao') return false;
+      } else if (selectedTab === 'da_giao') {
+        if (order.trang_thai_don_hang !== 'da_giao') return false;
       } else if (selectedTab === 'da_huy') {
-        if (order.trang_thai_don_hang !== 'da_huy') {
-          return false;
-        }
+        if (order.trang_thai_don_hang !== 'da_huy') return false;
       }
 
       // Lọc theo Ngày tháng (Shopee Date Filter: YYYY-MM-DD)
@@ -241,11 +241,10 @@ export default function OrdersListScreen({ navigation }) {
   const getStatusBadge = (status) => {
     switch (status) {
       case 'cho_xac_nhan':
-        return { label: '⏳ Chờ xác nhận', color: '#D97706', bg: '#FEF3C7' };
+        return { label: '⏳ Chờ nhận', color: '#D97706', bg: '#FEF3C7' };
       case 'dang_che_bien':
-        return { label: '👨‍🍳 Đang chế biến', color: '#0284C7', bg: '#E0F2FE' };
       case 'san_sang_giao':
-        return { label: '🍽️ Chờ giao', color: '#0D9488', bg: '#CCFBF1' };
+        return { label: '👨‍🍳 Đang làm', color: '#0284C7', bg: '#E0F2FE' };
       case 'dang_giao':
         return { label: '🛵 Đang giao', color: '#7C3AED', bg: '#EDE9FE' };
       case 'da_giao':
@@ -346,24 +345,26 @@ export default function OrdersListScreen({ navigation }) {
         <Text style={styles.topHeaderTitle}>Đơn Hàng 📦</Text>
       </View>
 
-      {/* 1. Thanh Tab Phân Loại Danh Mục (Chuẩn Shopee) */}
+      {/* 1. Thanh Tab Phân Loại Danh Mục (Chờ nhận, Đang làm, Đang giao, Hoàn thành, Đã hủy) */}
       <View style={styles.tabContainer}>
-        {tabs.map(tab => {
-          const isSelected = selectedTab === tab.key;
-          return (
-            <TouchableOpacity 
-              key={tab.key}
-              style={[styles.tabBtn, isSelected && styles.tabBtnActive]} 
-              onPress={() => setSelectedTab(tab.key)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.tabText, isSelected && styles.tabTextActive]}>
-                {tab.label}
-              </Text>
-              {isSelected && <View style={styles.activeTabIndicator} />}
-            </TouchableOpacity>
-          );
-        })}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScrollContent}>
+          {tabs.map(tab => {
+            const isSelected = selectedTab === tab.key;
+            return (
+              <TouchableOpacity 
+                key={tab.key}
+                style={[styles.tabBtn, isSelected && styles.tabBtnActive]} 
+                onPress={() => setSelectedTab(tab.key)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.tabText, isSelected && styles.tabTextActive]}>
+                  {tab.label}
+                </Text>
+                {isSelected && <View style={styles.activeTabIndicator} />}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* 2. Thanh Bộ Lọc Ngày Tháng Chuẩn Shopee (Chỉ dùng bộ lọc ngày) */}
@@ -546,16 +547,19 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // Tab Danh Mục chuẩn Shopee
+  // Tab Danh Mục (Chờ nhận, Đang làm, Đang giao, Hoàn thành, Đã hủy)
   tabContainer: {
     backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
+  tabScrollContent: {
+    flexDirection: 'row',
+    paddingHorizontal: 6,
+  },
   tabBtn: {
-    flex: 1,
-    paddingVertical: 13,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     alignItems: 'center',
     position: 'relative',
   },
@@ -574,8 +578,8 @@ const styles = StyleSheet.create({
   activeTabIndicator: {
     position: 'absolute',
     bottom: 0,
-    left: '20%',
-    right: '20%',
+    left: 10,
+    right: 10,
     height: 3,
     backgroundColor: '#EE4D2D',
     borderRadius: 2,
