@@ -250,6 +250,7 @@ const createOrder = async (req, res) => {
     const orderId = orderResult.insertId;
 
     // 4b. Chèn chi tiết các món vào đơn hàng & Trừ tồn kho món ăn
+    for (const item of cartItems) {
       let optionLabels = [];
       let rawOptionIds = [];
       if (item.tuy_chon_da_chon) {
