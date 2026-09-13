@@ -467,7 +467,7 @@ export default function AddressScreen({ navigation, route }) {
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.distanceBadgeText, isOutOfRange && styles.distanceBadgeTextOutOfRange]}>
                         {distanceKm !== null
-                          ? `Khoảng cách: ${distanceKm} km • Tiền ship: ${shippingFee.toLocaleString('vi-VN')} đ`
+                          ? `Khoảng cách: ${distanceKm} km`
                           : 'Chưa có vị trí bản đồ • Bấm ✏️ ghim vị trí để xem khoảng cách'}
                       </Text>
                       {isOutOfRange && (

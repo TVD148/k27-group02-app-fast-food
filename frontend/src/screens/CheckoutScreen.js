@@ -528,13 +528,13 @@ export default function CheckoutScreen({ route, navigation }) {
                   {defaultAddress.address || address}
                 </Text>
 
-                {/* Khoảng cách & Phí ship */}
+                {/* Khoảng cách tới quán */}
                 {distanceKm !== null ? (
                   <View style={[styles.distanceBadge, isOutOfRange && styles.distanceBadgeOutOfRange]}>
                     <Text style={[styles.distanceBadgeText, isOutOfRange && styles.distanceBadgeTextOutOfRange]}>
                       {isOutOfRange 
                         ? '🚫 Ngoài khu vực giao hàng của quán' 
-                        : `📍 Khoảng cách: ${distanceKm} km • Phí ship: ${shippingFee.toLocaleString('vi-VN')} đ`}
+                        : `📍 Khoảng cách: ${distanceKm} km`}
                     </Text>
                   </View>
                 ) : (

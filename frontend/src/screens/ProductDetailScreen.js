@@ -220,13 +220,24 @@ export default function ProductDetailScreen({ route, navigation }) {
         {/* 5. Tùy biến Dinh dưỡng nếu món có nguyên liệu tùy biến */}
         {food.co_the_tuy_bien_dinh_duong ? (
           <TouchableOpacity 
-            style={styles.nutritionBannerBtn}
-            onPress={() => navigation.navigate('CustomNutrition', { itemId: food.ma_mon_an, foodName: food.ten_mon })}
+            style={[
+              styles.nutritionBannerBtn,
+              food.trang_thai === 'het_hang' && { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1', opacity: 0.6 }
+            ]}
+            onPress={() => {
+              if (food.trang_thai === 'het_hang') {
+                Alert.alert('Thông báo', `Món '${food.ten_mon}' hiện đang tạm ngưng bán, không thể tùy biến!`);
+                return;
+              }
+              navigation.navigate('CustomNutrition', { itemId: food.ma_mon_an, foodName: food.ten_mon, isOutOfStock: false });
+            }}
           >
             <View style={styles.nutritionBannerLeft}>
-              <Text style={styles.nutritionBannerTitle}>🥗 Tùy biến Dinh dưỡng</Text>
+              <Text style={[styles.nutritionBannerTitle, food.trang_thai === 'het_hang' && { color: '#64748B' }]}>
+                {food.trang_thai === 'het_hang' ? '🥗 Tùy biến Dinh dưỡng (Tạm ngưng)' : '🥗 Tùy biến Dinh dưỡng'}
+              </Text>
             </View>
-            <Text style={styles.nutritionBannerArrow}>➔</Text>
+            <Text style={[styles.nutritionBannerArrow, food.trang_thai === 'het_hang' && { color: '#94A3B8' }]}>➔</Text>
           </TouchableOpacity>
         ) : null}
 

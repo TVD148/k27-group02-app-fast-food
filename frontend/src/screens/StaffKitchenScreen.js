@@ -225,9 +225,14 @@ export default function StaffKitchenScreen({ navigation }) {
     try {
       const res = await updateOrderStatus(orderId, newStatus, `Bếp: ${actionTitle}`);
       if (res.success) {
-        const successMsg = newStatus === 'dang_che_bien' 
-          ? 'Đã nhận đơn và chuyển sang trạng thái đang nấu thành công! 🍳'
-          : (res.message || 'Cập nhật trạng thái thành công!');
+        let successMsg = 'Cập nhật trạng thái thành công!';
+        if (newStatus === 'dang_che_bien') {
+          successMsg = 'Đã nhận đơn và chuyển sang trạng thái đang nấu thành công! 🍳';
+        } else if (newStatus === 'san_sang_giao') {
+          successMsg = 'Đã nấu xong! Đơn hàng đã sẵn sàng để Shipper nhận giao 🛵';
+        } else if (res.message) {
+          successMsg = res.message;
+        }
         Alert.alert('Thành công 🎉', successMsg);
         if (selectedOrder && selectedOrder.ma_don_hang === orderId) {
           setSelectedOrder(null);
@@ -300,9 +305,14 @@ export default function StaffKitchenScreen({ navigation }) {
                 </View>
               </View>
 
-              {/* Thông tin khách hàng & Bàn/Thời gian */}
+              {/* Thông tin khách hàng & SĐT & Bàn/Thời gian */}
               <View style={styles.customerInfoRow}>
-                <Text style={styles.customerNameText}>👤 {order.ten_khach_hang || 'Khách hàng'}</Text>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text style={styles.customerNameText}>👤 {order.ten_khach_hang || 'Khách hàng'}</Text>
+                  {(order.so_dien_thoai_nhan || order.so_dien_thoai) ? (
+                    <Text style={styles.customerPhoneText}>📞 SĐT: {order.so_dien_thoai_nhan || order.so_dien_thoai}</Text>
+                  ) : null}
+                </View>
                 <Text style={styles.orderTimeText}>🕒 {new Date(order.ngay_dat).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</Text>
               </View>
 
@@ -555,7 +565,7 @@ export default function StaffKitchenScreen({ navigation }) {
             <View>
               <Text style={styles.modalHeaderTitle}>📋 CHI TIẾT ĐƠN #{selectedOrder?.ma_don_hang}</Text>
               <Text style={styles.modalHeaderSubtitle}>
-                Khách: {selectedOrder?.ten_khach_hang} • {selectedOrder?.dia_chi_giao || 'Tại quán'}
+                Khách: {selectedOrder?.ten_khach_hang} {(selectedOrder?.so_dien_thoai_nhan || selectedOrder?.so_dien_thoai) ? `• 📞 ${selectedOrder.so_dien_thoai_nhan || selectedOrder.so_dien_thoai}` : ''} • {selectedOrder?.dia_chi_giao || 'Tại quán'}
               </Text>
             </View>
 
@@ -924,6 +934,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#1E293B',
+  },
+  customerPhoneText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0284C7',
+    marginTop: 2,
   },
   orderTimeText: {
     fontSize: 13,

@@ -269,11 +269,6 @@ export default function CartScreen({ navigation }) {
               <Text style={styles.summaryLabel}>Tiền hàng tạm tính:</Text>
               <Text style={styles.summaryValue}>{cartData?.tong_tien.toLocaleString('vi-VN')} đ</Text>
             </View>
-            
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Phí giao hàng:</Text>
-              <Text style={[styles.summaryValue, { color: '#00A896', fontStyle: 'italic', fontSize: 13 }]}>Tính theo km khi đặt hàng</Text>
-            </View>
 
             <View style={styles.divider} />
 

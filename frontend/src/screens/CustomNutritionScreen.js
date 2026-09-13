@@ -117,7 +117,13 @@ export default function CustomNutritionScreen({ route, navigation }) {
     fetchCalculatedNutrition(itemId, newMap);
   };
 
+  const isOutOfStock = foodData?.trang_thai === 'het_hang' || route.params?.isOutOfStock;
+
   const handleAddToCart = async () => {
+    if (isOutOfStock) {
+      Alert.alert('Thông báo', `Món '${foodData?.ten_mon || initialFoodName || 'này'}' hiện đang tạm hết hàng / ngưng bán!`);
+      return;
+    }
     const token = await AsyncStorage.getItem('user_token');
     if (!token) {
       Alert.alert(
@@ -199,6 +205,14 @@ export default function CustomNutritionScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {isOutOfStock && (
+          <View style={styles.outOfStockBanner}>
+            <Text style={styles.outOfStockBannerText}>
+              ⚠️ Món ăn này hiện đang TẠM HẾT HÀNG / NGƯNG BÁN. Không thể thêm vào giỏ hàng!
+            </Text>
+          </View>
+        )}
+
         {/* 1. Card ảnh & thông tin món ăn */}
         <View style={styles.headerFoodCard}>
           <View style={styles.foodImageContainer}>
@@ -328,9 +342,13 @@ export default function CustomNutritionScreen({ route, navigation }) {
 
         {/* Nút thêm/cập nhật vào giỏ hàng + Giá tiền tính toán động */}
         <TouchableOpacity
-          style={[styles.addToCartBtn, adding && styles.btnDisabled]}
+          style={[
+            styles.addToCartBtn, 
+            (adding || isOutOfStock) && styles.btnDisabled,
+            isOutOfStock && { backgroundColor: '#9CA3AF' }
+          ]}
           onPress={handleAddToCart}
-          disabled={adding}
+          disabled={adding || isOutOfStock}
           activeOpacity={0.85}
         >
           {adding ? (
@@ -338,7 +356,7 @@ export default function CustomNutritionScreen({ route, navigation }) {
           ) : (
             <View style={styles.addToCartBtnContent}>
               <Text style={styles.addToCartBtnText}>
-                {cartItemId ? 'Cập nhật món trong giỏ 🔄' : 'Thêm vào giỏ hàng'}
+                {isOutOfStock ? 'Tạm ngưng bán 🚫' : (cartItemId ? 'Cập nhật món trong giỏ 🔄' : 'Thêm vào giỏ hàng')}
               </Text>
               <Text style={styles.addToCartPriceText}>
                 {(nutrition.gia_sau_tuy_bien || foodData?.gia_ban_goc || 0).toLocaleString('vi-VN')} đ
@@ -361,6 +379,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  outOfStockBanner: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  outOfStockBannerText: {
+    color: '#DC2626',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   loadingText: {
     marginTop: 10,

@@ -30,7 +30,7 @@ const getItemDefaultNutrition = async (req, res) => {
     const { itemId } = req.params;
 
     // 2.1 Kiểm tra món ăn có tồn tại không
-    const [foods] = await db.query('SELECT ma_mon_an, ten_mon, gia_ban FROM mon_an WHERE ma_mon_an = ?', [itemId]);
+    const [foods] = await db.query('SELECT ma_mon_an, ten_mon, gia_ban, trang_thai FROM mon_an WHERE ma_mon_an = ?', [itemId]);
     if (foods.length === 0) {
       return res.status(404).json({
         success: false,
@@ -98,6 +98,7 @@ const getItemDefaultNutrition = async (req, res) => {
         ma_mon_an: food.ma_mon_an,
         ten_mon: food.ten_mon,
         gia_ban_goc: parseFloat(food.gia_ban),
+        trang_thai: food.trang_thai,
         la_mon_dong_san: la_mon_dong_san,
         tong_dinh_duong_mac_dinh: {
           calo: parseFloat(tong_calo.toFixed(2)),
