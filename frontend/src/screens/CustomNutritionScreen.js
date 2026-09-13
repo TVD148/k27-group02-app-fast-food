@@ -61,7 +61,19 @@ export default function CustomNutritionScreen({ route, navigation }) {
         setQuantities(initialQty);
 
         // Tính toán thông số khởi đầu
-        fetchCalculatedNutrition(itemId, initialQty);
+        if (recipeList.length > 0) {
+          fetchCalculatedNutrition(itemId, initialQty);
+        } else {
+          const defNutrition = response.data?.tong_dinh_duong_mac_dinh || {};
+          setNutrition({
+            calo: defNutrition.calo || 0,
+            protein: defNutrition.protein || 0,
+            carbs: defNutrition.carbs || 0,
+            fat: defNutrition.fat || 0,
+            phu_thu_nguyen_lieu: 0,
+            gia_sau_tuy_bien: response.data?.gia_ban_goc || 0
+          });
+        }
       }
     } catch (error) {
       Alert.alert('Lỗi', error.message || 'Không thể tải công thức nguyên liệu!');
@@ -179,16 +191,16 @@ export default function CustomNutritionScreen({ route, navigation }) {
         {/* 1. Card ảnh & thông tin món ăn */}
         <View style={styles.headerFoodCard}>
           <View style={styles.foodImageContainer}>
-            <Text style={styles.foodEmoji}>{isPrepackaged ? '🥤' : '🥗'}</Text>
+            <Text style={styles.foodEmoji}>{recipe.length === 0 ? '🍽️' : '🥗'}</Text>
           </View>
           <View style={styles.foodHeaderInfo}>
             <Text style={styles.foodTitle}>{foodData?.ten_mon || initialFoodName}</Text>
             <Text style={styles.foodBadge}>
-              {isPrepackaged 
-                ? 'Sản phẩm đóng gói sẵn' 
-                : cartItemId 
-                  ? '🔄 Đang chỉnh sửa món trong giỏ hàng' 
-                  : 'Chế độ Tùy biến Dinh dưỡng (Killer Feature)'}
+              {cartItemId 
+                ? '🔄 Đang chỉnh sửa món trong giỏ hàng' 
+                : recipe.length === 0 
+                  ? 'Món không có tùy biến dinh dưỡng' 
+                  : 'Chế độ Tùy biến Dinh dưỡng'}
             </Text>
             <Text style={styles.basePriceText}>
               Giá gốc: {foodData?.gia_ban_goc?.toLocaleString('vi-VN')} đ
@@ -198,31 +210,18 @@ export default function CustomNutritionScreen({ route, navigation }) {
 
         {/* 2. Danh sách các nguyên liệu tùy biến */}
         <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>
-            {isPrepackaged ? 'ℹ️ Thông tin sản phẩm' : '🥬 Tùy chỉnh khẩu phần nguyên liệu'}
-          </Text>
-          <Text style={styles.sectionSubtitle}>
-            {isPrepackaged 
-              ? 'Sản phẩm nước uống đóng chai/lon sẵn theo quy cách nhà sản xuất, không hỗ trợ điều chỉnh nguyên liệu.'
-              : 'Tăng/giảm nguyên liệu để điều chỉnh lượng Calo, Đạm, Tinh bột & Chất béo theo nhu cầu sức khỏe của bạn.'
-            }
-          </Text>
-
-          {/* Nếu là món đóng sẵn hoặc không có nguyên liệu tùy biến */}
           {recipe.length === 0 ? (
-            <View style={styles.prepackagedInfoBox}>
-              <Text style={styles.prepackagedInfoEmoji}>🥤</Text>
-              <Text style={styles.prepackagedInfoTitle}>Sản phẩm đóng gói sẵn nguyên bản</Text>
-              <Text style={styles.prepackagedInfoDesc}>
-                Đây là sản phẩm đóng lon/chai theo tiêu chuẩn chất lượng từ nhà sản xuất (như Pepsi, nước giải khát...). Quán giữ nguyên bản và không hỗ trợ thay đổi nguyên liệu.
-              </Text>
-              <View style={styles.prepackagedBadgeBox}>
-                <Text style={styles.prepackagedBadgeText}>✓ Dinh dưỡng tiêu chuẩn từ NSX</Text>
-              </View>
+            <View style={styles.noCustomBox}>
+              <Text style={styles.noCustomEmoji}>🍽️</Text>
+              <Text style={styles.noCustomTitle}>Món không có tùy biến dinh dưỡng</Text>
             </View>
           ) : (
-            /* Danh sách nguyên liệu tự làm cho phép tùy chỉnh (Min 1, Max 5) */
-            recipe.map((item) => {
+            <>
+              <Text style={styles.sectionTitle}>🥬 Tùy chỉnh khẩu phần nguyên liệu</Text>
+              <Text style={styles.sectionSubtitle}>
+                Tăng/giảm nguyên liệu để điều chỉnh lượng Calo, Đạm, Tinh bột & Chất béo theo nhu cầu sức khỏe của bạn.
+              </Text>
+              {recipe.map((item) => {
               const currentQty = quantities[item.ma_nguyen_lieu] || 1;
               const defQty = parseFloat(item.so_luong_mac_dinh);
               const delta = currentQty - defQty;
@@ -280,9 +279,10 @@ export default function CustomNutritionScreen({ route, navigation }) {
                   </View>
                 </View>
               );
-            })
-          )}
-        </View>
+            })}
+          </>
+        )}
+      </View>
       </ScrollView>
 
       {/* 3. Bottom Bar Cố Định ở Đáy: Thanh Thước Đo Dinh Dưỡng Động (Macro Bar) */}
@@ -426,6 +426,27 @@ const styles = StyleSheet.create({
     color: '#64748B',
     lineHeight: 18,
     marginBottom: 16,
+  },
+  noCustomBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 36,
+    paddingHorizontal: 20,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginVertical: 10,
+  },
+  noCustomEmoji: {
+    fontSize: 44,
+    marginBottom: 12,
+  },
+  noCustomTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#475569',
+    textAlign: 'center',
   },
   prepackagedInfoBox: {
     alignItems: 'center',
