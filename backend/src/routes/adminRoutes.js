@@ -36,6 +36,7 @@ router.put('/users/:id/role', adminController.updateUserRole);
 
 // Thống kê Doanh thu & Vận hành
 router.get('/dashboard-stats', adminController.getDashboardStats);
+router.get('/online-personnel', adminController.getOnlinePersonnel);
 
 // Quản lý Địa chỉ mốc của quán & Giới hạn bán kính giao hàng
 router.get('/store-landmark', adminController.getStoreLandmark);

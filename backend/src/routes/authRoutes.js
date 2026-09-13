@@ -15,4 +15,10 @@ router.get('/profile', verifyToken, authController.getProfile);
 // Route cập nhật thông tin cá nhân (Họ tên, SĐT, Email)
 router.put('/profile', verifyToken, authController.updateProfile);
 
+// Route heartbeat điểm danh trực tuyến
+router.post('/heartbeat', verifyToken, authController.heartbeat);
+
+// Route cập nhật trạng thái trực tuyến của shipper
+router.put('/shipper-status', verifyToken, authController.updateShipperStatus);
+
 module.exports = router;

@@ -441,6 +441,15 @@ const createUser = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Họ tên và Số điện thoại là bắt buộc!' });
     }
 
+    const targetRole = parseInt(ma_vai_tro);
+    // YÊU CẦU BẢO MẬT: Không thể cấp quyền Quản trị viên cho tài khoản khác
+    if (targetRole === 3) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bảo mật hệ thống: Không thể tạo tài khoản với quyền Quản trị viên (Admin)!'
+      });
+    }
+
     const [existing] = await db.query('SELECT ma_nguoi_dung FROM nguoi_dung WHERE so_dien_thoai = ?', [so_dien_thoai.trim()]);
     if (existing.length > 0) {
       return res.status(400).json({ success: false, message: 'Số điện thoại này đã được đăng ký trên hệ thống!' });
@@ -452,7 +461,7 @@ const createUser = async (req, res) => {
     const [result] = await db.query(`
       INSERT INTO nguoi_dung (ho_ten, email, mat_khau, so_dien_thoai, dia_chi, ma_vai_tro, trang_thai)
       VALUES (?, ?, ?, ?, ?, ?, 'hoat_dong')
-    `, [ho_ten.trim(), email ? email.trim() : null, hashedPassword, so_dien_thoai.trim(), dia_chi, parseInt(ma_vai_tro)]);
+    `, [ho_ten.trim(), email ? email.trim() : null, hashedPassword, so_dien_thoai.trim(), dia_chi, targetRole]);
 
     return res.status(201).json({
       success: true,
@@ -465,6 +474,7 @@ const createUser = async (req, res) => {
 };
 
 // 3. Đổi vai trò tài khoản (PUT /api/admin/users/:id/role)
+// YÊU CẦU BẢO MẬT: Có thể điều chỉnh quyền của các tài khoản, KHÔNG THỂ cấp quyền quản trị cho các tài khoản khác
 const updateUserRole = async (req, res) => {
   try {
     const userId = req.params.id;
@@ -472,16 +482,97 @@ const updateUserRole = async (req, res) => {
     if (!ma_vai_tro) {
       return res.status(400).json({ success: false, message: 'Vui lòng chọn vai trò mới!' });
     }
-    await db.query('UPDATE nguoi_dung SET ma_vai_tro = ? WHERE ma_nguoi_dung = ?', [parseInt(ma_vai_tro), userId]);
-    return res.status(200).json({ success: true, message: 'Cập nhật quyền tài khoản thành công!' });
+
+    const targetRole = parseInt(ma_vai_tro);
+
+    // 1. Ràng buộc: Tuyệt đối không cho phép cấp quyền Quản trị viên (Admin - 3)
+    if (targetRole === 3) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bảo mật hệ thống: Không thể cấp quyền Quản trị viên (Admin) cho các tài khoản khác!'
+      });
+    }
+
+    if (![1, 2, 4].includes(targetRole)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vai trò không hợp lệ! Chỉ có thể chọn: Khách hàng (1), Nhân viên quán & bếp (2), hoặc Shipper (4).'
+      });
+    }
+
+    // 2. Ràng buộc: Kiểm tra tài khoản đích, bảo vệ tài khoản Quản trị viên hiện có
+    const [targetUser] = await db.query('SELECT ma_nguoi_dung, ho_ten, ma_vai_tro FROM nguoi_dung WHERE ma_nguoi_dung = ?', [userId]);
+    if (targetUser.length === 0) {
+      return res.status(404).json({ success: false, message: 'Tài khoản không tồn tại!' });
+    }
+
+    if (targetUser[0].ma_vai_tro === 3) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bảo mật hệ thống: Không thể thay đổi quyền của tài khoản Quản trị viên!'
+      });
+    }
+
+    await db.query('UPDATE nguoi_dung SET ma_vai_tro = ? WHERE ma_nguoi_dung = ?', [targetRole, userId]);
+
+    const roleMap = {
+      1: 'Khách hàng',
+      2: 'Nhân viên quán & bếp',
+      4: 'Tài xế Shipper'
+    };
+
+    return res.status(200).json({ 
+      success: true, 
+      message: `Đã đổi quyền của '${targetUser[0].ho_ten}' thành '${roleMap[targetRole]}' thành công!`,
+      data: { ma_nguoi_dung: userId, ma_vai_tro: targetRole }
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Lỗi cập nhật vai trò.', error: error.message });
   }
 };
 
 // ============================================================================
-// V. BÁO CÁO THỐNG KÊ DOANH THU (DASHBOARD STATS)
+// V. BÁO CÁO THỐNG KÊ DOANH THU & NHÂN SỰ TRỰC TUYẾN THẬT
 // ============================================================================
+
+// 5. Lấy danh sách nhân sự thực sự đang trực tuyến mở app (GET /api/admin/online-personnel)
+const getOnlinePersonnel = async (req, res) => {
+  try {
+    // Lấy các nhân sự (Nhân viên bếp 2 hoặc Shipper 4) có hoạt động trong 5 phút qua
+    // Hoặc Shipper đang bật chế độ trực tuyến trong 15 phút qua
+    const [onlineUsers] = await db.query(`
+      SELECT u.ma_nguoi_dung, u.ho_ten, u.email, u.so_dien_thoai, u.ma_vai_tro, u.trang_thai_shipper, u.lan_hoat_dong_cuoi,
+             TIMESTAMPDIFF(SECOND, u.lan_hoat_dong_cuoi, NOW()) as seconds_since_active,
+             v.ten_vai_tro
+      FROM nguoi_dung u
+      JOIN vai_tro v ON u.ma_vai_tro = v.ma_vai_tro
+      WHERE u.ma_vai_tro IN (2, 4)
+        AND u.lan_hoat_dong_cuoi IS NOT NULL
+        AND (
+          u.lan_hoat_dong_cuoi >= NOW() - INTERVAL 5 MINUTE
+          OR (u.ma_vai_tro = 4 AND u.trang_thai_shipper = 'truc_tuyen' AND u.lan_hoat_dong_cuoi >= NOW() - INTERVAL 15 MINUTE)
+        )
+      ORDER BY u.lan_hoat_dong_cuoi DESC
+    `);
+
+    const onlineStaff = onlineUsers.filter(u => u.ma_vai_tro === 2);
+    const onlineShippers = onlineUsers.filter(u => u.ma_vai_tro === 4);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Lấy danh sách nhân sự trực tuyến thành công!',
+      data: {
+        online_staff_count: onlineStaff.length,
+        online_shipper_count: onlineShippers.length,
+        online_staff: onlineStaff,
+        online_shippers: onlineShippers,
+        all_online: onlineUsers
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi lấy nhân sự trực tuyến.', error: error.message });
+  }
+};
 
 const getDashboardStats = async (req, res) => {
   try {
@@ -493,9 +584,30 @@ const getDashboardStats = async (req, res) => {
     const [ordersDelivered] = await db.query('SELECT COUNT(*) as delivered_orders FROM don_hang WHERE trang_thai_don_hang = "da_giao"');
     // Tổng số món ăn
     const [foodsCount] = await db.query('SELECT COUNT(*) as total_foods FROM mon_an');
-    // Tổng số người dùng theo vai trò
-    const [usersStaff] = await db.query('SELECT COUNT(*) as total_staff FROM nguoi_dung WHERE ma_vai_tro = 2');
-    const [usersShipper] = await db.query('SELECT COUNT(*) as total_shipper FROM nguoi_dung WHERE ma_vai_tro = 4');
+    
+    // Đếm nhân sự THẬT SỰ TRỰC TUYẾN trong vòng 5 phút qua (không dùng dữ liệu giả)
+    const [onlineStaffRows] = await db.query(`
+      SELECT COUNT(*) as total_online_staff 
+      FROM nguoi_dung 
+      WHERE ma_vai_tro = 2 
+        AND lan_hoat_dong_cuoi IS NOT NULL
+        AND lan_hoat_dong_cuoi >= NOW() - INTERVAL 5 MINUTE
+    `);
+
+    const [onlineShipperRows] = await db.query(`
+      SELECT COUNT(*) as total_online_shipper 
+      FROM nguoi_dung 
+      WHERE ma_vai_tro = 4 
+        AND lan_hoat_dong_cuoi IS NOT NULL
+        AND (
+          lan_hoat_dong_cuoi >= NOW() - INTERVAL 5 MINUTE 
+          OR (trang_thai_shipper = 'truc_tuyen' AND lan_hoat_dong_cuoi >= NOW() - INTERVAL 15 MINUTE)
+        )
+    `);
+
+    // Tổng số nhân viên / shipper đăng ký trong hệ thống
+    const [usersStaffTotal] = await db.query('SELECT COUNT(*) as total_staff FROM nguoi_dung WHERE ma_vai_tro = 2');
+    const [usersShipperTotal] = await db.query('SELECT COUNT(*) as total_shipper FROM nguoi_dung WHERE ma_vai_tro = 4');
 
     return res.status(200).json({
       success: true,
@@ -505,8 +617,12 @@ const getDashboardStats = async (req, res) => {
         pending_orders: ordersPending[0].pending_orders || 0,
         delivered_orders: ordersDelivered[0].delivered_orders || 0,
         total_foods: foodsCount[0].total_foods || 0,
-        total_staff: usersStaff[0].total_staff || 0,
-        total_shipper: usersShipper[0].total_shipper || 0
+        // Nhân sự thực sự trực tuyến
+        online_staff_count: onlineStaffRows[0].total_online_staff || 0,
+        online_shipper_count: onlineShipperRows[0].total_online_shipper || 0,
+        // Tổng số đăng ký
+        total_staff: usersStaffTotal[0].total_staff || 0,
+        total_shipper: usersShipperTotal[0].total_shipper || 0
       }
     });
   } catch (error) {
@@ -616,6 +732,7 @@ module.exports = {
   getUsers,
   createUser,
   updateUserRole,
+  getOnlinePersonnel,
   getDashboardStats,
   getIngredients,
   getStoreLandmark,

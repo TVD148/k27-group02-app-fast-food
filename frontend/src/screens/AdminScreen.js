@@ -16,8 +16,10 @@ import {
   Platform,
   StatusBar
 } from 'react-native';
+import * as Location from 'expo-location';
 import {
   fetchDashboardStats,
+  fetchOnlinePersonnel,
   fetchMenuItems,
   createFoodItem,
   deleteFoodItem,
@@ -30,6 +32,7 @@ import {
   toggleAdminVoucher,
   fetchAdminUsers,
   createAdminUser,
+  updateAdminUserRole,
   fetchStoreLandmark,
   updateAdminStoreLandmark
 } from '../services/api';
@@ -127,6 +130,13 @@ export default function AdminScreen({ navigation }) {
   const [orders, setOrders] = useState([]);
   const [vouchers, setVouchers] = useState([]);
   const [users, setUsers] = useState([]);
+  const [onlinePersonnel, setOnlinePersonnel] = useState({
+    online_staff_count: 0,
+    online_shipper_count: 0,
+    online_staff: [],
+    online_shippers: [],
+    all_online: []
+  });
 
   // Mốc quán & Bán kính phục vụ (Cột mốc 3km)
   const [storeLandmark, setStoreLandmark] = useState({
@@ -138,6 +148,13 @@ export default function AdminScreen({ navigation }) {
     gia_ship_moi_km: '5000'
   });
   const [savingLandmark, setSavingLandmark] = useState(false);
+  const [locatingGPS, setLocatingGPS] = useState(false);
+
+  // States Tab Quản lý tài khoản & Phân quyền
+  const [userSearchText, setUserSearchText] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState('all'); // 'all' | '1' | '2' | '4' | '3'
+  const [roleModalUser, setRoleModalUser] = useState(null);
+  const [selectedNewRole, setSelectedNewRole] = useState(1);
 
   // States Tab Menu: Search có nút Clear + Filter Chips + Toggles
   const [menuSearchText, setMenuSearchText] = useState('');
@@ -148,7 +165,7 @@ export default function AdminScreen({ navigation }) {
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
 
   // Modal forms
-  const [modalType, setModalType] = useState(null); // 'addFood' | 'addVoucher' | 'addUser'
+  const [modalType, setModalType] = useState(null); // 'addFood' | 'addVoucher' | 'addUser' | 'changeRole'
   const [submitting, setSubmitting] = useState(false);
 
   // Form add food
@@ -169,20 +186,24 @@ export default function AdminScreen({ navigation }) {
   const loadAllAdminData = async () => {
     setLoading(true);
     try {
-      const [statsRes, foodsRes, ordersRes, vouchersRes, usersRes, landmarkRes] = await Promise.all([
-        fetchDashboardStats(),
-        fetchMenuItems(),
-        fetchOrders(),
-        fetchAdminVouchers(),
-        fetchAdminUsers(),
-        fetchStoreLandmark().catch(() => null)
+      const [statsRes, foodsRes, ordersRes, vouchersRes, usersRes, landmarkRes, onlineRes] = await Promise.all([
+        fetchDashboardStats().catch(() => null),
+        fetchMenuItems().catch(() => null),
+        fetchOrders().catch(() => null),
+        fetchAdminVouchers().catch(() => null),
+        fetchAdminUsers().catch(() => null),
+        fetchStoreLandmark().catch(() => null),
+        fetchOnlinePersonnel().catch(() => null)
       ]);
 
-      if (statsRes.success) setStats(statsRes.data);
-      if (foodsRes.success) setFoods(foodsRes.data || []);
-      if (ordersRes.success) setOrders(ordersRes.data || []);
-      if (vouchersRes.success) setVouchers(vouchersRes.data || []);
-      if (usersRes.success) setUsers(usersRes.data || []);
+      if (statsRes && statsRes.success) setStats(statsRes.data);
+      if (foodsRes && foodsRes.success) setFoods(foodsRes.data || []);
+      if (ordersRes && ordersRes.success) setOrders(ordersRes.data || []);
+      if (vouchersRes && vouchersRes.success) setVouchers(vouchersRes.data || []);
+      if (usersRes && usersRes.success) setUsers(usersRes.data || []);
+      if (onlineRes && onlineRes.success && onlineRes.data) {
+        setOnlinePersonnel(onlineRes.data);
+      }
       if (landmarkRes && landmarkRes.success && landmarkRes.data) {
         setStoreLandmark({
           ten_quan: landmarkRes.data.ten_quan || 'Cửa hàng FastFood BDU',
@@ -223,6 +244,198 @@ export default function AdminScreen({ navigation }) {
     setRefreshing(true);
     loadAllAdminData();
   };
+
+  // Bật GPS để lấy chính xác tọa độ và địa chỉ quán
+  const handleGetStoreGPSLocation = async () => {
+    setLocatingGPS(true);
+    try {
+      let lat = null;
+      let lng = null;
+
+      // 1. Kiểm tra trên Mobile bằng expo-location
+      if (Location && Location.requestForegroundPermissionsAsync) {
+        if (Location.hasServicesEnabledAsync) {
+          const enabled = await Location.hasServicesEnabledAsync();
+          if (!enabled) {
+            Alert.alert('Chưa bật GPS 📡', 'Vui lòng bật tính năng định vị vị trí (GPS) trên thiết bị để lấy tọa độ quán!');
+            setLocatingGPS(false);
+            return;
+          }
+        }
+
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Chưa cấp quyền vị trí', 'Vui lòng cấp quyền truy cập vị trí để lấy tọa độ quán chính xác.');
+          setLocatingGPS(false);
+          return;
+        }
+
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        lat = loc.coords.latitude;
+        lng = loc.coords.longitude;
+      } else if (typeof navigator !== 'undefined' && navigator.geolocation) {
+        // 2. Web fallback
+        const pos = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+          });
+        });
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+      }
+
+      if (!lat || !lng) {
+        Alert.alert('Lỗi định vị', 'Không thể lấy được tọa độ GPS từ thiết bị.');
+        setLocatingGPS(false);
+        return;
+      }
+
+      // Reverse geocoding để lấy địa chỉ quán chuẩn tiếng Việt
+      let resolvedAddress = '';
+      try {
+        const bdcRes = await fetch(
+          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=vi`
+        );
+        if (bdcRes.ok) {
+          const bdcData = await bdcRes.json();
+          const admin = bdcData.localityInfo?.administrative || [];
+          const info = bdcData.localityInfo?.informative || [];
+
+          let district = '';
+          const districtObj = [...info, ...admin].find(i => {
+            if (!i.name) return false;
+            const n = i.name.toLowerCase();
+            return (
+              n.includes('quận') || n.includes('huyện') || n.includes('thị xã') ||
+              n.includes('thủ đức') || n.includes('thủ dầu một') || n.includes('thu dau mot') ||
+              n.includes('dĩ an') || n.includes('di an') || n.includes('thuận an') || n.includes('thuan an') ||
+              n.includes('bến cát') || n.includes('tân uyên') ||
+              (i.description && (i.description.includes('quận') || i.description.includes('huyện') || i.description.includes('thị xã') || i.description.includes('thành phố')))
+            );
+          });
+          if (districtObj) {
+            district = districtObj.name;
+            const dLower = district.toLowerCase();
+            if (dLower === 'thu dau mot') district = 'TP. Thủ Dầu Một';
+            else if (dLower === 'di an') district = 'TP. Dĩ An';
+            else if (dLower === 'thuan an') district = 'TP. Thuận An';
+            else if (dLower === 'ben cat') district = 'TX. Bến Cát';
+            else if (dLower === 'tan uyen') district = 'TX. Tân Uyên';
+          }
+
+          let province = '';
+          const provObj = [...admin].find(i => {
+            if (!i.name) return false;
+            const n = i.name.toLowerCase();
+            return n.includes('tỉnh') || n.includes('thành phố') || n.includes('bình dương') || n.includes('hồ chí minh') || n.includes('hà nội');
+          });
+          if (provObj) province = provObj.name;
+
+          let ward = '';
+          const wardObj = [...admin, ...info].find(i => {
+            if (!i.name) return false;
+            const n = i.name.toLowerCase();
+            return n.includes('phường') || n.includes('xã') || n.includes('thị trấn');
+          });
+          if (wardObj) ward = wardObj.name;
+          else if (bdcData.locality) {
+            ward = bdcData.locality;
+            if (!ward.toLowerCase().startsWith('phường') && !ward.toLowerCase().startsWith('xã')) {
+              ward = 'Phường ' + ward;
+            }
+          }
+
+          const parts = [];
+          if (ward && !parts.includes(ward)) parts.push(ward);
+          if (district && district !== ward && district !== province && !parts.includes(district)) parts.push(district);
+          if (province) {
+            const pStr = (province.includes('Tỉnh') || province.includes('Thành phố') || province.includes('TP.')) 
+              ? province 
+              : (province === 'Hồ Chí Minh' ? 'TP. Hồ Chí Minh' : 'Tỉnh ' + province);
+            if (!parts.includes(pStr)) parts.push(pStr);
+          }
+          if (parts.length > 0) {
+            resolvedAddress = parts.join(', ');
+          }
+        }
+      } catch (err) {
+        console.log('Lỗi geocode:', err);
+      }
+
+      const newAddress = resolvedAddress || `Tọa độ GPS (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+      setStoreLandmark(prev => ({
+        ...prev,
+        dia_chi_quan: newAddress,
+        vi_do: lat.toFixed(6),
+        kinh_do: lng.toFixed(6)
+      }));
+
+      Alert.alert(
+        'Định vị GPS thành công! 📡',
+        `Tọa độ: ${lat.toFixed(6)}, ${lng.toFixed(6)}\nĐịa chỉ: ${newAddress}\n\nVui lòng bấm "💾 Lưu Địa Chỉ & Mốc Quán" để xác nhận lưu vào hệ thống.`
+      );
+    } catch (err) {
+      Alert.alert('Lỗi bật GPS', err.message || 'Không thể lấy tọa độ vị trí hiện tại.');
+    } finally {
+      setLocatingGPS(false);
+    }
+  };
+
+  // Mở modal phân quyền người dùng
+  const handleOpenRoleModal = (user) => {
+    if (user.ma_vai_tro === 3) {
+      Alert.alert('Bảo mật hệ thống 🔒', 'Tài khoản Quản trị viên (Admin) không thể thay đổi vai trò!');
+      return;
+    }
+    setRoleModalUser(user);
+    setSelectedNewRole(user.ma_vai_tro || 1);
+    setModalType('changeRole');
+  };
+
+  // Xác nhận đổi quyền tài khoản (Chặn tuyệt đối quyền Quản trị viên 3)
+  const handleSaveUserRole = async () => {
+    if (!roleModalUser) return;
+    if (selectedNewRole === 3) {
+      Alert.alert('Lỗi bảo mật ❌', 'Không thể cấp quyền Quản trị viên cho tài khoản khác!');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await updateAdminUserRole(roleModalUser.ma_nguoi_dung, selectedNewRole);
+      if (res.success) {
+        Alert.alert('Thành công 🎉', res.message || 'Đã cập nhật vai trò người dùng thành công!');
+        setModalType(null);
+        setRoleModalUser(null);
+        // Cập nhật danh sách người dùng trên giao diện ngay lập tức
+        setUsers(prev => prev.map(u => u.ma_nguoi_dung === roleModalUser.ma_nguoi_dung ? { ...u, ma_vai_tro: selectedNewRole } : u));
+        loadAllAdminData();
+      }
+    } catch (err) {
+      Alert.alert('Lỗi phân quyền', err.message || 'Không thể cập nhật quyền tài khoản!');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Lọc danh sách người dùng theo tên, SĐT, email & Tab vai trò
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      const q = userSearchText.trim().toLowerCase();
+      const matchSearch = !q ||
+        (u.ho_ten && u.ho_ten.toLowerCase().includes(q)) ||
+        (u.so_dien_thoai && u.so_dien_thoai.toLowerCase().includes(q)) ||
+        (u.email && u.email.toLowerCase().includes(q));
+      if (!matchSearch) return false;
+
+      if (userRoleFilter === '1') return u.ma_vai_tro === 1;
+      if (userRoleFilter === '2') return u.ma_vai_tro === 2;
+      if (userRoleFilter === '4') return u.ma_vai_tro === 4;
+      if (userRoleFilter === '3') return u.ma_vai_tro === 3;
+      return true;
+    });
+  }, [users, userSearchText, userRoleFilter]);
 
   // 1. Toggle Switch Bật/Tắt Hết Hàng Món Ăn
   const handleToggleFoodStock = async (foodId, currentStatus, foodName) => {
@@ -366,9 +579,11 @@ export default function AdminScreen({ navigation }) {
   // TAB 1: TỔNG QUAN (DASHBOARD) - LINE CHART & NHÂN SỰ ONLINE
   // =========================================================================
   const renderDashboardTab = () => {
-    const totalRevenue = stats?.overview?.tong_doanh_thu || 0;
-    const totalOrders = stats?.overview?.tong_don_hang || 0;
-    const totalFoods = stats?.overview?.tong_mon_an || 0;
+    const totalRevenue = stats?.total_revenue || stats?.overview?.tong_doanh_thu || 0;
+    const totalOrders = stats?.total_orders || stats?.overview?.tong_don_hang || 0;
+    const onlineStaffCount = onlinePersonnel?.online_staff_count ?? stats?.online_staff_count ?? 0;
+    const onlineShipperCount = onlinePersonnel?.online_shipper_count ?? stats?.online_shipper_count ?? 0;
+    const allOnlineList = onlinePersonnel?.all_online || [];
 
     return (
       <View style={styles.tabContentBlock}>
@@ -379,7 +594,7 @@ export default function AdminScreen({ navigation }) {
             <Text style={[styles.kpiValue, { color: '#6A1B9A' }]}>
               {parseFloat(totalRevenue).toLocaleString('vi-VN')} đ
             </Text>
-            <Text style={styles.kpiSub}>Đơn đã thu COD</Text>
+            <Text style={styles.kpiSub}>Đơn đã giao thành công</Text>
           </View>
 
           <View style={[styles.kpiCard, { backgroundColor: '#E0F2F1', borderColor: '#B2DFDB' }]}>
@@ -389,33 +604,87 @@ export default function AdminScreen({ navigation }) {
           </View>
         </View>
 
-        {/* 1. BIỂU ĐỒ ĐƯỜNG DOANH THU THEO YÊU CẦU */}
+        {/* 1. BIỂU ĐỒ ĐƯỜNG DOANH THU */}
         <RevenueLineChart />
 
-        {/* 2. HIỂN THỊ SỐ LƯỢNG SHIPPER / BẾP ĐANG ONLINE THEO YÊU CẦU */}
+        {/* 2. HIỂN THỊ SỐ LƯỢNG SHIPPER / BẾP ĐANG ONLINE THẬT SỰ (KHÔNG DÙNG DỮ LIỆU GIẢ) */}
         <View style={styles.onlinePersonnelSection}>
-          <Text style={styles.sectionHeaderTitle}>🟢 NHÂN SỰ TRỰC TUYẾN THỜI GIAN THỰC</Text>
+          <View style={styles.onlineSectionHeaderRow}>
+            <Text style={styles.sectionHeaderTitle}>🟢 NHÂN SỰ TRỰC TUYẾN THỜI GIAN THỰC</Text>
+            <View style={styles.liveIndicatorBadge}>
+              <View style={styles.pulseDot} />
+              <Text style={styles.liveIndicatorText}>Dữ liệu thật 100%</Text>
+            </View>
+          </View>
 
           <View style={styles.personnelCardsRow}>
             {/* Card Đầu Bếp Online */}
             <View style={styles.personnelCard}>
               <View style={styles.personnelCardTop}>
                 <Text style={styles.personnelIcon}>🧑‍🍳</Text>
-                <View style={styles.pulseDot} />
+                <View style={[styles.pulseDot, { backgroundColor: onlineStaffCount > 0 ? '#10B981' : '#94A3B8' }]} />
               </View>
-              <Text style={styles.personnelCount}>3 Đầu Bếp</Text>
-              <Text style={styles.personnelDesc}>Đang tiếp nhận & chế biến tại kho bếp</Text>
+              <Text style={styles.personnelCount}>{onlineStaffCount} Bếp / Quán</Text>
+              <Text style={styles.personnelDesc}>
+                {onlineStaffCount > 0 ? 'Đang mở app & sẵn sàng chế biến' : 'Hiện chưa có tài khoản Bếp mở app'}
+              </Text>
             </View>
 
             {/* Card Shipper Online */}
             <View style={styles.personnelCard}>
               <View style={styles.personnelCardTop}>
                 <Text style={styles.personnelIcon}>🛵</Text>
-                <View style={[styles.pulseDot, { backgroundColor: '#00897B' }]} />
+                <View style={[styles.pulseDot, { backgroundColor: onlineShipperCount > 0 ? '#00897B' : '#94A3B8' }]} />
               </View>
-              <Text style={styles.personnelCount}>5 Shipper</Text>
-              <Text style={styles.personnelDesc}>Đang bật GPS nhận đơn trên đường</Text>
+              <Text style={styles.personnelCount}>{onlineShipperCount} Shipper</Text>
+              <Text style={styles.personnelDesc}>
+                {onlineShipperCount > 0 ? 'Đang mở app & trực tuyến nhận đơn' : 'Hiện chưa có Shipper mở app'}
+              </Text>
             </View>
+          </View>
+
+          {/* DANH SÁCH CHI TIẾT NHÂN SỰ ĐANG MỞ APP THỰC TẾ */}
+          <View style={styles.onlineDetailContainer}>
+            <Text style={styles.onlineDetailTitle}>📋 Danh sách nhân sự đang hoạt động:</Text>
+            {allOnlineList.length > 0 ? (
+              allOnlineList.map(u => {
+                const isStaff = u.ma_vai_tro === 2;
+                const activeTimeStr = u.seconds_since_active != null
+                  ? (u.seconds_since_active < 60 ? 'Vừa thao tác xong' : `${Math.floor(u.seconds_since_active / 60)} phút trước`)
+                  : 'Vừa hoạt động';
+
+                return (
+                  <View key={u.ma_nguoi_dung} style={styles.onlineUserCard}>
+                    <View style={styles.onlineUserLeft}>
+                      <Text style={styles.onlineUserAvatar}>{isStaff ? '🧑‍🍳' : '🛵'}</Text>
+                      <View>
+                        <Text style={styles.onlineUserName}>{u.ho_ten}</Text>
+                        <Text style={styles.onlineUserSub}>📞 {u.so_dien_thoai || 'Chưa cập nhật SĐT'}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.onlineUserRight}>
+                      <View style={[styles.roleMiniBadge, isStaff ? styles.roleBadgeKitchen : styles.roleBadgeShipper]}>
+                        <Text style={[styles.roleMiniBadgeText, isStaff ? styles.roleTextKitchen : styles.roleTextShipper]}>
+                          {isStaff ? 'Nhân viên quán & bếp' : 'Shipper'}
+                        </Text>
+                      </View>
+                      <View style={styles.onlineStatusRow}>
+                        <View style={styles.activeDotGreen} />
+                        <Text style={styles.activeTimeText}>{activeTimeStr}</Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })
+            ) : (
+              <View style={styles.noOnlineBox}>
+                <Text style={styles.noOnlineEmoji}>💤</Text>
+                <Text style={styles.noOnlineText}>Chưa có nhân sự nào mở ứng dụng</Text>
+                <Text style={styles.noOnlineSub}>
+                  Hệ thống tự động ghi nhận nhân sự trực tuyến thật khi tài khoản Bếp hoặc Shipper mở app (không dùng dữ liệu ảo).
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -655,6 +924,32 @@ export default function AdminScreen({ navigation }) {
           Cột mốc quán được dùng để giới hạn khách đặt hàng trong 3km, giới hạn shipper nhận đơn trong 3km, và tính phí ship 5.000đ/1km.
         </Text>
 
+        {/* NÚT BẬT GPS LẤY VỊ TRÍ CHÍNH XÁC CỦA QUÁN */}
+        <TouchableOpacity
+          style={styles.gpsBannerBtn}
+          onPress={handleGetStoreGPSLocation}
+          disabled={locatingGPS}
+          activeOpacity={0.8}
+        >
+          {locatingGPS ? (
+            <View style={styles.gpsLocatingWrap}>
+              <ActivityIndicator color="#6A1B9A" size="small" />
+              <Text style={styles.gpsLocatingText}>Đang kết nối vệ tinh GPS & định vị địa chỉ quán...</Text>
+            </View>
+          ) : (
+            <View style={styles.gpsBannerInner}>
+              <Text style={styles.gpsBannerIcon}>📡</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.gpsBannerTitle}>Bật GPS Lấy Vị Trí Quán Hiện Tại</Text>
+                <Text style={styles.gpsBannerSub}>Tự động nhận diện tọa độ GPS và tên địa chỉ chính xác của quán</Text>
+              </View>
+              <View style={styles.gpsActionPill}>
+                <Text style={styles.gpsActionPillText}>Định vị</Text>
+              </View>
+            </View>
+          )}
+        </TouchableOpacity>
+
         <Text style={styles.landmarkFieldLabel}>Tên quán / Nhà hàng:</Text>
         <TextInput
           style={styles.landmarkInput}
@@ -728,6 +1023,7 @@ export default function AdminScreen({ navigation }) {
           )}
         </TouchableOpacity>
       </View>
+
       {/* Khối quản lý Voucher */}
       <View style={styles.settingsGroupCard}>
         <View style={styles.groupHeaderRow}>
@@ -753,28 +1049,134 @@ export default function AdminScreen({ navigation }) {
         ))}
       </View>
 
-      {/* Khối quản lý Nhân sự */}
+      {/* Khối Quản Lý Tài Khoản Toàn Bộ Người Dùng & Điều Chỉnh Quyền */}
       <View style={styles.settingsGroupCard}>
         <View style={styles.groupHeaderRow}>
-          <Text style={styles.groupHeaderTitle}>👥 Quản Lý Tài Khoản Nhân Sự</Text>
+          <Text style={styles.groupHeaderTitle}>👥 Quản Lý Người Dùng & Phân Quyền</Text>
           <TouchableOpacity 
             style={styles.groupActionAddBtn}
             onPress={() => setModalType('addUser')}
           >
-            <Text style={styles.groupActionAddText}>+ Thêm Nhân Sự</Text>
+            <Text style={styles.groupActionAddText}>+ Thêm Tài Khoản</Text>
           </TouchableOpacity>
         </View>
 
-        {users.map(u => (
-          <View key={u.ma_nguoi_dung} style={styles.userRowItem}>
-            <View>
-              <Text style={styles.userItemName}>{u.ho_ten} ({u.so_dien_thoai})</Text>
-              <Text style={styles.userItemRole}>
-                {u.ma_vai_tro === 3 ? '👑 Quản trị viên' : u.ma_vai_tro === 2 ? '🧑‍🍳 Nhân viên quán & bếp' : u.ma_vai_tro === 4 ? '🛵 Shipper' : 'Khách hàng'}
+        <Text style={styles.landmarkDesc}>
+          Quản lý toàn bộ {users.length} tài khoản trong hệ thống. Bạn có thể điều chỉnh vai trò sang Khách hàng, Bếp & Quán, hoặc Shipper.
+        </Text>
+
+        {/* Ô tìm kiếm tài khoản */}
+        <View style={styles.userSearchBar}>
+          <Text style={styles.userSearchIcon}>🔍</Text>
+          <TextInput
+            style={styles.userSearchInput}
+            placeholder="Tìm theo tên, SĐT hoặc email..."
+            placeholderTextColor="#94A3B8"
+            value={userSearchText}
+            onChangeText={setUserSearchText}
+          />
+          {userSearchText.length > 0 && (
+            <TouchableOpacity onPress={() => setUserSearchText('')}>
+              <Text style={styles.clearTextIcon}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Filter Chips cho vai trò */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.userRoleChipsScroll}>
+          {[
+            { key: 'all', label: `Tất cả (${users.length})` },
+            { key: '1', label: `👤 Khách (${users.filter(u => u.ma_vai_tro === 1).length})` },
+            { key: '2', label: `🧑‍🍳 Bếp/Quán (${users.filter(u => u.ma_vai_tro === 2).length})` },
+            { key: '4', label: `🛵 Shipper (${users.filter(u => u.ma_vai_tro === 4).length})` },
+            { key: '3', label: `👑 Admin (${users.filter(u => u.ma_vai_tro === 3).length})` },
+          ].map(chip => (
+            <TouchableOpacity
+              key={chip.key}
+              style={[styles.userChipItem, userRoleFilter === chip.key && styles.userChipActive]}
+              onPress={() => setUserRoleFilter(chip.key)}
+            >
+              <Text style={[styles.userChipText, userRoleFilter === chip.key && styles.userChipTextActive]}>
+                {chip.label}
               </Text>
-            </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Danh sách người dùng */}
+        {filteredUsers.length === 0 ? (
+          <View style={styles.noUserFoundBox}>
+            <Text style={styles.noUserFoundText}>Không tìm thấy tài khoản nào khớp với bộ lọc</Text>
           </View>
-        ))}
+        ) : (
+          filteredUsers.map(u => {
+            const isAdminUser = u.ma_vai_tro === 3;
+            const isKitchen = u.ma_vai_tro === 2;
+            const isShipper = u.ma_vai_tro === 4;
+
+            let roleName = 'Khách hàng';
+            let roleBadgeStyle = styles.badgeCustomer;
+            let roleTextStyle = styles.badgeTextCustomer;
+
+            if (isAdminUser) {
+              roleName = 'Quản trị viên';
+              roleBadgeStyle = styles.badgeAdmin;
+              roleTextStyle = styles.badgeTextAdmin;
+            } else if (isKitchen) {
+              roleName = 'Nhân viên quán & bếp';
+              roleBadgeStyle = styles.badgeKitchen;
+              roleTextStyle = styles.badgeTextKitchen;
+            } else if (isShipper) {
+              roleName = 'Tài xế Shipper';
+              roleBadgeStyle = styles.badgeShipper;
+              roleTextStyle = styles.badgeTextShipper;
+            }
+
+            return (
+              <View key={u.ma_nguoi_dung} style={styles.userCardItem}>
+                <View style={styles.userCardMain}>
+                  <View style={styles.userCardAvatar}>
+                    <Text style={styles.userAvatarEmoji}>
+                      {isAdminUser ? '👑' : isKitchen ? '🧑‍🍳' : isShipper ? '🛵' : '👤'}
+                    </Text>
+                  </View>
+                  <View style={styles.userCardDetails}>
+                    <View style={styles.userNameRow}>
+                      <Text style={styles.userItemName}>{u.ho_ten}</Text>
+                      <View style={[styles.roleBadgeBox, roleBadgeStyle]}>
+                        <Text style={[styles.roleBadgeLabel, roleTextStyle]}>{roleName}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.userItemContact}>
+                      📞 {u.so_dien_thoai || 'Không có SĐT'} {u.email ? `• ✉️ ${u.email}` : ''}
+                    </Text>
+                    {u.lan_hoat_dong_cuoi && (
+                      <Text style={styles.userLastActive}>
+                        Hoạt động: {new Date(u.lan_hoat_dong_cuoi).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+
+                {/* Nút hành động phân quyền */}
+                <View style={styles.userCardActionRow}>
+                  {isAdminUser ? (
+                    <View style={styles.adminProtectedTag}>
+                      <Text style={styles.adminProtectedText}>🔒 Quản trị viên (Cố định - Không thể chuyển giao)</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.changeRoleBtn}
+                      onPress={() => handleOpenRoleModal(u)}
+                    >
+                      <Text style={styles.changeRoleBtnText}>⚙️ Phân Quyền</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            );
+          })
+        )}
       </View>
 
       {/* Nút thoát */}
@@ -1002,6 +1404,117 @@ export default function AdminScreen({ navigation }) {
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSubmitBtn} onPress={handleAddUser} disabled={submitting}>
                 <Text style={styles.modalSubmitText}>Tạo Tài Khoản</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ========================================================================= */}
+      {/* MODAL ĐIỀU CHỈNH VAI TRÒ / PHÂN QUYỀN (KHÔNG CHO PHÉP CẤP ADMIN) */}
+      {/* ========================================================================= */}
+      <Modal visible={modalType === 'changeRole'} animationType="slide" transparent={true}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalHeading}>⚙️ Phân Quyền Tài Khoản</Text>
+              <TouchableOpacity onPress={() => setModalType(null)}>
+                <Text style={styles.modalCloseIcon}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {roleModalUser && (
+              <View style={styles.targetUserInfoBox}>
+                <Text style={styles.targetUserName}>👤 {roleModalUser.ho_ten}</Text>
+                <Text style={styles.targetUserSub}>
+                  SĐT: {roleModalUser.so_dien_thoai || 'Chưa có'} • Email: {roleModalUser.email || 'Chưa có'}
+                </Text>
+                <Text style={styles.targetUserSub}>
+                  Vai trò hiện tại:{' '}
+                  <Text style={{ fontWeight: '700', color: '#6A1B9A' }}>
+                    {roleModalUser.ma_vai_tro === 2
+                      ? '🧑‍🍳 Nhân viên quán & bếp'
+                      : roleModalUser.ma_vai_tro === 4
+                      ? '🛵 Tài xế Shipper'
+                      : '👤 Khách hàng'}
+                  </Text>
+                </Text>
+              </View>
+            )}
+
+            <Text style={styles.selectRoleHeading}>Chọn vai trò muốn phân quyền:</Text>
+
+            {/* Các tùy chọn vai trò: 1, 2, 4 (TUYỆT ĐỐI KHÔNG CÓ 3) */}
+            <View style={styles.roleOptionsList}>
+              {[
+                {
+                  id: 1,
+                  icon: '👤',
+                  title: 'Khách Hàng',
+                  desc: 'Đặt món ăn, lưu sổ địa chỉ, nhận hàng và đánh giá đơn'
+                },
+                {
+                  id: 2,
+                  icon: '🧑‍🍳',
+                  title: 'Nhân Viên Quán & Bếp',
+                  desc: 'Xem đơn hàng cần nấu, chuyển trạng thái chế biến & báo sẵn sàng giao'
+                },
+                {
+                  id: 4,
+                  icon: '🛵',
+                  title: 'Tài Xế Shipper',
+                  desc: 'Bật trực tuyến GPS nhận đơn giao trong bán kính 3km của quán'
+                }
+              ].map(r => {
+                const isSelected = selectedNewRole === r.id;
+                return (
+                  <TouchableOpacity
+                    key={r.id}
+                    style={[styles.roleOptionCard, isSelected && styles.roleOptionCardSelected]}
+                    onPress={() => setSelectedNewRole(r.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.roleOptionIcon}>{r.icon}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.roleOptionTitle, isSelected && styles.roleOptionTitleSelected]}>
+                        {r.title}
+                      </Text>
+                      <Text style={styles.roleOptionDesc}>{r.desc}</Text>
+                    </View>
+                    <View style={[styles.roleRadioCircle, isSelected && styles.roleRadioCircleSelected]}>
+                      {isSelected && <View style={styles.roleRadioDot} />}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* CẢNH BÁO BẢO MẬT: KHÔNG THỂ CẤP QUYỀN QUẢN TRỊ VIÊN */}
+            <View style={styles.securityWarningBox}>
+              <Text style={styles.securityWarningIcon}>🔒</Text>
+              <Text style={styles.securityWarningText}>
+                Quy định bảo mật hệ thống: Không thể cấp quyền Quản trị viên (Admin) cho các tài khoản khác.
+              </Text>
+            </View>
+
+            <View style={styles.modalBtnGroup}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setModalType(null)}
+                disabled={submitting}
+              >
+                <Text style={styles.modalCancelText}>Hủy Bỏ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalSubmitBtn}
+                onPress={handleSaveUserRole}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <Text style={styles.modalSubmitText}>Lưu Thay Đổi</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -1757,5 +2270,459 @@ const styles = StyleSheet.create({
     color: '#0284C7',
     fontWeight: '600',
     marginTop: 2,
+  },
+  // Real-time Online Personnel Styles
+  onlineSectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  liveIndicatorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    gap: 4,
+  },
+  liveIndicatorText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  onlineDetailContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  onlineDetailTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1E293B',
+    marginBottom: 10,
+  },
+  onlineUserCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  onlineUserLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  onlineUserAvatar: {
+    fontSize: 22,
+  },
+  onlineUserName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  onlineUserSub: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  onlineUserRight: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  roleMiniBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  roleBadgeKitchen: {
+    backgroundColor: '#EDE7F6',
+  },
+  roleBadgeShipper: {
+    backgroundColor: '#E0F2F1',
+  },
+  roleMiniBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  roleTextKitchen: {
+    color: '#6A1B9A',
+  },
+  roleTextShipper: {
+    color: '#00897B',
+  },
+  onlineStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  activeDotGreen: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  activeTimeText: {
+    fontSize: 10,
+    color: '#10B981',
+    fontWeight: '600',
+  },
+  noOnlineBox: {
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 12,
+  },
+  noOnlineEmoji: {
+    fontSize: 26,
+    marginBottom: 4,
+  },
+  noOnlineText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  noOnlineSub: {
+    fontSize: 11,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 16,
+  },
+  // GPS Banner Button Styles
+  gpsBannerBtn: {
+    backgroundColor: '#F3E8FF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#D8B4FE',
+  },
+  gpsBannerInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  gpsBannerIcon: {
+    fontSize: 24,
+  },
+  gpsBannerTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#581C87',
+  },
+  gpsBannerSub: {
+    fontSize: 11,
+    color: '#7E22CE',
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  gpsActionPill: {
+    backgroundColor: '#6A1B9A',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  gpsActionPillText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  gpsLocatingWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  gpsLocatingText: {
+    fontSize: 12,
+    color: '#6A1B9A',
+    fontWeight: '700',
+  },
+  // User Management & Filter Styles
+  userSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 10,
+    marginBottom: 10,
+  },
+  userSearchIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  userSearchInput: {
+    flex: 1,
+    height: 38,
+    fontSize: 13,
+    color: '#1E293B',
+  },
+  userRoleChipsScroll: {
+    marginBottom: 12,
+  },
+  userChipItem: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  userChipActive: {
+    backgroundColor: '#EDE7F6',
+    borderColor: '#6A1B9A',
+  },
+  userChipText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  userChipTextActive: {
+    color: '#6A1B9A',
+    fontWeight: '800',
+  },
+  userCardItem: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  userCardMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  userCardAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EDE7F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  userAvatarEmoji: {
+    fontSize: 20,
+  },
+  userCardDetails: {
+    flex: 1,
+  },
+  userNameRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  roleBadgeBox: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  badgeCustomer: {
+    backgroundColor: '#F1F5F9',
+  },
+  badgeTextCustomer: {
+    color: '#475569',
+  },
+  badgeKitchen: {
+    backgroundColor: '#EDE7F6',
+  },
+  badgeTextKitchen: {
+    color: '#6A1B9A',
+  },
+  badgeShipper: {
+    backgroundColor: '#E0F2F1',
+  },
+  badgeTextShipper: {
+    color: '#00897B',
+  },
+  badgeAdmin: {
+    backgroundColor: '#FEF3C7',
+  },
+  badgeTextAdmin: {
+    color: '#B45309',
+  },
+  roleBadgeLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  userItemContact: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 3,
+  },
+  userLastActive: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  userCardActionRow: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    alignItems: 'flex-end',
+  },
+  adminProtectedTag: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  adminProtectedText: {
+    fontSize: 11,
+    color: '#B45309',
+    fontWeight: '700',
+  },
+  changeRoleBtn: {
+    backgroundColor: '#EDE7F6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1C4E9',
+  },
+  changeRoleBtnText: {
+    fontSize: 12,
+    color: '#6A1B9A',
+    fontWeight: '700',
+  },
+  noUserFoundBox: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  noUserFoundText: {
+    fontSize: 13,
+    color: '#94A3B8',
+  },
+  // Modal Change Role Styles
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalCloseIcon: {
+    fontSize: 18,
+    color: '#94A3B8',
+    padding: 4,
+  },
+  targetUserInfoBox: {
+    backgroundColor: '#F8FAFC',
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  targetUserName: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  targetUserSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  selectRoleHeading: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 8,
+  },
+  roleOptionsList: {
+    gap: 8,
+    marginBottom: 14,
+  },
+  roleOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  roleOptionCardSelected: {
+    backgroundColor: '#FAF5FF',
+    borderColor: '#6A1B9A',
+  },
+  roleOptionIcon: {
+    fontSize: 22,
+  },
+  roleOptionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  roleOptionTitleSelected: {
+    color: '#6A1B9A',
+    fontWeight: '800',
+  },
+  roleOptionDesc: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  roleRadioCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  roleRadioCircleSelected: {
+    borderColor: '#6A1B9A',
+  },
+  roleRadioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#6A1B9A',
+  },
+  securityWarningBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    marginBottom: 12,
+  },
+  securityWarningIcon: {
+    fontSize: 16,
+  },
+  securityWarningText: {
+    fontSize: 11,
+    color: '#B91C1C',
+    flex: 1,
+    lineHeight: 16,
+    fontWeight: '600',
   },
 });

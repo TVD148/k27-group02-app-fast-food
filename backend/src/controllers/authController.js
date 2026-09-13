@@ -272,9 +272,42 @@ const updateProfile = async (req, res) => {
   }
 };
 
+// 5. HEARTBEAT ĐIỂM DANH TRỰC TUYẾN THỜI GIAN THỰC (POST /api/auth/heartbeat)
+const heartbeat = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    await db.query('UPDATE nguoi_dung SET lan_hoat_dong_cuoi = NOW() WHERE ma_nguoi_dung = ?', [userId]);
+    return res.status(200).json({ success: true, message: 'Heartbeat OK' });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// 6. CẬP NHẬT TRẠNG THÁI TRỰC TUYẾN CỦA SHIPPER (PUT /api/auth/shipper-status)
+const updateShipperStatus = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { trang_thai_shipper } = req.body;
+    const status = trang_thai_shipper === 'truc_tuyen' ? 'truc_tuyen' : 'ngoai_tuyen';
+    await db.query(
+      'UPDATE nguoi_dung SET trang_thai_shipper = ?, lan_hoat_dong_cuoi = NOW() WHERE ma_nguoi_dung = ?',
+      [status, userId]
+    );
+    return res.status(200).json({
+      success: true,
+      message: `Đã chuyển trạng thái shipper thành ${status === 'truc_tuyen' ? 'Trực tuyến' : 'Ngoại tuyến'}!`,
+      data: { trang_thai_shipper: status }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   register,
   login,
   getProfile,
-  updateProfile
+  updateProfile,
+  heartbeat,
+  updateShipperStatus
 };

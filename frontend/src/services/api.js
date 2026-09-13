@@ -533,6 +533,16 @@ export const fetchDashboardStats = async () => {
   }
 };
 
+// Lấy danh sách nhân sự thực sự trực tuyến (không dùng dữ liệu giả)
+export const fetchOnlinePersonnel = async () => {
+  try {
+    const response = await api.get('/admin/online-personnel');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Không thể tải danh sách nhân sự trực tuyến!');
+  }
+};
+
 // CRUD Món ăn
 export const createFoodItem = async (foodData) => {
   try {
