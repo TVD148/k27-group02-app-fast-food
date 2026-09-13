@@ -47,6 +47,17 @@ export default function HomeScreen({ navigation }) {
       const token = await AsyncStorage.getItem('user_token');
       if (storedUser && token) {
         const user = JSON.parse(storedUser);
+        const userRole = parseInt(user.ma_vai_tro || 1, 10);
+        if (userRole === 4) {
+          navigation.replace('Shipper');
+          return;
+        } else if (userRole === 2 || userRole === 5) {
+          navigation.replace('StaffKitchen');
+          return;
+        } else if (userRole === 3) {
+          navigation.replace('Admin');
+          return;
+        }
         setUserInfo(user);
 
         // Tải địa chỉ mặc định của tài khoản hiện tại

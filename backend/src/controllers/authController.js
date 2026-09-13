@@ -197,7 +197,7 @@ const getProfile = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { ho_ten, so_dien_thoai, email } = req.body;
+    const { ho_ten, so_dien_thoai, email, mat_khau } = req.body;
 
     if (!ho_ten || !ho_ten.trim()) {
       return res.status(400).json({
@@ -248,10 +248,25 @@ const updateProfile = async (req, res) => {
       }
     }
 
-    await db.query(
-      'UPDATE nguoi_dung SET ho_ten = ?, so_dien_thoai = ?, email = ? WHERE ma_nguoi_dung = ?',
-      [ho_ten.trim(), so_dien_thoai.trim(), (email ? email.trim() : null), userId]
-    );
+    // Kiểm tra nếu có đổi mật khẩu
+    if (mat_khau && mat_khau.trim()) {
+      if (mat_khau.trim().length < 6) {
+        return res.status(400).json({
+          success: false,
+          message: 'Mật khẩu mới phải có tối thiểu 6 ký tự!'
+        });
+      }
+      const hashed = await bcrypt.hash(mat_khau.trim(), 10);
+      await db.query(
+        'UPDATE nguoi_dung SET ho_ten = ?, so_dien_thoai = ?, email = ?, mat_khau = ? WHERE ma_nguoi_dung = ?',
+        [ho_ten.trim(), so_dien_thoai.trim(), (email ? email.trim() : null), hashed, userId]
+      );
+    } else {
+      await db.query(
+        'UPDATE nguoi_dung SET ho_ten = ?, so_dien_thoai = ?, email = ? WHERE ma_nguoi_dung = ?',
+        [ho_ten.trim(), so_dien_thoai.trim(), (email ? email.trim() : null), userId]
+      );
+    }
 
     const [updatedUsers] = await db.query(
       'SELECT ma_nguoi_dung, ho_ten, email, so_dien_thoai, dia_chi, hinh_anh, ma_vai_tro, trang_thai FROM nguoi_dung WHERE ma_nguoi_dung = ?',

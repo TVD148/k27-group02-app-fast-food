@@ -48,6 +48,17 @@ export default function ProfileScreen({ navigation }) {
       const token = await AsyncStorage.getItem('user_token');
       if (stored && token) {
         let userObj = JSON.parse(stored);
+        const userRole = parseInt(userObj.ma_vai_tro || 1, 10);
+        if (userRole === 4) {
+          navigation.replace('Shipper');
+          return;
+        } else if (userRole === 2 || userRole === 5) {
+          navigation.replace('StaffKitchen');
+          return;
+        } else if (userRole === 3) {
+          navigation.replace('Admin');
+          return;
+        }
         setUser(userObj);
 
         // Lấy địa chỉ mặc định từ Database MySQL

@@ -5,6 +5,7 @@ import {
   View,
   ScrollView,
   TouchableOpacity,
+  TextInput,
   ActivityIndicator,
   Alert,
   SafeAreaView,
@@ -17,7 +18,15 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import { fetchOrders, acceptOrderDelivery, updateOrderStatus, fetchShipperStats, fetchStoreLandmark } from '../services/api';
+import { 
+  fetchOrders, 
+  acceptOrderDelivery, 
+  updateOrderStatus, 
+  fetchShipperStats, 
+  fetchStoreLandmark,
+  updateUserProfile,
+  logoutUser
+} from '../services/api';
 
 function calculateHaversine(lat1, lon1, lat2, lon2) {
   if (!lat1 || !lon1 || !lat2 || !lon2) return null;
@@ -82,6 +91,11 @@ export default function ShipperScreen({ navigation }) {
   const [calendarYear, setCalendarYear] = useState(now.getFullYear());
   const [calendarMonth, setCalendarMonth] = useState(now.getMonth());
   const [tempSelectedDate, setTempSelectedDate] = useState(null);
+
+  // Modal Thay đổi thông tin cá nhân của Shipper
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [profileForm, setProfileForm] = useState({ ho_ten: '', so_dien_thoai: '', email: '', mat_khau: '' });
+  const [savingProfile, setSavingProfile] = useState(false);
 
   useEffect(() => {
     loadShipperData();
@@ -865,6 +879,65 @@ export default function ShipperScreen({ navigation }) {
     );
   };
 
+  // Xử lý thay đổi thông tin cá nhân trực tiếp trên form Shipper
+  const handleOpenEditProfile = () => {
+    setProfileForm({
+      ho_ten: currentUser?.ho_ten || '',
+      so_dien_thoai: currentUser?.so_dien_thoai || '',
+      email: currentUser?.email || '',
+      mat_khau: ''
+    });
+    setShowEditProfileModal(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!profileForm.ho_ten.trim()) {
+      Alert.alert('Lỗi', 'Vui lòng nhập họ và tên!');
+      return;
+    }
+    if (!profileForm.so_dien_thoai.trim()) {
+      Alert.alert('Lỗi', 'Vui lòng nhập số điện thoại!');
+      return;
+    }
+    setSavingProfile(true);
+    try {
+      const res = await updateUserProfile(
+        profileForm.ho_ten.trim(),
+        profileForm.so_dien_thoai.trim(),
+        profileForm.email.trim(),
+        profileForm.mat_khau.trim() || undefined
+      );
+      if (res.success) {
+        Alert.alert('Thành công 🎉', 'Đã cập nhật thông tin cá nhân của bạn!');
+        setCurrentUser(res.data);
+        setShowEditProfileModal(false);
+      }
+    } catch (err) {
+      Alert.alert('Lỗi cập nhật', err.message || 'Không thể lưu thông tin!');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  // Đăng xuất trực tiếp từ form Shipper
+  const handleLogout = () => {
+    Alert.alert(
+      'Xác nhận đăng xuất 🚪',
+      'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản Shipper?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Đăng xuất',
+          style: 'destructive',
+          onPress: async () => {
+            await logoutUser();
+            navigation.replace('Login');
+          }
+        }
+      ]
+    );
+  };
+
   // Render Tab: Hồ sơ Shipper (Không có đánh giá ảo và số chuyến ảo)
   const renderProfileTab = () => {
     const totalEarnings = stats.total_shipping_earnings !== undefined 
@@ -879,6 +952,7 @@ export default function ShipperScreen({ navigation }) {
           </View>
           <Text style={styles.shipperName}>{currentUser?.ho_ten || 'Tài Xế FastFood'}</Text>
           <Text style={styles.shipperPhone}>{currentUser?.so_dien_thoai || 'Chưa cập nhật SĐT'}</Text>
+          <Text style={styles.shipperRoleBadge}>🛵 Tài Xế Giao Hàng (Shipper)</Text>
           
           <View style={[styles.onlineStatusPill, isOnline ? styles.onlineStatusPillGreen : styles.onlineStatusPillGray]}>
             <Text style={[styles.onlineStatusText, isOnline ? styles.onlineStatusTextGreen : styles.onlineStatusTextGray]}>
@@ -918,12 +992,22 @@ export default function ShipperScreen({ navigation }) {
           <Text style={styles.viewDeliveredHistoryBtnText}>📜 Xem Lịch Sử Đơn Đã Giao</Text>
         </TouchableOpacity>
 
+        {/* Nút Thay đổi thông tin trực tiếp trên form Shipper */}
         <TouchableOpacity 
-          style={styles.exitToHomeBtn}
-          onPress={() => navigation.navigate('Profile')}
+          style={styles.editProfileTouchBtn}
+          onPress={handleOpenEditProfile}
           activeOpacity={0.8}
         >
-          <Text style={styles.exitToHomeBtnText}>➔ Mở Hồ Sơ Cá Nhân & Đăng Xuất</Text>
+          <Text style={styles.editProfileTouchBtnText}>✏️ Thay Đổi Thông Tin Cá Nhân</Text>
+        </TouchableOpacity>
+
+        {/* Nút Đăng xuất trực tiếp trên form Shipper */}
+        <TouchableOpacity 
+          style={styles.logoutDirectBtn}
+          onPress={handleLogout}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.logoutDirectBtnText}>🚪 Đăng Xuất Khỏi Hệ Thống</Text>
         </TouchableOpacity>
       </ScrollView>
     );
@@ -1336,6 +1420,87 @@ export default function ShipperScreen({ navigation }) {
                 onPress={handleGrantLocationPermission}
               >
                 <Text style={styles.acceptPermissionText}>Đồng ý cấp quyền</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ========================================================================= */}
+      {/* MODAL THAY ĐỔI THÔNG TIN CÁ NHÂN CỦA SHIPPER TRỰC TIẾP TRÊN FORM */}
+      {/* ========================================================================= */}
+      <Modal
+        visible={showEditProfileModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEditProfileModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.editProfileCard}>
+            <View style={styles.editProfileHeader}>
+              <Text style={styles.editProfileTitle}>✏️ Thay Đổi Thông Tin Shipper</Text>
+              <TouchableOpacity onPress={() => setShowEditProfileModal(false)}>
+                <Text style={styles.editProfileCloseText}>✕ Đóng</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+              <Text style={styles.inputFieldLabel}>Họ và tên *</Text>
+              <TextInput
+                style={styles.profileTextInput}
+                placeholder="Nhập họ và tên..."
+                value={profileForm.ho_ten}
+                onChangeText={(t) => setProfileForm({ ...profileForm, ho_ten: t })}
+              />
+
+              <Text style={styles.inputFieldLabel}>Số điện thoại *</Text>
+              <TextInput
+                style={styles.profileTextInput}
+                placeholder="Nhập số điện thoại (10 chữ số)..."
+                keyboardType="phone-pad"
+                value={profileForm.so_dien_thoai}
+                onChangeText={(t) => setProfileForm({ ...profileForm, so_dien_thoai: t })}
+              />
+
+              <Text style={styles.inputFieldLabel}>Email</Text>
+              <TextInput
+                style={styles.profileTextInput}
+                placeholder="Nhập địa chỉ email..."
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={profileForm.email}
+                onChangeText={(t) => setProfileForm({ ...profileForm, email: t })}
+              />
+
+              <Text style={styles.inputFieldLabel}>Mật khẩu mới (Để trống nếu không đổi)</Text>
+              <TextInput
+                style={styles.profileTextInput}
+                placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)..."
+                secureTextEntry
+                value={profileForm.mat_khau}
+                onChangeText={(t) => setProfileForm({ ...profileForm, mat_khau: t })}
+              />
+            </ScrollView>
+
+            <View style={styles.editProfileActions}>
+              <TouchableOpacity
+                style={styles.editProfileCancelBtn}
+                onPress={() => setShowEditProfileModal(false)}
+                disabled={savingProfile}
+              >
+                <Text style={styles.editProfileCancelText}>Hủy</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.editProfileSubmitBtn}
+                onPress={handleSaveProfile}
+                disabled={savingProfile}
+              >
+                {savingProfile ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.editProfileSubmitText}>💾 Lưu Thay Đổi</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -2948,5 +3113,130 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800',
+  },
+  shipperRoleBadge: {
+    backgroundColor: '#E0F2F1',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'center',
+    marginTop: 6,
+  },
+  shipperRoleBadgeText: {
+    color: '#00796B',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  editProfileTouchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00897B',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginTop: 18,
+    shadowColor: '#00897B',
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  editProfileTouchBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  logoutDirectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFEBEE',
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginTop: 12,
+  },
+  logoutDirectBtnText: {
+    color: '#D32F2F',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  editProfileCard: {
+    backgroundColor: '#FFFFFF',
+    width: '90%',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  editProfileHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEEEEE',
+  },
+  editProfileTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#1F2937',
+  },
+  editProfileCloseText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#9CA3AF',
+  },
+  inputFieldLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#374151',
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  profileTextInput: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#1F2937',
+  },
+  editProfileActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 18,
+  },
+  editProfileCancelBtn: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  editProfileCancelText: {
+    color: '#4B5563',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  editProfileSubmitBtn: {
+    flex: 1,
+    backgroundColor: '#00897B',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editProfileSubmitText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 14,
   },
 });

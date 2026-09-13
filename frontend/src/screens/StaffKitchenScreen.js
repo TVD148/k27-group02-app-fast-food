@@ -10,11 +10,12 @@ import {
   SafeAreaView,
   RefreshControl,
   Modal,
+  TextInput,
   StatusBar,
   Platform
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchOrders, updateOrderStatus, fetchMenuItems, toggleItemStatus } from '../services/api';
+import { fetchOrders, updateOrderStatus, fetchMenuItems, toggleItemStatus, updateUserProfile, logoutUser } from '../services/api';
 
 export default function StaffKitchenScreen({ navigation }) {
   // 3 Bottom Tabs: 'pending' (Đơn mới), 'cooking' (Đang nấu & Sẵn sàng), 'profile' (Hồ sơ)
@@ -26,6 +27,92 @@ export default function StaffKitchenScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+
+  // Profile Edit & Logout State
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    ho_ten: '',
+    so_dien_thoai: '',
+    email: '',
+    mat_khau: ''
+  });
+
+  const handleOpenEditProfile = () => {
+    setProfileForm({
+      ho_ten: currentUser?.ho_ten || '',
+      so_dien_thoai: currentUser?.so_dien_thoai || '',
+      email: currentUser?.email || '',
+      mat_khau: ''
+    });
+    setShowEditProfileModal(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!profileForm.ho_ten.trim()) {
+      Alert.alert('Lỗi', 'Vui lòng nhập họ và tên');
+      return;
+    }
+    if (!profileForm.so_dien_thoai.trim()) {
+      Alert.alert('Lỗi', 'Vui lòng nhập số điện thoại');
+      return;
+    }
+    if (profileForm.mat_khau && profileForm.mat_khau.length < 6) {
+      Alert.alert('Lỗi', 'Mật khẩu mới phải có ít nhất 6 ký tự');
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      const res = await updateUserProfile(
+        profileForm.ho_ten.trim(),
+        profileForm.so_dien_thoai.trim(),
+        profileForm.email.trim(),
+        profileForm.mat_khau ? profileForm.mat_khau.trim() : undefined
+      );
+      if (res && res.success) {
+        Alert.alert('Thành công', 'Thông tin nhân viên đã được cập nhật thành công!');
+        const updated = {
+          ...currentUser,
+          ho_ten: profileForm.ho_ten.trim(),
+          so_dien_thoai: profileForm.so_dien_thoai.trim(),
+          email: profileForm.email.trim()
+        };
+        setCurrentUser(updated);
+        await AsyncStorage.setItem('user_info', JSON.stringify(updated));
+        setShowEditProfileModal(false);
+      } else {
+        Alert.alert('Lỗi', res.message || 'Không thể cập nhật thông tin');
+      }
+    } catch (err) {
+      Alert.alert('Lỗi', err.message || 'Có lỗi xảy ra khi cập nhật thông tin');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Đăng Xuất Ca Làm Việc',
+      'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản nhân viên / bếp?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Đăng Xuất',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await logoutUser();
+            } catch (e) {
+              console.log('Lỗi đăng xuất:', e.message);
+            }
+            await AsyncStorage.multiRemove(['user_token', 'user_info', 'user_role']);
+            navigation.replace('Login');
+          }
+        }
+      ]
+    );
+  };
 
   // Modal Chi tiết Đơn Chế Biến (Killer Feature)
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -273,11 +360,34 @@ export default function StaffKitchenScreen({ navigation }) {
           <Text style={styles.kitchenAvatarEmoji}>👨‍🍳</Text>
         </View>
         <Text style={styles.kitchenStaffName}>{currentUser?.ho_ten || 'Đầu Bếp Trưởng'}</Text>
-        <Text style={styles.kitchenStaffRole}>Bộ Phận: Chế Biến & Kiểm Soát Dinh Dưỡng</Text>
+        <View style={styles.staffRoleBadge}>
+          <Text style={styles.staffRoleBadgeText}>
+            {currentUser?.ma_vai_tro === 5 ? '👨‍🍳 Bếp Trưởng / Chế Biến' : '🧑‍🍳 Nhân Viên Quán'}
+          </Text>
+        </View>
+        <Text style={styles.kitchenStaffInfoRow}>📞 SĐT: {currentUser?.so_dien_thoai || 'Chưa cập nhật'}</Text>
+        <Text style={styles.kitchenStaffInfoRow}>📧 Email: {currentUser?.email || 'Chưa cập nhật'}</Text>
+        
         <View style={styles.kitchenStatusPill}>
           <View style={styles.onlineDot} />
           <Text style={styles.kitchenStatusText}>Bếp Đang Trực Tuyến & Nhận Đơn</Text>
         </View>
+
+        {/* Nút Thay Đổi Thông Tin Cá Nhân */}
+        <TouchableOpacity
+          style={styles.editProfileTouchBtn}
+          onPress={handleOpenEditProfile}
+        >
+          <Text style={styles.editProfileTouchBtnText}>✏️ Thay Đổi Thông Tin Cá Nhân</Text>
+        </TouchableOpacity>
+
+        {/* Nút Đăng Xuất Trực Tiếp */}
+        <TouchableOpacity
+          style={styles.logoutDirectBtn}
+          onPress={handleLogout}
+        >
+          <Text style={styles.logoutDirectBtnText}>🚪 Đăng Xuất Ca Làm Việc</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Quản lý tình trạng nguyên liệu & món ăn nhanh */}
@@ -310,14 +420,6 @@ export default function StaffKitchenScreen({ navigation }) {
           );
         })}
       </View>
-
-      {/* Nút Đăng xuất / Quay về trang chính */}
-      <TouchableOpacity 
-        style={styles.exitKitchenBtn}
-        onPress={() => navigation.navigate('Profile')}
-      >
-        <Text style={styles.exitKitchenBtnText}>➔ Mở Hồ Sơ Cá Nhân & Đăng Xuất</Text>
-      </TouchableOpacity>
     </ScrollView>
   );
 
@@ -528,6 +630,85 @@ export default function StaffKitchenScreen({ navigation }) {
             )}
           </View>
         </SafeAreaView>
+      </Modal>
+
+      {/* MODAL THAY ĐỔI THÔNG TIN CỦA NHÂN VIÊN/BẾP TRỰC TIẾP */}
+      <Modal
+        visible={showEditProfileModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEditProfileModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.editProfileCard}>
+            <View style={styles.editProfileHeader}>
+              <Text style={styles.editProfileTitle}>✏️ Cập Nhật Thông Tin Nhân Viên</Text>
+              <TouchableOpacity onPress={() => setShowEditProfileModal(false)}>
+                <Text style={styles.editProfileCloseText}>✕ Đóng</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+              <Text style={styles.inputFieldLabel}>Họ và tên *</Text>
+              <TextInput
+                style={styles.profileTextInput}
+                placeholder="Nhập họ và tên..."
+                value={profileForm.ho_ten}
+                onChangeText={(t) => setProfileForm({ ...profileForm, ho_ten: t })}
+              />
+
+              <Text style={styles.inputFieldLabel}>Số điện thoại *</Text>
+              <TextInput
+                style={styles.profileTextInput}
+                placeholder="Nhập số điện thoại..."
+                keyboardType="phone-pad"
+                value={profileForm.so_dien_thoai}
+                onChangeText={(t) => setProfileForm({ ...profileForm, so_dien_thoai: t })}
+              />
+
+              <Text style={styles.inputFieldLabel}>Email</Text>
+              <TextInput
+                style={styles.profileTextInput}
+                placeholder="Nhập địa chỉ email..."
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={profileForm.email}
+                onChangeText={(t) => setProfileForm({ ...profileForm, email: t })}
+              />
+
+              <Text style={styles.inputFieldLabel}>Mật khẩu mới (Để trống nếu không đổi)</Text>
+              <TextInput
+                style={styles.profileTextInput}
+                placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)..."
+                secureTextEntry
+                value={profileForm.mat_khau}
+                onChangeText={(t) => setProfileForm({ ...profileForm, mat_khau: t })}
+              />
+            </ScrollView>
+
+            <View style={styles.editProfileActions}>
+              <TouchableOpacity
+                style={styles.editProfileCancelBtn}
+                onPress={() => setShowEditProfileModal(false)}
+                disabled={savingProfile}
+              >
+                <Text style={styles.editProfileCancelText}>Hủy</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.editProfileSubmitBtn}
+                onPress={handleSaveProfile}
+                disabled={savingProfile}
+              >
+                {savingProfile ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.editProfileSubmitText}>💾 Lưu Thay Đổi</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -1204,5 +1385,144 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+  staffRoleBadge: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'center',
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  staffRoleBadgeText: {
+    color: '#DC2626',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  kitchenStaffInfoRow: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 3,
+    textAlign: 'center',
+  },
+  editProfileTouchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#DC2626',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginTop: 18,
+    shadowColor: '#DC2626',
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  editProfileTouchBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  logoutDirectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFEBEE',
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginTop: 12,
+  },
+  logoutDirectBtnText: {
+    color: '#D32F2F',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  editProfileCard: {
+    backgroundColor: '#FFFFFF',
+    width: '90%',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  editProfileHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEEEEE',
+  },
+  editProfileTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#1F2937',
+  },
+  editProfileCloseText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#9CA3AF',
+  },
+  inputFieldLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#374151',
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  profileTextInput: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#1F2937',
+  },
+  editProfileActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 18,
+  },
+  editProfileCancelBtn: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  editProfileCancelText: {
+    color: '#4B5563',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  editProfileSubmitBtn: {
+    flex: 1,
+    backgroundColor: '#DC2626',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editProfileSubmitText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 14,
   },
 });

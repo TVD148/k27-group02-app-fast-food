@@ -16,6 +16,7 @@ import {
   Platform,
   StatusBar
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import {
   fetchDashboardStats,
@@ -34,7 +35,9 @@ import {
   createAdminUser,
   updateAdminUserRole,
   fetchStoreLandmark,
-  updateAdminStoreLandmark
+  updateAdminStoreLandmark,
+  updateUserProfile,
+  logoutUser
 } from '../services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -130,6 +133,92 @@ export default function AdminScreen({ navigation }) {
   const [orders, setOrders] = useState([]);
   const [vouchers, setVouchers] = useState([]);
   const [users, setUsers] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    ho_ten: '',
+    so_dien_thoai: '',
+    email: '',
+    mat_khau: ''
+  });
+
+  const handleOpenEditProfile = () => {
+    setProfileForm({
+      ho_ten: currentUser?.ho_ten || '',
+      so_dien_thoai: currentUser?.so_dien_thoai || '',
+      email: currentUser?.email || '',
+      mat_khau: ''
+    });
+    setShowEditProfileModal(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!profileForm.ho_ten.trim()) {
+      Alert.alert('Lỗi', 'Vui lòng nhập họ và tên');
+      return;
+    }
+    if (!profileForm.so_dien_thoai.trim()) {
+      Alert.alert('Lỗi', 'Vui lòng nhập số điện thoại');
+      return;
+    }
+    if (profileForm.mat_khau && profileForm.mat_khau.length < 6) {
+      Alert.alert('Lỗi', 'Mật khẩu mới phải có ít nhất 6 ký tự');
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      const res = await updateUserProfile(
+        profileForm.ho_ten.trim(),
+        profileForm.so_dien_thoai.trim(),
+        profileForm.email.trim(),
+        profileForm.mat_khau ? profileForm.mat_khau.trim() : undefined
+      );
+      if (res && res.success) {
+        Alert.alert('Thành công', 'Thông tin quản trị viên đã được cập nhật thành công!');
+        const updated = {
+          ...currentUser,
+          ho_ten: profileForm.ho_ten.trim(),
+          so_dien_thoai: profileForm.so_dien_thoai.trim(),
+          email: profileForm.email.trim()
+        };
+        setCurrentUser(updated);
+        await AsyncStorage.setItem('user_info', JSON.stringify(updated));
+        setShowEditProfileModal(false);
+      } else {
+        Alert.alert('Lỗi', res.message || 'Không thể cập nhật thông tin');
+      }
+    } catch (err) {
+      Alert.alert('Lỗi', err.message || 'Có lỗi xảy ra khi cập nhật thông tin');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Đăng Xuất Admin',
+      'Bạn có chắc chắn muốn đăng xuất khỏi trang Quản trị viên?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Đăng Xuất',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await logoutUser();
+            } catch (e) {
+              console.log('Lỗi đăng xuất:', e.message);
+            }
+            await AsyncStorage.multiRemove(['user_token', 'user_info', 'user_role']);
+            navigation.replace('Login');
+          }
+        }
+      ]
+    );
+  };
+
   const [onlinePersonnel, setOnlinePersonnel] = useState({
     online_staff_count: 0,
     online_shipper_count: 0,
@@ -197,6 +286,9 @@ export default function AdminScreen({ navigation }) {
   const loadAllAdminData = async () => {
     setLoading(true);
     try {
+      const storedUser = await AsyncStorage.getItem('user_info');
+      if (storedUser) setCurrentUser(JSON.parse(storedUser));
+
       const [statsRes, foodsRes, ordersRes, vouchersRes, usersRes, landmarkRes, onlineRes] = await Promise.all([
         fetchDashboardStats().catch(() => null),
         fetchMenuItems().catch(() => null),
@@ -1295,13 +1387,41 @@ export default function AdminScreen({ navigation }) {
         )}
       </View>
 
-      {/* Nút thoát */}
-      <TouchableOpacity 
-        style={styles.logoutAdminBtn}
-        onPress={() => navigation.navigate('Profile')}
-      >
-        <Text style={styles.logoutAdminBtnText}>➔ Mở Hồ Sơ Cá Nhân & Đăng Xuất</Text>
-      </TouchableOpacity>
+      {/* KHỐI HỒ SƠ QUẢN TRỊ VIÊN & ĐĂNG XUẤT TRỰC TIẾP */}
+      <View style={styles.adminProfileCard}>
+        <View style={styles.adminProfileHeaderRow}>
+          <View style={styles.adminAvatarWrap}>
+            <Text style={styles.adminAvatarEmoji}>👑</Text>
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.adminProfileName}>{currentUser?.ho_ten || 'Quản Trị Viên Hệ Thống'}</Text>
+            <View style={styles.adminRoleBadge}>
+              <Text style={styles.adminRoleBadgeText}>👑 QUẢN TRỊ VIÊN CẤP CAO (ADMIN)</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.adminInfoRowsContainer}>
+          <Text style={styles.adminInfoRowText}>📞 SĐT đăng nhập: <Text style={{ fontWeight: '700', color: '#1F2937' }}>{currentUser?.so_dien_thoai || 'Chưa cập nhật'}</Text></Text>
+          <Text style={styles.adminInfoRowText}>📧 Email liên hệ: <Text style={{ fontWeight: '700', color: '#1F2937' }}>{currentUser?.email || 'Chưa cập nhật'}</Text></Text>
+        </View>
+
+        <View style={styles.adminActionButtonsRow}>
+          <TouchableOpacity 
+            style={styles.adminEditProfileBtn}
+            onPress={handleOpenEditProfile}
+          >
+            <Text style={styles.adminEditProfileBtnText}>✏️ Sửa Thông Tin</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.adminDirectLogoutBtn}
+            onPress={handleLogout}
+          >
+            <Text style={styles.adminDirectLogoutBtnText}>🚪 Đăng Xuất</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     </View>
   );
 
@@ -1742,6 +1862,87 @@ export default function AdminScreen({ navigation }) {
                   <ActivityIndicator color="#FFF" size="small" />
                 ) : (
                   <Text style={styles.modalSubmitText}>Lưu Thay Đổi</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ========================================================================= */}
+      {/* MODAL THAY ĐỔI THÔNG TIN QUẢN TRỊ VIÊN (ADMIN) */}
+      {/* ========================================================================= */}
+      <Modal
+        visible={showEditProfileModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEditProfileModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalHeading}>✏️ Thay Đổi Thông Tin Admin</Text>
+              <TouchableOpacity onPress={() => setShowEditProfileModal(false)}>
+                <Text style={styles.modalCloseIcon}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+              <Text style={styles.formFieldLabel}>Họ và tên *</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Nhập họ và tên..."
+                value={profileForm.ho_ten}
+                onChangeText={(t) => setProfileForm({ ...profileForm, ho_ten: t })}
+              />
+
+              <Text style={styles.formFieldLabel}>Số điện thoại *</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Nhập số điện thoại..."
+                keyboardType="phone-pad"
+                value={profileForm.so_dien_thoai}
+                onChangeText={(t) => setProfileForm({ ...profileForm, so_dien_thoai: t })}
+              />
+
+              <Text style={styles.formFieldLabel}>Email</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Nhập địa chỉ email..."
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={profileForm.email}
+                onChangeText={(t) => setProfileForm({ ...profileForm, email: t })}
+              />
+
+              <Text style={styles.formFieldLabel}>Mật khẩu mới (Để trống nếu không đổi)</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)..."
+                secureTextEntry
+                value={profileForm.mat_khau}
+                onChangeText={(t) => setProfileForm({ ...profileForm, mat_khau: t })}
+              />
+            </ScrollView>
+
+            <View style={styles.modalBtnGroup}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowEditProfileModal(false)}
+                disabled={savingProfile}
+              >
+                <Text style={styles.modalCancelText}>Hủy</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalSubmitBtn}
+                onPress={handleSaveProfile}
+                disabled={savingProfile}
+              >
+                {savingProfile ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.modalSubmitText}>💾 Lưu Thay Đổi</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -3044,5 +3245,97 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 16,
     fontWeight: '600',
+  },
+  adminProfileCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 18,
+    marginTop: 18,
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+    shadowColor: '#6A1B9A',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  adminProfileHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  adminAvatarWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#F3E8FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#9333EA',
+  },
+  adminAvatarEmoji: {
+    fontSize: 26,
+  },
+  adminProfileName: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1F2937',
+  },
+  adminRoleBadge: {
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  adminRoleBadgeText: {
+    color: '#7C3AED',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  adminInfoRowsContainer: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    gap: 6,
+  },
+  adminInfoRowText: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  adminActionButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  adminEditProfileBtn: {
+    flex: 1,
+    backgroundColor: '#6A1B9A',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adminEditProfileBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  adminDirectLogoutBtn: {
+    flex: 1,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adminDirectLogoutBtnText: {
+    color: '#DC2626',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

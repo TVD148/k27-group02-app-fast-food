@@ -65,26 +65,14 @@ export default function LoginScreen({ navigation }) {
         let targetScreen = 'Home';
 
         if (userRole === 2 || userRole === 5) {
-          roleName = 'Nhân viên Bếp';
-          targetScreen = 'StaffKitchen';
+          navigation.replace('StaffKitchen');
         } else if (userRole === 4) {
-          roleName = 'Tài xế Shipper';
-          targetScreen = 'Shipper';
+          navigation.replace('Shipper');
         } else if (userRole === 3) {
-          roleName = 'Quản trị viên (Admin)';
-          targetScreen = 'Admin';
+          navigation.replace('Admin');
+        } else {
+          navigation.replace('Home');
         }
-
-        Alert.alert(
-          'Đăng nhập thành công 🎉',
-          `Chào mừng ${response.data?.user?.ho_ten || ''} (${roleName}) trở lại với Fast Food!`,
-          [
-            { 
-              text: 'Bắt đầu ngay 🚀', 
-              onPress: () => navigation.replace(targetScreen)
-            }
-          ]
-        );
       } else {
         Alert.alert('Đăng nhập thất bại', response.message || 'Tài khoản hoặc mật khẩu không chính xác!');
       }

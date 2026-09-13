@@ -6,6 +6,26 @@ export default function SplashScreen({ navigation }) {
   useEffect(() => {
     const timer = setTimeout(async () => {
       try {
+        const token = await AsyncStorage.getItem('user_token');
+        const userInfoStr = await AsyncStorage.getItem('user_info');
+        if (token && userInfoStr) {
+          const user = JSON.parse(userInfoStr);
+          const userRole = parseInt(user.ma_vai_tro || 1, 10);
+          if (userRole === 4) {
+            navigation.replace('Shipper');
+            return;
+          } else if (userRole === 2 || userRole === 5) {
+            navigation.replace('StaffKitchen');
+            return;
+          } else if (userRole === 3) {
+            navigation.replace('Admin');
+            return;
+          } else {
+            navigation.replace('Home');
+            return;
+          }
+        }
+
         const hasSeenOnboarding = await AsyncStorage.getItem('has_seen_onboarding');
         if (hasSeenOnboarding === 'true') {
           navigation.replace('Home');

@@ -107,14 +107,14 @@ export const getUserProfile = async () => {
   }
 };
 
-// Cập nhật thông tin cá nhân (Họ tên, SĐT, Email)
-export const updateUserProfile = async (ho_ten, so_dien_thoai, email) => {
+// Cập nhật thông tin cá nhân (Họ tên, SĐT, Email, Mật khẩu mới)
+export const updateUserProfile = async (ho_ten, so_dien_thoai, email, mat_khau) => {
   try {
-    const response = await api.put('/auth/profile', {
-      ho_ten,
-      so_dien_thoai,
-      email
-    });
+    const payload = { ho_ten, so_dien_thoai, email };
+    if (mat_khau && mat_khau.trim()) {
+      payload.mat_khau = mat_khau.trim();
+    }
+    const response = await api.put('/auth/profile', payload);
     if (response.data && response.data.success && response.data.data) {
       await AsyncStorage.setItem('user_info', JSON.stringify(response.data.data));
     }
