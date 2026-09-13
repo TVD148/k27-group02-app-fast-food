@@ -467,12 +467,12 @@ export default function AddressScreen({ navigation, route }) {
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.distanceBadgeText, isOutOfRange && styles.distanceBadgeTextOutOfRange]}>
                         {distanceKm !== null
-                          ? `Cách quán: ${distanceKm} km • Tiền ship: ${shippingFee.toLocaleString('vi-VN')} đ (${distanceKm <= 1.0 ? 'Mặc định 5k dưới 1km' : '+500đ/100m'})`
-                          : 'Chưa có tọa độ GPS • Bấm ✏️ ghim vị trí để tính khoảng cách'}
+                          ? `Khoảng cách: ${distanceKm} km • Tiền ship: ${shippingFee.toLocaleString('vi-VN')} đ`
+                          : 'Chưa có vị trí bản đồ • Bấm ✏️ ghim vị trí để xem khoảng cách'}
                       </Text>
                       {isOutOfRange && (
                         <Text style={styles.outOfRangeSubText}>
-                          (Vượt quá bán kính phục vụ {maxRadius}km của quán)
+                          (Ngoài khu vực phục vụ của quán)
                         </Text>
                       )}
                     </View>

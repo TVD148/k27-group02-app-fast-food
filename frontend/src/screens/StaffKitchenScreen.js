@@ -114,10 +114,16 @@ export default function StaffKitchenScreen({ navigation }) {
 
   useEffect(() => {
     loadData();
+    const interval = setInterval(() => {
+      loadDataSilently();
+    }, 8000);
     const unsubscribe = navigation.addListener('focus', () => {
       loadData();
     });
-    return unsubscribe;
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
   }, [navigation]);
 
   const loadData = async () => {
@@ -144,9 +150,38 @@ export default function StaffKitchenScreen({ navigation }) {
     }
   };
 
+  const loadDataSilently = async () => {
+    try {
+      const [orderRes, menuRes] = await Promise.all([
+        fetchOrders().catch(() => null),
+        fetchMenuItems().catch(() => null)
+      ]);
+      if (orderRes && orderRes.success) {
+        setOrders(orderRes.data || []);
+      }
+      if (menuRes && menuRes.success) {
+        setMenuItems(menuRes.data || []);
+      }
+    } catch (e) {}
+  };
+
   const handleRefresh = () => {
     setRefreshing(true);
     loadData();
+  };
+
+  // Bật / tắt tồn kho món ăn nhanh từ màn hình bếp
+  const handleToggleItem = async (foodId, currentStatus, foodName) => {
+    try {
+      const res = await toggleItemStatus(foodId);
+      if (res && res.success) {
+        const newStatus = res.trang_thai_moi || res.data?.trang_thai || (currentStatus === 'con_hang' ? 'het_hang' : 'con_hang');
+        setMenuItems(prev => prev.map(f => f.ma_mon_an === foodId ? { ...f, trang_thai: newStatus } : f));
+        Alert.alert('Đã cập nhật', `${foodName}: ${newStatus === 'con_hang' ? 'Đã chuyển sang CÒN HÀNG ✅' : 'Đã chuyển sang HẾT HÀNG ❌'}`);
+      }
+    } catch (err) {
+      Alert.alert('Lỗi', err.message || 'Không thể đổi trạng thái món!');
+    }
   };
 
   // Phân loại đơn:
@@ -203,19 +238,6 @@ export default function StaffKitchenScreen({ navigation }) {
       Alert.alert('Lỗi', err.message || 'Không thể cập nhật trạng thái đơn!');
     } finally {
       setUpdatingOrderId(null);
-    }
-  };
-
-  // Bật/tắt món còn/hết hàng
-  const handleToggleItem = async (itemId, currentStatus, itemName) => {
-    try {
-      const res = await toggleItemStatus(itemId);
-      if (res.success) {
-        Alert.alert('Đã cập nhật', `${itemName}: ${res.trang_thai_moi === 'con_hang' ? 'Đã bật CÒN HÀNG ✅' : 'Đã bật TẠM HẾT ❌'}`);
-        loadData();
-      }
-    } catch (err) {
-      Alert.alert('Lỗi', err.message || 'Không thể đổi trạng thái món!');
     }
   };
 
@@ -402,9 +424,8 @@ export default function StaffKitchenScreen({ navigation }) {
       {/* Quản lý tình trạng nguyên liệu & món ăn nhanh */}
       <View style={styles.stockSectionCard}>
         <Text style={styles.stockSectionTitle}>📦 Bật / Tắt Tồn Kho Món Nhanh</Text>
-        <Text style={styles.stockSectionSubtitle}>Gạt công tắc để thông báo cho khách khi quán tạm hết nguyên liệu</Text>
 
-        {menuItems.slice(0, 8).map((item) => {
+        {menuItems.map((item) => {
           const isAvailable = item.trang_thai === 'con_hang';
           return (
             <View key={item.ma_mon_an} style={styles.stockRow}>
@@ -631,7 +652,7 @@ export default function StaffKitchenScreen({ navigation }) {
                             <View style={{ flex: 1 }}>
                               <Text style={styles.standardNoticeTitle}>Món làm bình thường (Không có tùy biến)</Text>
                               <Text style={styles.standardNoticeDesc}>
-                                Món này là "{dish.ten_mon}", đầu bếp làm theo định lượng và công thức chuẩn của quán.
+                                Món này là "{dish.ten_mon}", chế biến theo món chuẩn của quán.
                               </Text>
                             </View>
                           </View>

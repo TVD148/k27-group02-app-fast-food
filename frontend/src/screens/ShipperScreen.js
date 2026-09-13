@@ -176,8 +176,8 @@ export default function ShipperScreen({ navigation }) {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
-          'Yêu cầu bật GPS 📍',
-          'Bạn bắt buộc phải cấp quyền vị trí và bật GPS trên thiết bị để hệ thống kiểm tra bạn đang ở trong bán kính 3km so với quán trước khi nhận đơn!'
+          'Yêu cầu vị trí 📍',
+          'Vui lòng cấp quyền truy cập vị trí trên thiết bị trước khi bắt đầu nhận đơn!'
         );
         setIsOnline(false);
         return;
@@ -186,7 +186,9 @@ export default function ShipperScreen({ navigation }) {
       let lat = null;
       let lng = null;
       try {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        // Lấy nhanh vị trí gần nhất hoặc dùng balanced với timeout ngắn
+        const loc = await Location.getLastKnownPositionAsync({}).catch(() => null) 
+          || await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         if (loc && loc.coords) {
           lat = loc.coords.latitude;
           lng = loc.coords.longitude;
@@ -202,26 +204,26 @@ export default function ShipperScreen({ navigation }) {
             navigator.geolocation.getCurrentPosition(
               (pos) => { lat = pos.coords.latitude; lng = pos.coords.longitude; resolve(); },
               () => resolve(),
-              { timeout: 4000 }
+              { timeout: 3000 }
             );
           });
         }
       }
 
-      // Fallback môi trường test web nếu không có GPS phần cứng
+      // Fallback nếu không có GPS phần cứng
       if (!lat || !lng) {
-        lat = storeLandmark.vi_do + 0.003;
-        lng = storeLandmark.kinh_do + 0.003;
+        lat = storeLandmark.vi_do + 0.002;
+        lng = storeLandmark.kinh_do + 0.002;
       }
 
-      // Kiểm tra khoảng cách từ Shipper đến quán (Bán kính phục vụ 3km)
+      // Kiểm tra khoảng cách
       const distToStore = calculateHaversine(storeLandmark.vi_do, storeLandmark.kinh_do, lat, lng);
       const maxRadius = storeLandmark.ban_kinh_phuc_vu_km || 3.0;
 
       if (distToStore !== null && distToStore > maxRadius) {
         Alert.alert(
-          'Ngoài bán kính nhận đơn 🚫',
-          `Bạn đang ở cách quán ${distToStore} km (vượt quá bán kính ${maxRadius} km của quán).\nQuán chỉ cho phép các tài xế trong bán kính 3km quanh quán nhận đơn. Vui lòng di chuyển lại gần quán hơn để bắt đầu chạy!`
+          'Vị trí chưa phù hợp 🚫',
+          'Vị trí hiện tại của bạn cách quá xa quán. Vui lòng di chuyển lại gần khu vực quán để bắt đầu nhận đơn!'
         );
         setIsOnline(false);
         setCurrentLocation(null);
@@ -232,74 +234,57 @@ export default function ShipperScreen({ navigation }) {
       setIsOnline(true);
       Alert.alert(
         'ĐÃ BẮT ĐẦU CHẠY! 🟢',
-        `Định vị GPS thành công!\nKhoảng cách tới quán: ${distToStore || 0.5} km (Hợp lệ trong 3km).\nBạn đã sẵn sàng nhận các cuốc đơn mới quanh khu vực!`
+        'Bạn đã sẵn sàng nhận các cuốc đơn mới!'
       );
       loadShipperData();
     } catch (e) {
-      Alert.alert('Lỗi định vị', 'Không thể kích hoạt GPS: ' + (e.message || 'Vui lòng kiểm tra cài đặt vị trí'));
+      Alert.alert('Lỗi định vị', 'Không thể kích hoạt vị trí: ' + (e.message || 'Vui lòng kiểm tra cài đặt vị trí'));
       setIsOnline(false);
     }
   };
 
-  // Shipper bấm nhận đơn giao (Cạnh tranh: Ai nhanh tay bấm nhận trước sẽ được)
+  // Shipper bấm nhận đơn giao (Xử lý tức thì, không bị treo tải lâu)
   const handleAcceptOrder = async (orderId) => {
     if (!isOnline) {
       Alert.alert(
         'Chưa bắt đầu chạy ⚠️',
-        'Vui lòng nhấn nút "Bắt đầu chạy" phía trên để bật GPS và kiểm tra vị trí trong 3km trước khi nhận đơn!'
+        'Vui lòng nhấn nút "Bắt đầu chạy" phía trên trước khi nhận đơn!'
       );
       return;
     }
 
     setActingOrderId(orderId);
     try {
-      // 1. Lấy vị trí GPS thực tế
+      // 1. Dùng vị trí hiện tại đã có khi bắt đầu chạy, nếu chưa có lấy nhanh LastKnownPosition (không chờ quét vệ tinh)
       let shipperCoords = currentLocation;
-      try {
-        const { status } = await Location.getForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      if (!shipperCoords || !shipperCoords.lat) {
+        try {
+          const loc = await Location.getLastKnownPositionAsync({}).catch(() => null);
           if (loc && loc.coords) {
             shipperCoords = { lat: loc.coords.latitude, lng: loc.coords.longitude };
             setCurrentLocation(shipperCoords);
           }
-        }
-      } catch (locErr) {
-        console.log('GPS kiểm tra lại:', locErr.message);
+        } catch (locErr) {}
       }
 
-      if (!shipperCoords) {
-        shipperCoords = { lat: storeLandmark.vi_do + 0.003, lng: storeLandmark.kinh_do + 0.003 };
+      if (!shipperCoords || !shipperCoords.lat) {
+        shipperCoords = { lat: storeLandmark.vi_do + 0.002, lng: storeLandmark.kinh_do + 0.002 };
       }
 
-      // 2. Kiểm tra lại khoảng cách từ Shipper đến Quán
-      const distToStore = calculateHaversine(storeLandmark.vi_do, storeLandmark.kinh_do, shipperCoords.lat, shipperCoords.lng);
-      if (distToStore !== null && distToStore > (storeLandmark.ban_kinh_phuc_vu_km || 3.0)) {
-        Alert.alert(
-          'Ngoài phạm vi nhận đơn 🚫',
-          `Bạn đang ở cách quán ${distToStore} km (vượt quá bán kính 3km của quán). Shipper chỉ được nhận đơn khi trong phạm vi 3km từ quán!`
-        );
-        setIsOnline(false);
-        return;
-      }
-
-      // 3. Gửi yêu cầu nhận đơn lên Backend (Cơ chế Atomic Update)
+      // 2. Gửi yêu cầu nhận đơn lên Backend ngay lập tức
       const res = await acceptOrderDelivery(orderId, shipperCoords);
       if (res.success) {
-        const distKm = res.data?.khoang_cach_km || '1.0';
-        const fee = res.data?.phi_giao_hang ? res.data.phi_giao_hang.toLocaleString('vi-VN') : '5.000';
         Alert.alert(
           'Nhận đơn thành công! 🚀',
-          `Bạn đã nhận đơn #${orderId} thành công!\nKhoảng cách từ quán tới khách: ${distKm} km\nThù lao ship: +${fee} đ\nHãy di chuyển tới quán nhận đồ ăn và giao cho khách!`
+          `Bạn đã nhận đơn #${orderId} thành công!\nHãy di chuyển tới quán nhận đồ ăn và giao cho khách!`
         );
         setActiveBottomTab('delivering');
         loadShipperData();
       }
     } catch (err) {
-      // Báo lỗi khi tài xế khác nhanh tay hơn nhận mất
       Alert.alert(
-        'Đơn đã có người nhận',
-        err.message || 'Rất tiếc! Đơn hàng này vừa được tài xế khác nhanh tay nhận trước!'
+        'Thông báo',
+        err.message || 'Đơn hàng này đã có tài xế khác nhận trước!'
       );
       loadShipperData();
     } finally {
@@ -457,22 +442,18 @@ export default function ShipperScreen({ navigation }) {
           </View>
           <Text style={styles.offlineCardTitle}>BẠN ĐANG NGOẠI TUYẾN</Text>
           <Text style={styles.offlineCardDesc}>
-            Để nhận đơn giao, bạn cần bật định vị GPS và nhấn nút "Bắt đầu chạy" bên dưới. Hệ thống sẽ kiểm tra bạn đang ở trong bán kính 3km của quán ({storeLandmark?.dia_chi_quan || '504 Đại lộ Bình Dương'}) trước khi hiển thị đơn.
+            Vui lòng nhấn nút "Bắt đầu chạy" bên dưới để bật vị trí và sẵn sàng nhận đơn giao.
           </Text>
           <TouchableOpacity 
             style={styles.startRunBtn} 
             onPress={handleToggleOnlineStatus}
             activeOpacity={0.85}
           >
-            <Text style={styles.startRunBtnText}>🟢 BẬT GPS & BẮT ĐẦU CHẠY</Text>
+            <Text style={styles.startRunBtnText}>🟢 BẬT VỊ TRÍ & BẮT ĐẦU CHẠY</Text>
           </TouchableOpacity>
         </View>
       );
     }
-
-    const distToStoreCurrent = currentLocation 
-      ? calculateHaversine(storeLandmark.vi_do, storeLandmark.kinh_do, currentLocation.lat, currentLocation.lng)
-      : null;
 
     if (availableOrders.length === 0) {
       return (
@@ -482,10 +463,8 @@ export default function ShipperScreen({ navigation }) {
             <View style={styles.onlineInfoLeft}>
               <View style={styles.liveGreenDot} />
               <View>
-                <Text style={styles.onlineInfoTitle}>🟢 ĐÃ BẬT GPS • SẴN SÀNG NHẬN ĐƠN</Text>
-                <Text style={styles.onlineInfoSub}>
-                  {distToStoreCurrent !== null ? `Cách quán: ${distToStoreCurrent} km (Trong bán kính 3km)` : 'Vị trí hợp lệ quanh quán'}
-                </Text>
+                <Text style={styles.onlineInfoTitle}>🟢 ĐÃ BẬT VỊ TRÍ • SẴN SÀNG NHẬN ĐƠN</Text>
+                <Text style={styles.onlineInfoSub}>Vị trí sẵn sàng nhận đơn</Text>
               </View>
             </View>
             <TouchableOpacity style={styles.quickScanBtn} onPress={handleRefresh}>
@@ -499,7 +478,7 @@ export default function ShipperScreen({ navigation }) {
             </View>
             <Text style={styles.emptyTitle}>Đang chờ đơn hàng từ bếp...</Text>
             <Text style={styles.emptySubtitle}>
-              Hệ thống tự động quét đơn mới trong phạm vi 3km mỗi vài giây. Khi bếp nấu xong đơn sẽ xuất hiện ngay tại đây.
+              Khi bếp nấu xong, đơn hàng sẽ hiển thị tại đây.
             </Text>
             <TouchableOpacity style={styles.emptyRefreshBtn} onPress={handleRefresh}>
               <Text style={styles.emptyRefreshText}>🔄 Quét Đơn Mới</Text>
@@ -516,10 +495,8 @@ export default function ShipperScreen({ navigation }) {
           <View style={styles.onlineInfoLeft}>
             <View style={styles.liveGreenDot} />
             <View>
-              <Text style={styles.onlineInfoTitle}>🟢 ĐÃ BẬT GPS • SẴN SÀNG NHẬN ĐƠN</Text>
-              <Text style={styles.onlineInfoSub}>
-                {distToStoreCurrent !== null ? `Cách quán: ${distToStoreCurrent} km (Hợp lệ trong 3km)` : 'Vị trí hợp lệ quanh quán'}
-              </Text>
+              <Text style={styles.onlineInfoTitle}>🟢 ĐÃ BẬT VỊ TRÍ • SẴN SÀNG NHẬN ĐƠN</Text>
+              <Text style={styles.onlineInfoSub}>Vị trí sẵn sàng nhận đơn</Text>
             </View>
           </View>
           <TouchableOpacity style={styles.quickScanBtn} onPress={handleRefresh}>
@@ -583,11 +560,6 @@ export default function ShipperScreen({ navigation }) {
               <View style={styles.addressBox}>
                 <Text style={styles.addressStoreText}>🏬 Lấy tại: {storeLandmark?.dia_chi_quan || 'Cửa hàng FastFood (504 Đại Lộ Bình Dương)'}</Text>
                 <Text style={styles.addressCustomerText}>🎯 Giao tới: {order.dia_chi_giao || order.dia_chi_giao_hang || 'Địa chỉ khách hàng'}</Text>
-              </View>
-
-              {/* Huy hiệu cạnh tranh */}
-              <View style={styles.competitiveBadge}>
-                <Text style={styles.competitiveBadgeText}>⚡ Ai nhanh tay bấm nhận trước sẽ được đi giao đơn này!</Text>
               </View>
 
               {/* Nút CTA Nhận đơn ngay */}
@@ -974,28 +946,6 @@ export default function ShipperScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Thông tin hoạt động thực tế từ Database (Không dùng dữ liệu ảo) */}
-        <View style={styles.realProfileStatsCard}>
-          <Text style={styles.realProfileStatsTitle}>📊 HOẠT ĐỘNG THỰC TẾ</Text>
-          <View style={styles.realProfileStatRow}>
-            <Text style={styles.realProfileStatLabel}>Đơn đã giao thành công:</Text>
-            <Text style={styles.realProfileStatValue}>{stats.total_delivered || 0} đơn</Text>
-          </View>
-          <View style={styles.realProfileStatDivider} />
-          <View style={styles.realProfileStatRow}>
-            <Text style={styles.realProfileStatLabel}>Tổng tiền ship tích lũy:</Text>
-            <Text style={styles.realProfileStatValueGreen}>
-              {totalEarnings.toLocaleString('vi-VN')} đ
-            </Text>
-          </View>
-          <View style={styles.realProfileStatDivider} />
-          <View style={styles.realProfileStatRow}>
-            <Text style={styles.realProfileStatLabel}>Tiền COD đang giữ:</Text>
-            <Text style={styles.realProfileStatValueCod}>
-              {parseFloat(stats.total_cod || 0).toLocaleString('vi-VN')} đ
-            </Text>
-          </View>
-        </View>
 
         <TouchableOpacity 
           style={styles.viewDeliveredHistoryBtn}
@@ -1269,7 +1219,7 @@ export default function ShipperScreen({ navigation }) {
       <View style={styles.topHeader}>
         <View>
           <Text style={styles.shipperAppTitle}>🛵 FASTFOOD SHIPPER</Text>
-          <Text style={styles.shipperAppSubtitle}>Hệ Thống Giao Vận Công Nghệ</Text>
+          <Text style={styles.shipperAppSubtitle}>Giao Vận Nhanh</Text>
         </View>
 
         {/* Nút Chuyển Đổi Trực Tuyến & Bắt đầu chạy */}
@@ -1290,7 +1240,7 @@ export default function ShipperScreen({ navigation }) {
         {loading && !refreshing ? (
           <View style={styles.loaderWrap}>
             <ActivityIndicator size="large" color="#00897B" />
-            <Text style={styles.loaderText}>Đang quét đơn hàng mới...</Text>
+            <Text style={styles.loaderText}>Đang tải dữ liệu đơn hàng...</Text>
           </View>
         ) : (
           <ScrollView

@@ -724,21 +724,21 @@ const acceptDelivery = async (req, res) => {
     const shipperLat = vi_do || (coords && coords.lat) || null;
     const shipperLng = kinh_do || (coords && coords.lng) || null;
 
-    // Yêu cầu bắt buộc phải có GPS thực tế của Shipper
+    // Yêu cầu xác định vị trí của Shipper
     if (!shipperLat || !shipperLng) {
       return res.status(400).json({
         success: false,
-        message: 'Bạn phải bật GPS để xác định vị trí trước khi nhận đơn hàng!'
+        message: 'Vui lòng kích hoạt vị trí trước khi nhận đơn hàng!'
       });
     }
 
-    // Bắt buộc Shipper phải ở trong phạm vi 3km so với quán mới được nhận đơn
+    // Kiểm tra Shipper trong phạm vi nhận đơn của quán
     const distToStore = calculateHaversineDistance(store.vi_do, store.kinh_do, shipperLat, shipperLng);
     const maxRadius = parseFloat(store.ban_kinh_phuc_vu_km || 3.0);
     if (distToStore !== null && distToStore > maxRadius) {
       return res.status(400).json({
         success: false,
-        message: `Bạn đang ở cách quán ${distToStore} km (vượt quá bán kính ${maxRadius} km của quán). Bạn chỉ được nhận đơn khi trong phạm vi 3km từ quán!`
+        message: 'Bạn hiện đang ở ngoài khu vực nhận đơn của quán!'
       });
     }
 

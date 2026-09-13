@@ -103,6 +103,10 @@ export default function ProductDetailScreen({ route, navigation }) {
   };
 
   const handleAddToCart = async () => {
+    if (food?.trang_thai === 'het_hang') {
+      Alert.alert('Thông báo', `Món '${food.ten_mon}' hiện đang tạm hết hàng / ngưng bán!`);
+      return;
+    }
     try {
       const token = await AsyncStorage.getItem('user_token');
       if (!token) {
@@ -154,8 +158,22 @@ export default function ProductDetailScreen({ route, navigation }) {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* 1. Hình ảnh món ăn */}
         <View style={styles.imageSection}>
-          <Text style={styles.foodEmoji}>🍔</Text>
+          <Text style={[styles.foodEmoji, food.trang_thai === 'het_hang' && { opacity: 0.4 }]}>🍔</Text>
+          {food.trang_thai === 'het_hang' && (
+            <View style={styles.detailOutOfStockBadge}>
+              <Text style={styles.detailOutOfStockBadgeText}>NGƯNG BÁN</Text>
+            </View>
+          )}
         </View>
+
+        {food.trang_thai === 'het_hang' && (
+          <View style={styles.outOfStockAlertBanner}>
+            <Text style={styles.outOfStockAlertIcon}>⚠️</Text>
+            <Text style={styles.outOfStockAlertText}>
+              Món ăn này hiện đang TẠM HẾT HÀNG / NGƯNG BÁN. Quý khách vui lòng chọn món khác!
+            </Text>
+          </View>
+        )}
 
         <View style={styles.infoSection}>
           {/* 2. Tên và giá món ăn */}
@@ -219,10 +237,18 @@ export default function ProductDetailScreen({ route, navigation }) {
       <View style={styles.bottomBar}>
         <View style={styles.priceContainer}>
           <Text style={styles.priceLabel}>TỔNG CỘNG</Text>
-          <Text style={styles.priceValue}>{totalPrice.toLocaleString('vi-VN')} đ</Text>
+          <Text style={[styles.priceValue, food.trang_thai === 'het_hang' && { color: '#9CA3AF' }]}>
+            {totalPrice.toLocaleString('vi-VN')} đ
+          </Text>
         </View>
-        <TouchableOpacity style={styles.addToCartButton} onPress={handleAddToCart}>
-          <Text style={styles.addToCartButtonText}>Thêm vào giỏ 🛒</Text>
+        <TouchableOpacity 
+          style={[styles.addToCartButton, food.trang_thai === 'het_hang' && styles.addToCartButtonDisabled]} 
+          onPress={handleAddToCart}
+          disabled={food.trang_thai === 'het_hang'}
+        >
+          <Text style={[styles.addToCartButtonText, food.trang_thai === 'het_hang' && styles.addToCartButtonTextDisabled]}>
+            {food.trang_thai === 'het_hang' ? 'Tạm ngưng bán 🚫' : 'Thêm vào giỏ 🛒'}
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -385,10 +411,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 2,
   },
+  addToCartButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+  },
   addToCartButtonText: {
     color: '#FFF',
     fontSize: 15,
     fontWeight: 'bold',
+  },
+  addToCartButtonTextDisabled: {
+    color: '#F3F4F6',
+  },
+  detailOutOfStockBadge: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  detailOutOfStockBadgeText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  outOfStockAlertBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 10,
+  },
+  outOfStockAlertIcon: {
+    fontSize: 18,
+    marginRight: 8,
+  },
+  outOfStockAlertText: {
+    flex: 1,
+    color: '#B91C1C',
+    fontSize: 13,
+    fontWeight: '600',
   },
   nutritionBannerBtn: {
     backgroundColor: '#E0F2F1',

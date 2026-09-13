@@ -366,11 +366,30 @@ export default function AdminScreen({ navigation }) {
 
   useEffect(() => {
     loadAllAdminData();
+    const interval = setInterval(() => {
+      loadAdminDataSilently();
+    }, 10000);
     const unsubscribe = navigation.addListener('focus', () => {
       loadAllAdminData();
     });
-    return unsubscribe;
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
   }, [navigation]);
+
+  const loadAdminDataSilently = async () => {
+    try {
+      const [foodsRes, ordersRes, onlineRes] = await Promise.all([
+        fetchMenuItems().catch(() => null),
+        fetchOrders().catch(() => null),
+        fetchOnlinePersonnel().catch(() => null)
+      ]);
+      if (foodsRes && foodsRes.success) setFoods(foodsRes.data || []);
+      if (ordersRes && ordersRes.success) setOrders(ordersRes.data || []);
+      if (onlineRes && onlineRes.success && onlineRes.data) setOnlinePersonnel(onlineRes.data);
+    } catch (e) {}
+  };
 
   const loadAllAdminData = async () => {
     setLoading(true);
@@ -1289,7 +1308,7 @@ export default function AdminScreen({ navigation }) {
             <Text style={styles.sectionHeaderTitle}>🟢 NHÂN SỰ TRỰC TUYẾN THỜI GIAN THỰC</Text>
             <View style={styles.liveIndicatorBadge}>
               <View style={styles.pulseDot} />
-              <Text style={styles.liveIndicatorText}>Dữ liệu thật 100%</Text>
+              <Text style={styles.liveIndicatorText}>Trực tuyến</Text>
             </View>
           </View>
 
@@ -1356,9 +1375,6 @@ export default function AdminScreen({ navigation }) {
               <View style={styles.noOnlineBox}>
                 <Text style={styles.noOnlineEmoji}>💤</Text>
                 <Text style={styles.noOnlineText}>Chưa có nhân sự nào mở ứng dụng</Text>
-                <Text style={styles.noOnlineSub}>
-                  Hệ thống tự động ghi nhận nhân sự trực tuyến thật khi tài khoản Bếp hoặc Shipper mở app (không dùng dữ liệu ảo).
-                </Text>
               </View>
             )}
           </View>
@@ -3282,7 +3298,7 @@ export default function AdminScreen({ navigation }) {
                   id: 4,
                   icon: '🛵',
                   title: 'Tài Xế Shipper',
-                  desc: 'Bật trực tuyến GPS nhận đơn giao trong bán kính 3km của quán'
+                  desc: 'Nhận và giao đơn hàng cho khách'
                 }
               ].map(r => {
                 const isSelected = selectedNewRole === r.id;
@@ -3308,11 +3324,11 @@ export default function AdminScreen({ navigation }) {
               })}
             </View>
 
-            {/* CẢNH BÁO BẢO MẬT: KHÔNG THỂ CẤP QUYỀN QUẢN TRỊ VIÊN */}
+            {/* CẢNH BÁO PHÂN QUYỀN */}
             <View style={styles.securityWarningBox}>
               <Text style={styles.securityWarningIcon}>🔒</Text>
               <Text style={styles.securityWarningText}>
-                Quy định bảo mật hệ thống: Không thể cấp quyền Quản trị viên (Admin) cho các tài khoản khác.
+                Không thể cấp quyền Quản trị viên (Admin) cho các tài khoản khác.
               </Text>
             </View>
 

@@ -113,26 +113,38 @@ export default function SearchScreen({ navigation, route }) {
     setHasSearched(false);
   };
 
-  const renderFoodItem = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.foodCard}
-      activeOpacity={0.8}
-      onPress={() => navigation.navigate('ProductDetail', { itemId: item.ma_mon_an, food: item })}
-    >
-      <View style={styles.foodEmojiContainer}>
-        <Text style={styles.foodEmoji}>{item.hinh_anh || '🍔'}</Text>
-      </View>
-      <View style={styles.foodInfo}>
-        <Text style={styles.foodName} numberOfLines={1}>{item.ten_mon}</Text>
-        <Text style={styles.foodCategory}>{item.ten_danh_muc || 'Fast Food'}</Text>
-        <View style={styles.priceRow}>
-          <Text style={styles.foodPrice}>
-            {parseFloat(item.gia_ban).toLocaleString('vi-VN')} đ
-          </Text>
+  const renderFoodItem = ({ item }) => {
+    const isOutOfStock = item.trang_thai === 'het_hang';
+    return (
+      <TouchableOpacity 
+        style={[styles.foodCard, isOutOfStock && styles.foodCardOutOfStock]}
+        activeOpacity={0.8}
+        onPress={() => navigation.navigate('ProductDetail', { itemId: item.ma_mon_an, food: item })}
+      >
+        <View style={[styles.foodEmojiContainer, isOutOfStock && styles.foodEmojiOutOfStock]}>
+          <Text style={[styles.foodEmoji, isOutOfStock && { opacity: 0.4 }]}>{item.hinh_anh || '🍔'}</Text>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.foodInfo}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={[styles.foodName, isOutOfStock && { color: '#9CA3AF' }]} numberOfLines={1}>
+              {item.ten_mon}
+            </Text>
+            {isOutOfStock && (
+              <View style={styles.searchOutOfStockTag}>
+                <Text style={styles.searchOutOfStockText}>Ngưng bán</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.foodCategory}>{item.ten_danh_muc || 'Fast Food'}</Text>
+          <View style={styles.priceRow}>
+            <Text style={[styles.foodPrice, isOutOfStock && { color: '#9CA3AF' }]}>
+              {parseFloat(item.gia_ban).toLocaleString('vi-VN')} đ
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -428,8 +440,26 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  foodCardOutOfStock: {
+    backgroundColor: '#F8FAFC',
+    opacity: 0.85,
+  },
+  foodEmojiOutOfStock: {
+    backgroundColor: '#E2E8F0',
+  },
+  searchOutOfStockTag: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  searchOutOfStockText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   foodEmojiContainer: {
     width: 60,

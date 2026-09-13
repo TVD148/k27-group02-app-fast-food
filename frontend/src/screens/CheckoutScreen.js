@@ -296,8 +296,8 @@ export default function CheckoutScreen({ route, navigation }) {
 
     if (isOutOfRange) {
       Alert.alert(
-        'Vượt quá phạm vi 3km 🚫',
-        `Quán chỉ nhận giao hàng trong bán kính ${maxRadius}km từ quán (${storeLandmark?.dia_chi_quan || '504 Đại lộ Bình Dương'}). Vị trí hiện tại của bạn cách quán ${distanceKm} km. Vui lòng chọn địa chỉ khác trong phạm vi 3km!`,
+        'Ngoài khu vực giao hàng 🚫',
+        'Địa chỉ nhận hàng này hiện nằm ngoài khu vực phục vụ của quán. Vui lòng chọn địa chỉ khác!',
         [
           { text: 'Chọn lại địa chỉ ➔', onPress: () => navigation.navigate('Address') },
           { text: 'Đóng', style: 'cancel' }
@@ -528,18 +528,18 @@ export default function CheckoutScreen({ route, navigation }) {
                   {defaultAddress.address || address}
                 </Text>
 
-                {/* Khoảng cách tới mốc quán & Bán kính 3km */}
+                {/* Khoảng cách & Phí ship */}
                 {distanceKm !== null ? (
                   <View style={[styles.distanceBadge, isOutOfRange && styles.distanceBadgeOutOfRange]}>
                     <Text style={[styles.distanceBadgeText, isOutOfRange && styles.distanceBadgeTextOutOfRange]}>
                       {isOutOfRange 
-                        ? `🚫 Cách quán ${distanceKm} km (Vượt quá bán kính phục vụ ${maxRadius}km)` 
-                        : `📍 Cách quán ${distanceKm} km • Tiền ship: ${shippingFee.toLocaleString('vi-VN')} đ (${distanceKm <= 1.0 ? 'Mặc định 5k dưới 1km' : '+500đ/100m'})`}
+                        ? '🚫 Ngoài khu vực giao hàng của quán' 
+                        : `📍 Khoảng cách: ${distanceKm} km • Phí ship: ${shippingFee.toLocaleString('vi-VN')} đ`}
                     </Text>
                   </View>
                 ) : (
                   <View style={styles.autoDefaultBadge}>
-                    <Text style={styles.autoDefaultBadgeText}>✓ Đã tự động chọn địa chỉ mặc định, không cần nhập lại</Text>
+                    <Text style={styles.autoDefaultBadgeText}>✓ Địa chỉ nhận hàng</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -609,11 +609,11 @@ export default function CheckoutScreen({ route, navigation }) {
           </View>
         </ScrollView>
 
-        {/* CẢNH BÁO NGOÀI PHẠM VI 3KM NẾU CÓ */}
+        {/* CẢNH BÁO NGOÀI PHẠM VI NẾU CÓ */}
         {isOutOfRange && (
           <View style={styles.outOfRangeBanner}>
             <Text style={styles.outOfRangeBannerText}>
-              ⚠️ Địa chỉ cách quán {distanceKm}km (vượt quá 3km). Quán chỉ nhận giao hàng trong bán kính 3km!
+              ⚠️ Địa chỉ này hiện nằm ngoài khu vực giao hàng của quán!
             </Text>
           </View>
         )}
@@ -630,7 +630,7 @@ export default function CheckoutScreen({ route, navigation }) {
             ) : (
               <Text style={styles.submitBtnText}>
                 {isOutOfRange
-                  ? `Ngoài bán kính giao hàng (${distanceKm} km) 🚫`
+                  ? 'Ngoài khu vực giao hàng 🚫'
                   : `Xác nhận Đặt hàng (${grandTotal.toLocaleString('vi-VN')} đ) 🚀`}
               </Text>
             )}

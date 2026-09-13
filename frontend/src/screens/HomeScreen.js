@@ -36,12 +36,19 @@ export default function HomeScreen({ navigation }) {
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       loadUserData();
+      loadFoodsData(selectedCategory, searchQuery, true);
     });
     loadUserData();
     loadCategoriesData();
     loadFoodsData('', '');
-    return unsubscribe;
-  }, [navigation]);
+    const interval = setInterval(() => {
+      loadFoodsData(selectedCategory, searchQuery, true);
+    }, 12000);
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
+  }, [navigation, selectedCategory, searchQuery]);
 
   const loadUserData = async () => {
     try {
@@ -108,8 +115,8 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const loadFoodsData = async (catId, search) => {
-    setLoadingFoods(true);
+  const loadFoodsData = async (catId, search, silent = false) => {
+    if (!silent) setLoadingFoods(true);
     try {
       const response = await fetchItems(catId, search);
       if (response && response.success && Array.isArray(response.data)) {
@@ -119,9 +126,9 @@ export default function HomeScreen({ navigation }) {
       }
     } catch (error) {
       console.log('Lỗi tải món ăn từ Database:', error.message);
-      setFoods([]);
+      if (!silent) setFoods([]);
     } finally {
-      setLoadingFoods(false);
+      if (!silent) setLoadingFoods(false);
     }
   };
 
@@ -182,32 +189,52 @@ export default function HomeScreen({ navigation }) {
     return '🍟';
   };
 
-  const renderFoodItem = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.foodCard}
-      activeOpacity={0.85}
-      onPress={() => navigation.navigate('ProductDetail', { itemId: item.ma_mon_an })}
-    >
-      <View style={styles.foodImageContainer}>
-        <Text style={styles.foodEmoji}>🍔</Text>
-      </View>
-      
-      <View style={styles.foodInfo}>
-        <Text style={styles.foodName} numberOfLines={1}>{item.ten_mon}</Text>
-        <Text style={styles.categoryBadge}>{item.ten_danh_muc || 'Fast Food'}</Text>
-        
-        <View style={styles.foodCardFooter}>
-          <Text style={styles.foodPrice}>{parseInt(item.gia_ban).toLocaleString('vi-VN')} đ</Text>
-          <TouchableOpacity 
-            style={styles.addPlusBtn}
-            onPress={() => navigation.navigate('ProductDetail', { itemId: item.ma_mon_an })}
-          >
-            <Text style={styles.addPlusText}>+</Text>
-          </TouchableOpacity>
+  const renderFoodItem = ({ item }) => {
+    const isOutOfStock = item.trang_thai === 'het_hang';
+    return (
+      <TouchableOpacity 
+        style={[styles.foodCard, isOutOfStock && styles.foodCardOutOfStock]}
+        activeOpacity={0.85}
+        onPress={() => navigation.navigate('ProductDetail', { itemId: item.ma_mon_an })}
+      >
+        <View style={[styles.foodImageContainer, isOutOfStock && styles.foodImageOutOfStock]}>
+          <Text style={[styles.foodEmoji, isOutOfStock && { opacity: 0.4 }]}>🍔</Text>
+          {isOutOfStock && (
+            <View style={styles.outOfStockBadge}>
+              <Text style={styles.outOfStockText}>Ngưng bán</Text>
+            </View>
+          )}
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+        
+        <View style={styles.foodInfo}>
+          <Text style={[styles.foodName, isOutOfStock && styles.foodTextOutOfStock]} numberOfLines={1}>
+            {item.ten_mon}
+          </Text>
+          <Text style={styles.categoryBadge}>{item.ten_danh_muc || 'Fast Food'}</Text>
+          
+          <View style={styles.foodCardFooter}>
+            <Text style={[styles.foodPrice, isOutOfStock && styles.foodPriceOutOfStock]}>
+              {parseInt(item.gia_ban).toLocaleString('vi-VN')} đ
+            </Text>
+            <TouchableOpacity 
+              style={[styles.addPlusBtn, isOutOfStock && styles.addPlusBtnOutOfStock]}
+              onPress={() => {
+                if (isOutOfStock) {
+                  Alert.alert('Thông báo', `Món '${item.ten_mon}' hiện đang tạm hết hàng / ngưng bán!`);
+                  return;
+                }
+                navigation.navigate('ProductDetail', { itemId: item.ma_mon_an });
+              }}
+            >
+              <Text style={[styles.addPlusText, isOutOfStock && styles.addPlusTextOutOfStock]}>
+                {isOutOfStock ? 'Hết' : '+'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -650,7 +677,44 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 18,
     fontWeight: 'bold',
-    lineHeight: 20,
+    marginTop: -2,
+  },
+  foodCardOutOfStock: {
+    opacity: 0.85,
+    backgroundColor: '#F9FAFB',
+  },
+  foodImageOutOfStock: {
+    backgroundColor: '#F3F4F6',
+  },
+  outOfStockBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  outOfStockText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  foodTextOutOfStock: {
+    color: '#9CA3AF',
+  },
+  foodPriceOutOfStock: {
+    color: '#9CA3AF',
+  },
+  addPlusBtnOutOfStock: {
+    backgroundColor: '#E5E7EB',
+    width: 36,
+  },
+  addPlusTextOutOfStock: {
+    color: '#6B7280',
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginTop: 0,
   },
   loader: {
     marginVertical: 20,
