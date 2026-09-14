@@ -1686,8 +1686,36 @@ export default function AdminScreen({ navigation }) {
   // TAB 1: TỔNG QUAN (DASHBOARD) - LINE CHART & NHÂN SỰ ONLINE
   // =========================================================================
   const renderDashboardTab = () => {
-    const totalRevenue = stats?.total_revenue || stats?.overview?.tong_doanh_thu || 0;
-    const totalOrders = stats?.total_orders || stats?.overview?.tong_don_hang || 0;
+    const isAllTime = !selectedChartDate || selectedChartDate === 'all';
+
+    const getFormattedDateLabel = (d) => {
+      if (!d || d === 'all') return 'Toàn thời gian';
+      try {
+        const parts = d.split('-');
+        if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      } catch (e) {}
+      return d;
+    };
+
+    const totalRevenue = isAllTime
+      ? (stats?.all_time_revenue ?? stats?.total_revenue ?? 0)
+      : (stats?.selected_date_revenue ?? stats?.total_revenue ?? 0);
+
+    const totalOrders = isAllTime
+      ? (stats?.all_time_orders ?? stats?.delivered_orders ?? stats?.total_orders ?? 0)
+      : (stats?.selected_date_orders ?? 0);
+
+    const revenueTitle = isAllTime ? 'Doanh Thu' : 'Doanh Thu Trong Ngày';
+    const ordersTitle = isAllTime ? 'Tổng Số Đơn' : 'Số Đơn Trong Ngày';
+
+    const revenueSubLabel = isAllTime
+      ? 'Đơn đã giao thành công'
+      : `Đơn đã giao (${getFormattedDateLabel(selectedChartDate)})`;
+
+    const ordersSubLabel = isAllTime
+      ? 'Đơn hoàn thành trên hệ thống'
+      : `Đơn hoàn thành (${getFormattedDateLabel(selectedChartDate)})`;
+
     const onlineStaffCount = onlinePersonnel?.online_staff_count ?? stats?.online_staff_count ?? 0;
     const onlineShipperCount = onlinePersonnel?.online_shipper_count ?? stats?.online_shipper_count ?? 0;
     const allOnlineList = onlinePersonnel?.all_online || [];
@@ -1697,17 +1725,31 @@ export default function AdminScreen({ navigation }) {
         {/* Hàng Chỉ Số Thống Kê Nhanh */}
         <View style={styles.statsRow}>
           <View style={[styles.kpiCard, { backgroundColor: '#EDE7F6', borderColor: '#D1C4E9' }]}>
-            <Text style={styles.kpiLabel}>Doanh Thu</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.kpiLabel}>{revenueTitle}</Text>
+              {!isAllTime && (
+                <View style={{ backgroundColor: '#D1C4E9', paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 4 }}>
+                  <Text style={{ fontSize: 9, color: '#4A148C', fontWeight: '700' }}>Theo ngày</Text>
+                </View>
+              )}
+            </View>
             <Text style={[styles.kpiValue, { color: '#6A1B9A' }]}>
               {parseFloat(totalRevenue).toLocaleString('vi-VN')} đ
             </Text>
-            <Text style={styles.kpiSub}>Đơn đã giao thành công</Text>
+            <Text style={styles.kpiSub}>{revenueSubLabel}</Text>
           </View>
 
           <View style={[styles.kpiCard, { backgroundColor: '#E0F2F1', borderColor: '#B2DFDB' }]}>
-            <Text style={styles.kpiLabel}>Tổng Số Đơn</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.kpiLabel}>{ordersTitle}</Text>
+              {!isAllTime && (
+                <View style={{ backgroundColor: '#B2DFDB', paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 4 }}>
+                  <Text style={{ fontSize: 9, color: '#004D40', fontWeight: '700' }}>Theo ngày</Text>
+                </View>
+              )}
+            </View>
             <Text style={[styles.kpiValue, { color: '#00897B' }]}>{totalOrders} đơn</Text>
-            <Text style={styles.kpiSub}>Trên toàn hệ thống</Text>
+            <Text style={styles.kpiSub}>{ordersSubLabel}</Text>
           </View>
         </View>
 

@@ -318,6 +318,7 @@ const createOrder = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Lỗi hệ thống khi tạo đơn hàng (createOrder):', error);
     return res.status(500).json({
       success: false,
       message: 'Lỗi hệ thống khi tạo đơn hàng.',

@@ -126,8 +126,8 @@ const confirmPayment = async (req, res) => {
 
     // 2.4 Ghi log lịch sử trạng thái đơn
     await db.query(
-      `INSERT INTO lich_su_trang_thai_don (ma_don_hang, trang_thai, ghi_chu) 
-       VALUES (?, 'cho_xac_nhan', ?)`,
+      `INSERT INTO lich_su_trang_thai_don (ma_don_hang, trang_thai_cu, trang_thai_moi, ghi_chu, nguoi_thuc_hien) 
+       VALUES (?, 'cho_xac_nhan', 'cho_xac_nhan', ?, 'Cổng thanh toán')`,
       [ma_don_hang, `Đã nhận thanh toán trực tuyến qua ${payMethod.toUpperCase()} (Mã GD: ${txnCode})`]
     );
 

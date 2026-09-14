@@ -11,8 +11,10 @@ Thư mục này chứa toàn bộ tài nguyên thiết kế cơ sở dữ liệu
 *   **Người phụ trách:** Đỗ Thị Mai Hương
 *   **Nhánh Git:** `database`
 
-## Cách khôi phục cơ sở dữ liệu
-1. Đăng nhập vào MySQL Server của bạn (MySQL Workbench hoặc CLI).
-2. Tạo database mới: `CREATE DATABASE fastfood_db;`
-3. Chạy file `db_schema.sql` để tạo cấu trúc bảng.
-4. Chạy file `seed_data.sql` để nạp dữ liệu mẫu.
+## Thứ tự nạp file SQL khi tạo Database mới:
+1. `app_fast_food.sql` (Cấu trúc bảng Sprint 1)
+2. `app_fast_food_data.sql` (Dữ liệu mẫu Sprint 1)
+3. `sprint2_db_update.sql` (Cấu trúc giỏ hàng, đơn hàng Sprint 2)
+4. `sprint2_data_update.sql` (Dữ liệu mẫu Sprint 2)
+5. `sprint3_db_update.sql` (Cấu trúc định vị GPS, voucher, dinh dưỡng, thanh toán Sprint 3)
+6. `sprint3_data_update.sql` (Dữ liệu mẫu Sprint 3)

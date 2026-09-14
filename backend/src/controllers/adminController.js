@@ -833,12 +833,11 @@ const getOnlinePersonnel = async (req, res) => {
 
 const getDashboardStats = async (req, res) => {
   try {
-    // Tổng doanh thu từ đơn đã giao thành công
+    // Tổng doanh thu từ đơn đã giao thành công (toàn thời gian)
     const [revenue] = await db.query('SELECT COALESCE(SUM(tong_thanh_toan), 0) as total_revenue FROM don_hang WHERE trang_thai_don_hang = "da_giao"');
-    // Tổng số đơn theo trạng thái
-    const [ordersCount] = await db.query('SELECT COUNT(*) as total_orders FROM don_hang');
-    const [ordersPending] = await db.query('SELECT COUNT(*) as pending_orders FROM don_hang WHERE trang_thai_don_hang IN ("cho_xac_nhan", "dang_che_bien")');
+    // Tổng số đơn đã hoàn thành (giao thành công) - chỉ đơn hoàn thành mới được tính là 1 đơn
     const [ordersDelivered] = await db.query('SELECT COUNT(*) as delivered_orders FROM don_hang WHERE trang_thai_don_hang = "da_giao"');
+    const [ordersPending] = await db.query('SELECT COUNT(*) as pending_orders FROM don_hang WHERE trang_thai_don_hang IN ("cho_xac_nhan", "dang_che_bien")');
     // Tổng số món ăn
     const [foodsCount] = await db.query('SELECT COUNT(*) as total_foods FROM mon_an');
     
@@ -877,6 +876,7 @@ const getDashboardStats = async (req, res) => {
 
     // Xác định ngày được chọn từ request (mặc định 'all' hoặc YYYY-MM-DD)
     const selectedDate = req.query.date ? String(req.query.date).trim() : 'all';
+    const isAllTime = !selectedDate || selectedDate === 'all';
 
     // Thống kê doanh thu theo các khung giờ (08h - 22h) theo ngày được chọn
     let hourlyQuery = `
@@ -888,7 +888,7 @@ const getDashboardStats = async (req, res) => {
       WHERE trang_thai_don_hang = 'da_giao'
     `;
     const hourlyParams = [];
-    if (selectedDate && selectedDate !== 'all') {
+    if (!isAllTime) {
       hourlyQuery += ' AND DATE(ngay_dat) = ?';
       hourlyParams.push(selectedDate);
     }
@@ -923,16 +923,27 @@ const getDashboardStats = async (req, res) => {
       };
     });
 
+    // Doanh thu và số đơn của ngày được chọn
     const selectedDateRevenue = hourlyRows.reduce((sum, r) => sum + parseFloat(r.doanh_thu || 0), 0);
     const selectedDateOrders = hourlyRows.reduce((sum, r) => sum + parseInt(r.so_don || 0), 0);
+
+    const allTimeRevenue = parseFloat(revenue[0].total_revenue || 0);
+    const allTimeDeliveredOrders = parseInt(ordersDelivered[0].delivered_orders || 0);
+
+    // Khi chọn ngày cụ thể, total_revenue & total_orders chỉ trả về đúng ngày đó.
+    // Khi chọn 'all' (Toàn thời gian), mới hiển thị toàn bộ tích lũy.
+    const displayRevenue = isAllTime ? allTimeRevenue : selectedDateRevenue;
+    const displayOrders = isAllTime ? allTimeDeliveredOrders : selectedDateOrders;
 
     return res.status(200).json({
       success: true,
       data: {
-        total_revenue: parseFloat(revenue[0].total_revenue || 0),
-        total_orders: ordersCount[0].total_orders || 0,
+        total_revenue: displayRevenue,
+        total_orders: displayOrders,
+        all_time_revenue: allTimeRevenue,
+        all_time_orders: allTimeDeliveredOrders,
         pending_orders: ordersPending[0].pending_orders || 0,
-        delivered_orders: ordersDelivered[0].delivered_orders || 0,
+        delivered_orders: allTimeDeliveredOrders,
         total_foods: foodsCount[0].total_foods || 0,
         // Dữ liệu biểu đồ theo giờ thực tế
         hourly_revenue: hourlyData,

@@ -225,7 +225,7 @@ export default function StaffKitchenScreen({ navigation }) {
         } else if (newStatus === 'san_sang_giao') {
           successMsg = 'Đã nấu xong! Đơn hàng đã sẵn sàng để Shipper nhận giao 🛵';
         } else if (newStatus === 'da_huy') {
-          successMsg = 'Đã hủy đơn hàng theo yêu cầu của khách! Món ăn đã được hoàn lại kho. 🛑';
+          successMsg = 'Đã hủy đơn hàng thành công! 🛑';
         } else if (res.message) {
           successMsg = res.message;
         }
@@ -245,12 +245,12 @@ export default function StaffKitchenScreen({ navigation }) {
   // Hủy đơn hàng khi khách gọi tới (áp dụng cho đơn đang nấu)
   const handleCancelOrderInKitchen = (orderId) => {
     Alert.alert(
-      'Xác nhận hủy đơn hàng 🛑',
-      `Khách hàng gọi điện yêu cầu hủy đơn #${orderId}?\n\nThao tác này sẽ hủy chế biến, ghi nhận lịch sử và hoàn lại số lượng tồn kho cho các món ăn trong đơn.`,
+      'Hủy đơn hàng 🛑',
+      'Bạn có chắc chắn không?',
       [
         { text: 'Quay lại', style: 'cancel' },
         {
-          text: 'Xác Nhận Hủy Đơn',
+          text: 'Xác Nhận Hủy',
           style: 'destructive',
           onPress: () => handleUpdateStatus(orderId, 'da_huy', 'Khách gọi yêu cầu hủy đơn khi bếp đang nấu')
         }

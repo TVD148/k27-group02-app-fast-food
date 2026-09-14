@@ -10,11 +10,11 @@ USE `fastfood_db`;
 -- Tạm thời tắt kiểm tra khóa ngoại để thực hiện dọn dẹp và khởi tạo an toàn
 SET FOREIGN_KEY_CHECKS = 0;
 
--- Dọn dẹp các bảng thuộc Sprint 3 nếu đã tồn tại từ trước
+-- Dọn dẹp các bảng và view thuộc Sprint 3 nếu đã tồn tại từ trước
+DROP VIEW IF EXISTS `nhat_ky_thanh_toan`;
+DROP VIEW IF EXISTS `cong_thuc_mon_an`;
 DROP TABLE IF EXISTS `thanh_toan`;
-DROP TABLE IF EXISTS `nhat_ky_thanh_toan`;
 DROP TABLE IF EXISTS `mon_an_nguyen_lieu`;
-DROP TABLE IF EXISTS `cong_thuc_mon_an`;
 DROP TABLE IF EXISTS `nguyen_lieu`;
 DROP TABLE IF EXISTS `ma_giam_gia`;
 
@@ -56,14 +56,6 @@ CREATE TABLE `mon_an_nguyen_lieu` (
   CONSTRAINT `fk_manl_nguyenlieu` FOREIGN KEY (`ma_nguyen_lieu`) REFERENCES `nguyen_lieu` (`ma_nguyen_lieu`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Bảng trung gian định lượng nguyên liệu cho từng món ăn';
 
--- Alias view cho cong_thuc_mon_an nếu tương thích phiên bản cũ
-CREATE OR REPLACE VIEW `cong_thuc_mon_an` AS 
-SELECT 
-  `ma_mon_an_nguyen_lieu` AS `ma_cong_thuc`,
-  `ma_mon_an`,
-  `ma_nguyen_lieu`,
-  `so_luong_mac_dinh` AS `dinh_luong_mac_dinh`
-FROM `mon_an_nguyen_lieu`;
 
 -- ============================================================================
 -- 3. BẢNG: ma_giam_gia (Quản lý mã khuyến mãi & Voucher giảm giá)
@@ -109,17 +101,6 @@ CREATE TABLE `thanh_toan` (
   CONSTRAINT `fk_thanhtoan_donhang` FOREIGN KEY (`ma_don_hang`) REFERENCES `don_hang` (`ma_don_hang`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Bảng nhật ký giao dịch và cổng thanh toán trực tuyến';
 
--- Alias view cho nhat_ky_thanh_toan nếu tương thích phiên bản cũ
-CREATE OR REPLACE VIEW `nhat_ky_thanh_toan` AS
-SELECT 
-  `ma_thanh_toan` AS `ma_giao_dich`,
-  `ma_don_hang`,
-  `phuong_thuc` AS `cong_thanh_toan`,
-  `ma_giao_dich_cong`,
-  `so_tien`,
-  `trang_thai_thanh_toan` AS `trang_thai_giao_dich`,
-  `ngay_tao` AS `thoi_gian_tao`
-FROM `thanh_toan`;
 
 -- ============================================================================
 -- 5. CẬP NHẬT BẢNG CỦ: BỔ SUNG VOUCHER & DINH DƯỠNG TÙY BIẾN
@@ -130,6 +111,13 @@ SET @sql_voucher = IF(@exist_voucher = 0, 'ALTER TABLE `don_hang` ADD COLUMN `ma
 PREPARE stmt1 FROM @sql_voucher;
 EXECUTE stmt1;
 DEALLOCATE PREPARE stmt1;
+
+-- 5.1b Thêm tọa độ GPS và khoảng cách giao hàng vào bảng don_hang
+SET @exist_gps_order = (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'don_hang' AND column_name = 'vi_do_giao');
+SET @sql_gps_order = IF(@exist_gps_order = 0, 'ALTER TABLE `don_hang` ADD COLUMN `vi_do_giao` DECIMAL(10, 8) DEFAULT NULL COMMENT "Vĩ độ GPS nơi giao hàng" AFTER `trang_thai_don_hang`, ADD COLUMN `kinh_do_giao` DECIMAL(11, 8) DEFAULT NULL COMMENT "Kinh độ GPS nơi giao hàng" AFTER `vi_do_giao`, ADD COLUMN `khoang_cach_km` DECIMAL(6, 2) DEFAULT NULL COMMENT "Khoảng cách giao hàng tính từ mốc quán (km)" AFTER `kinh_do_giao`;', 'SELECT 1;');
+PREPARE stmt1b FROM @sql_gps_order;
+EXECUTE stmt1b;
+DEALLOCATE PREPARE stmt1b;
 
 -- 5.2 Thêm cột dinh_duong_tuy_bien (JSON) vào bảng chi_tiet_gio_hang
 SET @exist_ctgh = (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'chi_tiet_gio_hang' AND column_name = 'dinh_duong_tuy_bien');
@@ -145,9 +133,63 @@ PREPARE stmt3 FROM @sql_ctdh;
 EXECUTE stmt3;
 DEALLOCATE PREPARE stmt3;
 
--- 5.4 Thêm cột so_dien_thoai_quan vào bảng cau_hinh_quan
+-- 5.4 BẢNG: cau_hinh_quan (Quản lý mốc tọa độ GPS của quán & Hotline liên hệ)
+CREATE TABLE IF NOT EXISTS `cau_hinh_quan` (
+  `id` INT(11) NOT NULL DEFAULT 1,
+  `ten_quan` VARCHAR(255) NOT NULL DEFAULT 'Cửa hàng FastFood BDU',
+  `dia_chi_quan` TEXT NOT NULL,
+  `so_dien_thoai_quan` VARCHAR(20) DEFAULT '0901234567' COMMENT 'Hotline liên hệ quán',
+  `vi_do` DECIMAL(10, 8) NOT NULL DEFAULT 10.980500 COMMENT 'Vĩ độ GPS mốc quán',
+  `kinh_do` DECIMAL(11, 8) NOT NULL DEFAULT 106.674500 COMMENT 'Kinh độ GPS mốc quán',
+  `ban_kinh_phuc_vu_km` DECIMAL(5, 2) NOT NULL DEFAULT 3.00 COMMENT 'Bán kính giao hàng tối đa (km)',
+  `gia_ship_moi_km` DECIMAL(10, 0) NOT NULL DEFAULT 5000 COMMENT 'Phụ thu vận chuyển mỗi km (VNĐ)',
+  `ngay_cap_nhat` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Bảng cấu hình tọa độ GPS mốc quán và bán kính phục vụ';
+
+-- Thêm cột so_dien_thoai_quan nếu bảng cau_hinh_quan đã tồn tại từ trước mà chưa có cột này
 SET @exist_chq_phone = (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'cau_hinh_quan' AND column_name = 'so_dien_thoai_quan');
 SET @sql_chq_phone = IF(@exist_chq_phone = 0, 'ALTER TABLE `cau_hinh_quan` ADD COLUMN `so_dien_thoai_quan` VARCHAR(20) DEFAULT "0901234567" COMMENT "Hotline liên hệ quán";', 'SELECT 1;');
 PREPARE stmt4 FROM @sql_chq_phone;
 EXECUTE stmt4;
 DEALLOCATE PREPARE stmt4;
+
+-- Khởi tạo bản ghi mốc quán mặc định tại Đại học Bình Dương (BDU) nếu chưa có
+INSERT IGNORE INTO `cau_hinh_quan` (`id`, `ten_quan`, `dia_chi_quan`, `so_dien_thoai_quan`, `vi_do`, `kinh_do`, `ban_kinh_phuc_vu_km`, `gia_ship_moi_km`)
+VALUES (1, 'Cửa hàng FastFood BDU', '504 Đại lộ Bình Dương, Phường Hiệp Thành, TP. Thủ Dầu Một, Bình Dương', '0901234567', 10.980500, 106.674500, 3.00, 5000);
+
+-- 5.5 BẢNG: dia_chi_nguoi_dung (Sổ địa chỉ người dùng kèm tọa độ GPS)
+CREATE TABLE IF NOT EXISTS `dia_chi_nguoi_dung` (
+  `ma_dia_chi` INT(11) NOT NULL AUTO_INCREMENT,
+  `ma_nguoi_dung` INT(11) NOT NULL,
+  `ten_nguoi_nhan` VARCHAR(100) NOT NULL,
+  `so_dien_thoai` VARCHAR(20) NOT NULL,
+  `nhan_dia_chi` VARCHAR(50) DEFAULT 'Nhà riêng',
+  `dia_chi` TEXT NOT NULL,
+  `ghi_chu` TEXT DEFAULT NULL,
+  `vi_do` DECIMAL(10, 8) DEFAULT NULL,
+  `kinh_do` DECIMAL(11, 8) DEFAULT NULL,
+  `mac_dinh` TINYINT(1) DEFAULT 0,
+  `ngay_tao` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `ngay_cap_nhat` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`ma_dia_chi`),
+  KEY `idx_diachi_nguoidung` (`ma_nguoi_dung`),
+  CONSTRAINT `fk_diachi_nguoidung` FOREIGN KEY (`ma_nguoi_dung`) REFERENCES `nguoi_dung` (`ma_nguoi_dung`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Sổ địa chỉ người dùng phục vụ định vị GPS và tính khoảng cách giao hàng';
+
+-- 5.6 ĐỒNG BỘ CÁC GIÁ TRỊ ENUM VỚI MÃ NGUỒN BACKEND/FRONTEND
+-- Bổ sung trạng thái 'san_sang_giao' và phương thức 'vietqr' vào bảng don_hang
+ALTER TABLE `don_hang` 
+  MODIFY COLUMN `trang_thai_don_hang` ENUM('cho_xac_nhan', 'dang_che_bien', 'san_sang_giao', 'dang_giao', 'da_giao', 'da_huy') NOT NULL DEFAULT 'cho_xac_nhan',
+  MODIFY COLUMN `phuong_thuc_thanh_toan` ENUM('tien_mat', 'chuyen_khoan', 'momo', 'vnpay', 'vietqr') NOT NULL DEFAULT 'tien_mat';
+
+-- Bổ sung trạng thái 'truc_tuyen', 'ngoai_tuyen' cho Shipper trong bảng nguoi_dung
+ALTER TABLE `nguoi_dung` 
+  MODIFY COLUMN `trang_thai_shipper` ENUM('truc_tuyen', 'ngoai_tuyen', 'ranh', 'dang_giao', 'nghi_viec') DEFAULT 'ngoai_tuyen';
+
+-- Bổ sung cột lan_hoat_dong_cuoi vào bảng nguoi_dung để theo dõi nhân sự online thật
+SET @exist_active = (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'nguoi_dung' AND column_name = 'lan_hoat_dong_cuoi');
+SET @sql_active = IF(@exist_active = 0, 'ALTER TABLE `nguoi_dung` ADD COLUMN `lan_hoat_dong_cuoi` DATETIME DEFAULT NULL COMMENT "Thời điểm thao tác app gần nhất để xác định nhân sự trực tuyến";', 'SELECT 1;');
+PREPARE stmt5 FROM @sql_active;
+EXECUTE stmt5;
+DEALLOCATE PREPARE stmt5;
